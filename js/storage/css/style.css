@@ -7,6 +7,31 @@
   --marker: #e8a93b;
   --line: #ddd8cd;
   --card: #ffffff;
+  --font-heading: Georgia, "Times New Roman", serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 6px;
+  --radius-small: 5px;
+  --card-shadow: none;
+  --glow: none;
+}
+
+/* ===== Cyberpunk theme ===== */
+[data-theme="cyberpunk"] {
+  --paper: #0a0e1a;
+  --ink: #d7e6ff;
+  --ink-soft: #6e84ac;
+  --green: #ff2e6e;
+  --green-dark: #ff5c8a;
+  --marker: #ffc53d;
+  --line: #24304a;
+  --card: #10182b;
+  --font-heading: "Orbitron", sans-serif;
+  --font-body: "Share Tech Mono", monospace;
+  --radius: 2px;
+  --radius-small: 2px;
+  --card-shadow: 0 0 0 1px rgba(33, 230, 193, 0.15), 0 0 30px rgba(33, 230, 193, 0.06);
+  --glow: 0 0 10px rgba(255, 46, 110, 0.55);
+  --focus-glow: 0 0 0 2px rgba(33, 230, 193, 0.35), 0 0 12px rgba(33, 230, 193, 0.4);
 }
 
 * { box-sizing: border-box; }
@@ -15,14 +40,34 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-body);
   line-height: 1.5;
+  transition: background 0.25s ease, color 0.25s ease;
+  position: relative;
+}
+
+/* Faint scanline texture — only visible in the cyberpunk theme */
+[data-theme="cyberpunk"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(215, 230, 255, 0.025) 0px,
+    rgba(215, 230, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 0;
 }
 
 .wrap {
   max-width: 880px;
   margin: 0 auto;
   padding: 48px 20px 80px;
+  position: relative;
+  z-index: 1;
 }
 
 .header {
@@ -30,7 +75,7 @@ body {
 }
 
 .header h1 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-heading);
   font-size: 2rem;
   font-weight: 700;
   margin: 0 0 4px;
@@ -46,8 +91,33 @@ body {
 .card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 28px;
+  box-shadow: var(--card-shadow);
+  position: relative;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+/* HUD-style corner brackets — cyberpunk theme only */
+[data-theme="cyberpunk"] .card::before,
+[data-theme="cyberpunk"] .card::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+[data-theme="cyberpunk"] .card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--marker);
+  border-left: 2px solid var(--marker);
+}
+[data-theme="cyberpunk"] .card::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--marker);
+  border-right: 2px solid var(--marker);
 }
 
 .auth-row {
@@ -72,18 +142,33 @@ body {
   font-size: 0.95rem;
   font-family: inherit;
   padding: 10px 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-small);
   border: 1px solid transparent;
   cursor: pointer;
+  transition: box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
 .btn-primary {
   background: var(--green);
   color: #fff;
+  box-shadow: var(--glow);
 }
 
 .btn-primary:hover {
   background: var(--green-dark);
+}
+
+[data-theme="cyberpunk"] .btn-primary:hover {
+  box-shadow: 0 0 16px rgba(255, 46, 110, 0.85);
+}
+
+[data-theme="cyberpunk"] .btn-ghost {
+  border-color: var(--line);
+}
+
+[data-theme="cyberpunk"] .btn-ghost:hover {
+  box-shadow: var(--focus-glow);
+  border-color: var(--marker);
 }
 
 .btn-ghost {
@@ -103,7 +188,7 @@ body {
 }
 
 .test-section h2 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-heading);
   font-size: 1.15rem;
   margin: 0 0 8px;
   color: var(--green-dark);
@@ -156,7 +241,7 @@ textarea {
 }
 
 .section-header h2 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-heading);
   font-size: 1.2rem;
   margin: 0;
   color: var(--green-dark);
@@ -313,4 +398,99 @@ textarea {
   display: flex;
   gap: 10px;
   margin-top: 16px;
+}
+
+/* Cyberpunk focus glow — inputs, selects, textareas */
+[data-theme="cyberpunk"] input:focus,
+[data-theme="cyberpunk"] select:focus,
+[data-theme="cyberpunk"] textarea:focus {
+  outline: none;
+  border-color: var(--marker) !important;
+  box-shadow: var(--focus-glow);
+}
+
+[data-theme="cyberpunk"] .roster-table input:hover,
+[data-theme="cyberpunk"] .roster-table input:focus {
+  background: rgba(33, 230, 193, 0.06);
+}
+
+[data-theme="cyberpunk"] .course-name:hover {
+  text-shadow: 0 0 8px rgba(255, 46, 110, 0.6);
+}
+
+/* ===== Settings menu & theme picker ===== */
+
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-wrap {
+  position: relative;
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 200px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 14px;
+  z-index: 10;
+}
+
+[data-theme="cyberpunk"] .settings-panel {
+  box-shadow: var(--card-shadow);
+}
+
+.settings-panel h3 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  text-transform: none;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+.theme-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.theme-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px;
+  border-radius: var(--radius-small);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.theme-item:hover {
+  background: var(--paper);
+}
+
+.theme-item-active {
+  font-weight: 600;
+  color: var(--green);
+}
+
+.theme-check {
+  color: var(--green);
+}
+
+[data-theme="cyberpunk"] .theme-item-active {
+  text-shadow: 0 0 6px rgba(255, 46, 110, 0.6);
+}
+
+[data-theme="cyberpunk"] .header h1,
+[data-theme="cyberpunk"] .section-header h2 {
+  letter-spacing: 0.03em;
 }

@@ -124,3 +124,22 @@ connection from the foundation build.
 
 The seating chart grid itself (up to 10×10 desks, arranging students
 from the roster into seats) is the next thing to build on top of this.
+
+## Themes
+
+A settings menu (the ⚙ button, top right) lets you switch between visual
+themes:
+
+- **Default** — the original paper/chalkboard look.
+- **Cyberpunk** — a dark, neon terminal-style theme (magenta/teal accents,
+  angular display type, monospace body text, HUD-style corner brackets,
+  a subtle glow on buttons and focused fields).
+
+Your choice is saved instantly to this browser (so it survives a reload
+even before signing in) and, once you're signed in, also saved to
+`settings.json` in your Google Drive — so the same theme follows you
+between your office and home computers.
+
+Adding a third theme later just means adding a new `[data-theme="..."]`
+block in `css/style.css` (following the same variables the cyberpunk
+theme overrides) and one new entry in the `THEMES` list in `js/theme.js`.

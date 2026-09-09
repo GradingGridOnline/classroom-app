@@ -33,12 +33,63 @@ const el = {
   mapPronunciation: document.getElementById("map-pronunciation"),
   confirmImportBtn: document.getElementById("confirm-import-btn"),
   cancelImportBtn: document.getElementById("cancel-import-btn"),
+
+  settingsBtn: document.getElementById("settings-btn"),
+  settingsPanel: document.getElementById("settings-panel"),
+  themeList: document.getElementById("theme-list"),
 };
 
 async function main() {
+  ThemeModule.initLocal();
+  renderThemeList();
+
   storage = new GoogleDriveProvider(APP_CONFIG);
   await storage.init();
   renderAuth();
+
+  if (storage.isSignedIn()) {
+    await ThemeModule.syncFromDrive();
+    renderThemeList();
+  }
+}
+
+// ===== Settings / theme =====
+
+el.settingsBtn.addEventListener("click", () => {
+  el.settingsPanel.hidden = !el.settingsPanel.hidden;
+});
+
+document.addEventListener("click", (e) => {
+  if (
+    !el.settingsPanel.hidden &&
+    !el.settingsPanel.contains(e.target) &&
+    e.target !== el.settingsBtn
+  ) {
+    el.settingsPanel.hidden = true;
+  }
+});
+
+function renderThemeList() {
+  el.themeList.innerHTML = "";
+  THEMES.forEach((theme) => {
+    const li = document.createElement("li");
+    li.className = "theme-item";
+    if (theme.id === ThemeModule.current) li.classList.add("theme-item-active");
+
+    const label = document.createElement("span");
+    label.textContent = theme.label;
+
+    const check = document.createElement("span");
+    check.className = "theme-check";
+    check.textContent = theme.id === ThemeModule.current ? "✓" : "";
+
+    li.append(label, check);
+    li.addEventListener("click", async () => {
+      await ThemeModule.set(theme.id);
+      renderThemeList();
+    });
+    el.themeList.appendChild(li);
+  });
 }
 
 function renderAuth() {
@@ -62,6 +113,8 @@ el.signInBtn.addEventListener("click", async () => {
   try {
     await storage.signIn();
     renderAuth();
+    await ThemeModule.syncFromDrive();
+    renderThemeList();
   } catch (err) {
     el.status.textContent = `Sign-in failed: ${err.message}`;
   }
