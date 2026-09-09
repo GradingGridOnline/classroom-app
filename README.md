@@ -95,3 +95,32 @@ built on top of this foundation will keep working unmodified.
 Once you've confirmed sign-in and save/load both work for you, the next
 phase is building the first real feature (seating charts are a natural
 starting point) on top of this foundation.
+
+## Courses & roster feature
+
+This adds course management and per-course student rosters on top of the
+foundation.
+
+- **Courses**: up to 20, each just a name. Stored as `courses.json`.
+- **Roster**: up to 100 students per course (name, school ID,
+  pronunciation). Stored as `roster-<courseId>.json`, one file per course.
+- **CSV/Excel upload**: click "Upload CSV / Excel" inside a course's
+  roster view, pick a `.csv`, `.xlsx`, or `.xls` file. The app shows you
+  its columns and asks you to confirm which one is the name, school ID,
+  and pronunciation — it makes a best-effort guess first, but always
+  double-check before importing. Importing **replaces** the current
+  roster for that course, so re-upload a corrected file any time your
+  university sends an updated list.
+- Students can also be added/edited/removed by hand directly in the
+  table — useful for quick corrections without re-uploading a file.
+- Nothing saves automatically — click **Save Roster** (or the course
+  list saves itself automatically when you add/rename/delete a course)
+  to actually write to Google Drive.
+
+No new setup steps are needed — this uses the same Google Drive
+connection from the foundation build.
+
+### Next feature
+
+The seating chart grid itself (up to 10×10 desks, arranging students
+from the roster into seats) is the next thing to build on top of this.

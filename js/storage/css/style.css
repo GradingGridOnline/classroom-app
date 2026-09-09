@@ -20,7 +20,7 @@ body {
 }
 
 .wrap {
-  max-width: 640px;
+  max-width: 880px;
   margin: 0 auto;
   padding: 48px 20px 80px;
 }
@@ -138,4 +138,179 @@ textarea {
   color: var(--marker);
   font-weight: 600;
   min-height: 1.2em;
+}
+
+/* ===== Courses & roster (added for the seating chart feature) ===== */
+
+.app-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-header h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.2rem;
+  margin: 0;
+  color: var(--green-dark);
+}
+
+.count-badge {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 12px;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+
+/* Course list */
+
+.course-list {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.course-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+}
+
+.course-item:last-child {
+  border-bottom: none;
+}
+
+.course-name {
+  flex: 1;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.course-name:hover {
+  color: var(--green);
+  text-decoration: underline;
+}
+
+.add-course-row {
+  display: flex;
+  gap: 10px;
+}
+
+.add-course-row input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+/* Roster */
+
+.roster-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+.roster-table th {
+  text-align: left;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  border-bottom: 2px solid var(--line);
+  padding: 8px 10px;
+}
+
+.roster-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 8px;
+}
+
+.roster-table input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.92rem;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.roster-table input:hover,
+.roster-table input:focus {
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+/* Column-mapping panel */
+
+.mapping-panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.mapping-panel h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: var(--green-dark);
+}
+
+.mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.mapping-row label {
+  width: 160px;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.mapping-row select {
+  flex: 1;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.mapping-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
 }
