@@ -167,3 +167,32 @@ Switching to the Seating Chart tab always reflects your roster's
 current state, so if you add or rename students on the Roster tab,
 those changes show up immediately in the unseated list and on any
 desks they're already seated at.
+
+## Seating chart — locks, groups, pop-out, and memory banks
+
+Building on the basic grid:
+
+- **Lock** 🔒 — appears on any occupied desk. While locked, that desk is
+  skipped by both Clear Seating and Auto-Fill. To remove a locked
+  student, click the lock icon to unlock first, then click the desk.
+- **Group color** — the small badge in a desk's corner cycles through
+  8 colors (click repeatedly to step through, wraps back to none).
+  Groups belong to the *desk position*, not the student sitting there —
+  so they represent your room's physical table layout and survive
+  Clear Seating, even on an empty desk.
+- **Pop-out** (`Pop Out ↗` button) — opens a second, read-only window
+  showing just the grid with student names, ideal for sliding onto a
+  projector or second monitor. It reads live from the main window, so
+  click its **Refresh** button any time you want it to catch up with
+  changes you've made since it opened. Its row order is flipped
+  top-to-bottom relative to your editing view, and "Front of Classroom"
+  moves to the top — meant to match the room as seen from the student
+  side rather than the teacher's side. (Left-right is *not* mirrored —
+  only vertical order — let me know if you'd like that added too.)
+- **Front of Classroom** label sits at the bottom of your main editing
+  grid, representing the teacher's own point of view.
+- **Memory banks** — 6 save slots per course, below the grid. Save
+  captures the current arrangement (size, seats, locks, groups) into a
+  slot; Load replaces your current arrangement with a slot's contents;
+  Delete clears a slot. All three write to Google Drive immediately —
+  they don't wait for the main "Save Seating Chart" button.

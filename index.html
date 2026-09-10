@@ -138,6 +138,7 @@
             <div class="panel-toolbar-buttons">
               <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
               <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating</button>
+              <button id="popout-btn" class="btn btn-ghost">Pop Out ↗</button>
               <button id="save-seating-btn" class="btn btn-primary">Save Seating Chart</button>
             </div>
           </div>
@@ -150,6 +151,13 @@
               <ul id="unseated-list" class="unseated-list"></ul>
             </aside>
             <div id="seating-grid" class="seating-grid"></div>
+          </div>
+          <p class="front-label">Front of Classroom</p>
+
+          <div class="banks-section">
+            <h3>Memory Banks</h3>
+            <p class="hint">Save the current arrangement into a slot, or load/delete a saved one. Saving or loading a bank stores it to Google Drive immediately.</p>
+            <div id="banks-list" class="banks-list"></div>
           </div>
 
           <p id="seating-status" class="result"></p>

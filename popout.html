@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Seating Chart — GradingGridOnline</title>
+  <script>
+    try {
+      var savedTheme = localStorage.getItem("ggo-theme");
+      if (savedTheme && savedTheme !== "default") {
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    /* Layout specific to the pop-out — fills the window, no app chrome. */
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .popout-wrap {
+      width: 100%;
+      max-width: 900px;
+    }
+    .popout-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .popout-header h1 {
+      font-family: var(--font-heading);
+      font-size: 1.4rem;
+      margin: 0;
+      color: var(--green-dark);
+    }
+    .front-label {
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      margin: 14px 0 0;
+    }
+    .popout-status {
+      color: var(--ink-soft);
+      font-size: 0.9rem;
+    }
+    #popout-grid .desk-lock-btn,
+    #popout-grid .desk-group-btn {
+      display: none; /* read-only view — no controls */
+    }
+  </style>
+</head>
+<body>
+  <div class="popout-wrap">
+    <div class="popout-header">
+      <h1 id="popout-course-title">Seating Chart</h1>
+      <button id="popout-refresh-btn" class="btn btn-ghost btn-small">↻ Refresh</button>
+    </div>
+
+    <p class="front-label">Front of Classroom</p>
+    <div id="popout-grid" class="seating-grid"></div>
+
+    <p id="popout-status" class="popout-status"></p>
+  </div>
+
+  <script src="js/popout.js"></script>
+</body>
+</html>

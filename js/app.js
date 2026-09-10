@@ -44,11 +44,13 @@ const el = {
   applyGridSizeBtn: document.getElementById("apply-grid-size-btn"),
   autoFillBtn: document.getElementById("auto-fill-btn"),
   clearSeatingBtn: document.getElementById("clear-seating-btn"),
+  popoutBtn: document.getElementById("popout-btn"),
   saveSeatingBtn: document.getElementById("save-seating-btn"),
   unseatedList: document.getElementById("unseated-list"),
   unseatedCount: document.getElementById("unseated-count"),
   seatingGrid: document.getElementById("seating-grid"),
   seatingStatus: document.getElementById("seating-status"),
+  banksList: document.getElementById("banks-list"),
 
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
@@ -429,14 +431,33 @@ function renderSeating() {
   const seatedIds = SeatingModule.seatedStudentIds();
   const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
 
-  // ----- Unseated list -----
+  // ----- Unseated list: name, pronunciation, school ID -----
   el.unseatedCount.textContent = String(unseated.length);
   el.unseatedList.innerHTML = "";
   unseated.forEach((student) => {
     const li = document.createElement("li");
     li.className = "unseated-item";
     if (student.id === selectedStudentId) li.classList.add("unseated-item-selected");
-    li.textContent = student.name || "(unnamed)";
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "unseated-name";
+    nameEl.textContent = student.name || "(unnamed)";
+    li.appendChild(nameEl);
+
+    if (student.pronunciation) {
+      const pronEl = document.createElement("span");
+      pronEl.className = "unseated-pronunciation";
+      pronEl.textContent = `(${student.pronunciation})`;
+      li.appendChild(pronEl);
+    }
+
+    if (student.schoolId) {
+      const idEl = document.createElement("span");
+      idEl.className = "unseated-id";
+      idEl.textContent = student.schoolId;
+      li.appendChild(idEl);
+    }
+
     li.addEventListener("click", () => {
       selectedStudentId = selectedStudentId === student.id ? null : student.id;
       renderSeating();
@@ -450,33 +471,161 @@ function renderSeating() {
 
   for (let r = 0; r < SeatingModule.rows; r++) {
     for (let c = 0; c < SeatingModule.cols; c++) {
-      const studentId = SeatingModule.studentAt(r, c);
-      const student = studentId ? RosterModule.students.find((s) => s.id === studentId) : null;
-
-      const desk = document.createElement("button");
-      desk.type = "button";
-      desk.className = "desk" + (student ? " desk-occupied" : " desk-empty");
-      desk.textContent = student ? student.name || "(unnamed)" : "+";
-      desk.title = student
-        ? `${student.name} — click to remove`
-        : selectedStudentId
-        ? "Click to seat the selected student here"
-        : "Select a student first";
-
-      desk.addEventListener("click", () => {
-        if (SeatingModule.studentAt(r, c)) {
-          SeatingModule.unseatAt(r, c);
-          renderSeating();
-        } else if (selectedStudentId) {
-          SeatingModule.seatStudent(r, c, selectedStudentId);
-          selectedStudentId = null;
-          renderSeating();
-        }
-      });
-
-      el.seatingGrid.appendChild(desk);
+      el.seatingGrid.appendChild(buildDeskElement(r, c));
     }
   }
+
+  renderBanks();
+}
+
+/** Builds one desk: the seat/unseat area, plus a lock toggle (when occupied) and a group-color badge. */
+function buildDeskElement(r, c) {
+  const studentId = SeatingModule.studentAt(r, c);
+  const student = studentId ? RosterModule.students.find((s) => s.id === studentId) : null;
+  const locked = SeatingModule.isLocked(r, c);
+  const group = SeatingModule.getGroup(r, c);
+
+  const desk = document.createElement("div");
+  desk.className =
+    "desk" +
+    (student ? " desk-occupied" : " desk-empty") +
+    (locked ? " desk-locked" : "") +
+    (group ? " desk-grouped" : "");
+  if (group) desk.style.setProperty("--group-color", GROUP_COLORS[group - 1]);
+
+  desk.title = student
+    ? locked
+      ? `${student.name} — locked (click the lock icon to unlock before removing)`
+      : `${student.name} — click to remove`
+    : selectedStudentId
+    ? "Click to seat the selected student here"
+    : "Select a student first";
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "desk-name";
+  nameEl.textContent = student ? student.name || "(unnamed)" : "+";
+  desk.appendChild(nameEl);
+
+  desk.addEventListener("click", () => {
+    if (student) {
+      if (locked) return; // unlock first
+      SeatingModule.unseatAt(r, c);
+      renderSeating();
+    } else if (selectedStudentId) {
+      SeatingModule.seatStudent(r, c, selectedStudentId);
+      selectedStudentId = null;
+      renderSeating();
+    }
+  });
+
+  if (student) {
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = "desk-lock-btn";
+    lockBtn.textContent = locked ? "🔒" : "🔓";
+    lockBtn.title = locked ? "Unlock this desk" : "Lock this desk (protects it from Clear Seating and Auto-Fill)";
+    lockBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      SeatingModule.toggleLock(r, c);
+      renderSeating();
+    });
+    desk.appendChild(lockBtn);
+  }
+
+  const groupBtn = document.createElement("button");
+  groupBtn.type = "button";
+  groupBtn.className = "desk-group-btn";
+  groupBtn.textContent = group ? String(group) : "";
+  groupBtn.title = group ? `Group ${group} — click to change` : "Click to assign a group color to this desk";
+  groupBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    SeatingModule.cycleGroup(r, c);
+    renderSeating();
+  });
+  desk.appendChild(groupBtn);
+
+  return desk;
+}
+
+function renderBanks() {
+  el.banksList.innerHTML = "";
+
+  SeatingModule.banks.forEach((bank, index) => {
+    const card = document.createElement("div");
+    card.className = "bank-card";
+
+    const label = document.createElement("div");
+    label.className = "bank-label";
+    label.textContent = `Bank ${index + 1}`;
+    card.appendChild(label);
+
+    const status = document.createElement("div");
+    status.className = "bank-status";
+    status.textContent = bank
+      ? `Saved ${new Date(bank.savedAt).toLocaleString()}`
+      : "Empty";
+    card.appendChild(status);
+
+    const buttonRow = document.createElement("div");
+    buttonRow.className = "bank-buttons";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-ghost btn-small";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", async () => {
+      if (bank && !confirm(`Overwrite Bank ${index + 1} with the current arrangement?`)) return;
+      el.seatingStatus.textContent = "Saving to memory bank…";
+      try {
+        await SeatingModule.saveBank(index);
+        el.seatingStatus.textContent = `Saved to Bank ${index + 1} ✓`;
+        renderBanks();
+      } catch (err) {
+        el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
+      }
+    });
+    buttonRow.appendChild(saveBtn);
+
+    const loadBtn = document.createElement("button");
+    loadBtn.type = "button";
+    loadBtn.className = "btn btn-ghost btn-small";
+    loadBtn.textContent = "Load";
+    loadBtn.disabled = !bank;
+    loadBtn.addEventListener("click", async () => {
+      if (!confirm(`Load Bank ${index + 1}? This replaces your current seating arrangement (including grid size).`)) return;
+      el.seatingStatus.textContent = "Loading memory bank…";
+      try {
+        await SeatingModule.loadBank(index);
+        selectedStudentId = null;
+        renderSeating();
+        el.seatingStatus.textContent = `Loaded Bank ${index + 1} ✓`;
+      } catch (err) {
+        el.seatingStatus.textContent = `Couldn't load: ${err.message}`;
+      }
+    });
+    buttonRow.appendChild(loadBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-ghost btn-small";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.disabled = !bank;
+    deleteBtn.addEventListener("click", async () => {
+      if (!confirm(`Delete Bank ${index + 1}? This can't be undone.`)) return;
+      el.seatingStatus.textContent = "Deleting…";
+      try {
+        await SeatingModule.deleteBank(index);
+        el.seatingStatus.textContent = `Bank ${index + 1} deleted.`;
+        renderBanks();
+      } catch (err) {
+        el.seatingStatus.textContent = `Couldn't delete: ${err.message}`;
+      }
+    });
+    buttonRow.appendChild(deleteBtn);
+
+    card.appendChild(buttonRow);
+    el.banksList.appendChild(card);
+  });
 }
 
 el.applyGridSizeBtn.addEventListener("click", () => {
@@ -495,10 +644,14 @@ el.autoFillBtn.addEventListener("click", () => {
 });
 
 el.clearSeatingBtn.addEventListener("click", () => {
-  if (!confirm("Remove every student from the seating chart? Your roster is unaffected.")) return;
+  if (!confirm("Remove every unlocked student from the seating chart? Locked desks and group colors are unaffected.")) return;
   SeatingModule.clear();
   selectedStudentId = null;
   renderSeating();
+});
+
+el.popoutBtn.addEventListener("click", () => {
+  window.open("popout.html", "ggo-seating-popout", "width=900,height=700");
 });
 
 el.saveSeatingBtn.addEventListener("click", async () => {
