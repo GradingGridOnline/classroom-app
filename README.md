@@ -143,3 +143,27 @@ between your office and home computers.
 Adding a third theme later just means adding a new `[data-theme="..."]`
 block in `css/style.css` (following the same variables the cyberpunk
 theme overrides) and one new entry in the `THEMES` list in `js/theme.js`.
+
+## Seating chart
+
+Each course now has two tabs: **Roster** and **Seating Chart**.
+
+- Grid size is adjustable from 1×1 up to 10×10 (set rows and columns,
+  click "Apply Size"). Shrinking the grid only removes seats that fall
+  outside the new bounds — those students just become unseated again,
+  nothing is deleted from the roster.
+- **To seat someone**: click their name in the "Unseated" list on the
+  left (it highlights), then click an empty desk.
+- **To remove someone**: click their occupied desk — they go back to
+  the unseated list.
+- **Auto-Fill** seats every remaining unseated student into the empty
+  desks, in roster order — handy for a quick starting layout you can
+  then adjust by hand.
+- **Clear Seating** empties the whole chart (your roster is untouched).
+- Like the roster, nothing saves automatically — click **Save Seating
+  Chart** to store it in Google Drive, as `seating-<courseId>.json`.
+
+Switching to the Seating Chart tab always reflects your roster's
+current state, so if you add or rename students on the Roster tab,
+those changes show up immediately in the unseated list and on any
+desks they're already seated at.

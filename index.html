@@ -63,57 +63,97 @@
         <p id="course-status" class="result"></p>
       </section>
 
-      <!-- ===== Roster view (one course) ===== -->
-      <section id="roster-section" class="app-section" hidden>
+      <!-- ===== Course detail (one course): Roster + Seating Chart tabs ===== -->
+      <section id="course-detail-section" class="app-section" hidden>
         <button id="back-to-courses-btn" class="btn btn-ghost btn-small">← All Courses</button>
 
         <div class="section-header">
-          <h2 id="roster-course-title">Course</h2>
-          <span id="roster-count" class="count-badge"></span>
+          <h2 id="course-detail-title">Course</h2>
         </div>
 
-        <div class="roster-toolbar">
-          <input id="roster-file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
-          <button id="upload-roster-btn" class="btn btn-ghost">Upload CSV / Excel</button>
-          <button id="add-student-btn" class="btn btn-ghost">+ Add Student</button>
-          <button id="save-roster-btn" class="btn btn-primary">Save Roster</button>
+        <div class="tab-row">
+          <button id="tab-roster-btn" class="tab-btn tab-btn-active">Roster</button>
+          <button id="tab-seating-btn" class="tab-btn">Seating Chart</button>
         </div>
 
-        <!-- Column-mapping step, shown right after a file is chosen -->
-        <div id="mapping-panel" class="mapping-panel" hidden>
-          <h3>Match your file's columns</h3>
-          <p class="hint" id="mapping-hint"></p>
-          <div class="mapping-row">
-            <label>Name column</label>
-            <select id="map-name"></select>
+        <!-- ----- Roster panel ----- -->
+        <div id="roster-panel" class="tab-panel">
+          <div class="panel-toolbar">
+            <span id="roster-count" class="count-badge"></span>
+            <div class="panel-toolbar-buttons">
+              <input id="roster-file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
+              <button id="upload-roster-btn" class="btn btn-ghost">Upload CSV / Excel</button>
+              <button id="add-student-btn" class="btn btn-ghost">+ Add Student</button>
+              <button id="save-roster-btn" class="btn btn-primary">Save Roster</button>
+            </div>
           </div>
-          <div class="mapping-row">
-            <label>School ID column</label>
-            <select id="map-schoolid"></select>
+
+          <!-- Column-mapping step, shown right after a file is chosen -->
+          <div id="mapping-panel" class="mapping-panel" hidden>
+            <h3>Match your file's columns</h3>
+            <p class="hint" id="mapping-hint"></p>
+            <div class="mapping-row">
+              <label>Name column</label>
+              <select id="map-name"></select>
+            </div>
+            <div class="mapping-row">
+              <label>School ID column</label>
+              <select id="map-schoolid"></select>
+            </div>
+            <div class="mapping-row">
+              <label>Pronunciation column</label>
+              <select id="map-pronunciation"></select>
+            </div>
+            <div class="mapping-buttons">
+              <button id="confirm-import-btn" class="btn btn-primary">Import (replaces current roster)</button>
+              <button id="cancel-import-btn" class="btn btn-ghost">Cancel</button>
+            </div>
           </div>
-          <div class="mapping-row">
-            <label>Pronunciation column</label>
-            <select id="map-pronunciation"></select>
-          </div>
-          <div class="mapping-buttons">
-            <button id="confirm-import-btn" class="btn btn-primary">Import (replaces current roster)</button>
-            <button id="cancel-import-btn" class="btn btn-ghost">Cancel</button>
-          </div>
+
+          <table class="roster-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>School ID</th>
+                <th>Pronunciation</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="roster-tbody"></tbody>
+          </table>
+
+          <p id="roster-status" class="result"></p>
         </div>
 
-        <table class="roster-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>School ID</th>
-              <th>Pronunciation</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="roster-tbody"></tbody>
-        </table>
+        <!-- ----- Seating chart panel ----- -->
+        <div id="seating-panel" class="tab-panel" hidden>
+          <div class="panel-toolbar">
+            <div class="grid-size-controls">
+              <label>Rows</label>
+              <select id="grid-rows"></select>
+              <label>Columns</label>
+              <select id="grid-cols"></select>
+              <button id="apply-grid-size-btn" class="btn btn-ghost btn-small">Apply Size</button>
+            </div>
+            <div class="panel-toolbar-buttons">
+              <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
+              <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating</button>
+              <button id="save-seating-btn" class="btn btn-primary">Save Seating Chart</button>
+            </div>
+          </div>
 
-        <p id="roster-status" class="result"></p>
+          <p class="hint">Click a student below, then click a desk to seat them. Click a seated desk to remove that student.</p>
+
+          <div class="seating-layout">
+            <aside class="unseated-panel">
+              <h3>Unseated <span id="unseated-count" class="count-badge"></span></h3>
+              <ul id="unseated-list" class="unseated-list"></ul>
+            </aside>
+            <div id="seating-grid" class="seating-grid"></div>
+          </div>
+
+          <p id="seating-status" class="result"></p>
+        </div>
       </section>
     </main>
   </div>
@@ -130,6 +170,7 @@
   <script src="js/courses.js"></script>
   <script src="js/roster.js"></script>
   <script src="js/roster-import.js"></script>
+  <script src="js/seating.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

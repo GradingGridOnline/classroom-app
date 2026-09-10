@@ -15,9 +15,14 @@ const el = {
   addCourseBtn: document.getElementById("add-course-btn"),
   courseStatus: document.getElementById("course-status"),
 
-  rosterSection: document.getElementById("roster-section"),
+  courseDetailSection: document.getElementById("course-detail-section"),
+  courseDetailTitle: document.getElementById("course-detail-title"),
   backToCoursesBtn: document.getElementById("back-to-courses-btn"),
-  rosterCourseTitle: document.getElementById("roster-course-title"),
+  tabRosterBtn: document.getElementById("tab-roster-btn"),
+  tabSeatingBtn: document.getElementById("tab-seating-btn"),
+  rosterPanel: document.getElementById("roster-panel"),
+  seatingPanel: document.getElementById("seating-panel"),
+
   rosterCount: document.getElementById("roster-count"),
   rosterFileInput: document.getElementById("roster-file-input"),
   uploadRosterBtn: document.getElementById("upload-roster-btn"),
@@ -34,10 +39,23 @@ const el = {
   confirmImportBtn: document.getElementById("confirm-import-btn"),
   cancelImportBtn: document.getElementById("cancel-import-btn"),
 
+  gridRows: document.getElementById("grid-rows"),
+  gridCols: document.getElementById("grid-cols"),
+  applyGridSizeBtn: document.getElementById("apply-grid-size-btn"),
+  autoFillBtn: document.getElementById("auto-fill-btn"),
+  clearSeatingBtn: document.getElementById("clear-seating-btn"),
+  saveSeatingBtn: document.getElementById("save-seating-btn"),
+  unseatedList: document.getElementById("unseated-list"),
+  unseatedCount: document.getElementById("unseated-count"),
+  seatingGrid: document.getElementById("seating-grid"),
+  seatingStatus: document.getElementById("seating-status"),
+
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
   themeList: document.getElementById("theme-list"),
 };
+
+let selectedStudentId = null; // currently-selected student in the "Unseated" list
 
 async function main() {
   ThemeModule.initLocal();
@@ -104,7 +122,7 @@ function renderAuth() {
   if (signedIn) {
     showCourses();
   } else {
-    el.rosterSection.hidden = true;
+    el.courseDetailSection.hidden = true;
   }
 }
 
@@ -128,7 +146,7 @@ el.signOutBtn.addEventListener("click", async () => {
 // ===== Courses =====
 
 async function showCourses() {
-  el.rosterSection.hidden = true;
+  el.courseDetailSection.hidden = true;
   el.courseSection.hidden = false;
   el.courseStatus.textContent = "Loading courses…";
   try {
@@ -151,7 +169,7 @@ function renderCourseList() {
     const nameSpan = document.createElement("span");
     nameSpan.className = "course-name";
     nameSpan.textContent = course.name;
-    nameSpan.addEventListener("click", () => openRoster(course));
+    nameSpan.addEventListener("click", () => openCourseDetail(course));
 
     const renameBtn = document.createElement("button");
     renameBtn.className = "btn btn-ghost btn-small";
@@ -206,14 +224,19 @@ el.newCourseName.addEventListener("keydown", (e) => {
   if (e.key === "Enter") el.addCourseBtn.click();
 });
 
-// ===== Roster =====
+// ===== Course detail (Roster + Seating Chart tabs) =====
 
-async function openRoster(course) {
+async function openCourseDetail(course) {
   el.courseSection.hidden = true;
-  el.rosterSection.hidden = false;
-  el.rosterCourseTitle.textContent = course.name;
-  el.rosterStatus.textContent = "Loading roster…";
+  el.courseDetailSection.hidden = false;
+  el.courseDetailTitle.textContent = course.name;
   el.mappingPanel.hidden = true;
+  selectedStudentId = null;
+
+  showTab("roster");
+
+  el.rosterStatus.textContent = "Loading roster…";
+  el.seatingStatus.textContent = "Loading seating chart…";
 
   try {
     await RosterModule.load(course.id);
@@ -222,9 +245,32 @@ async function openRoster(course) {
   } catch (err) {
     el.rosterStatus.textContent = `Couldn't load roster: ${err.message}`;
   }
+
+  try {
+    await SeatingModule.load(course.id);
+    renderSeating();
+    el.seatingStatus.textContent = "";
+  } catch (err) {
+    el.seatingStatus.textContent = `Couldn't load seating chart: ${err.message}`;
+  }
 }
 
 el.backToCoursesBtn.addEventListener("click", showCourses);
+
+function showTab(tab) {
+  const isRoster = tab === "roster";
+  el.rosterPanel.hidden = !isRoster;
+  el.seatingPanel.hidden = isRoster;
+  el.tabRosterBtn.classList.toggle("tab-btn-active", isRoster);
+  el.tabSeatingBtn.classList.toggle("tab-btn-active", !isRoster);
+  if (!isRoster) {
+    selectedStudentId = null;
+    renderSeating(); // roster may have changed since the tab was last shown
+  }
+}
+
+el.tabRosterBtn.addEventListener("click", () => showTab("roster"));
+el.tabSeatingBtn.addEventListener("click", () => showTab("seating"));
 
 function renderRoster() {
   el.rosterCount.textContent = `${RosterModule.students.length} / ${MAX_STUDENTS}`;
@@ -358,6 +404,110 @@ el.confirmImportBtn.addEventListener("click", () => {
     el.rosterStatus.textContent = `Imported ${students.length} students — click "Save Roster" to store them in Google Drive.`;
   } catch (err) {
     el.rosterStatus.textContent = err.message;
+  }
+});
+
+// ===== Seating chart =====
+
+function populateGridSizeSelects() {
+  [el.gridRows, el.gridCols].forEach((select) => {
+    if (select.options.length > 0) return; // already populated
+    for (let n = 1; n <= MAX_GRID_SIZE; n++) {
+      const opt = document.createElement("option");
+      opt.value = String(n);
+      opt.textContent = String(n);
+      select.appendChild(opt);
+    }
+  });
+}
+
+function renderSeating() {
+  populateGridSizeSelects();
+  el.gridRows.value = String(SeatingModule.rows);
+  el.gridCols.value = String(SeatingModule.cols);
+
+  const seatedIds = SeatingModule.seatedStudentIds();
+  const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+
+  // ----- Unseated list -----
+  el.unseatedCount.textContent = String(unseated.length);
+  el.unseatedList.innerHTML = "";
+  unseated.forEach((student) => {
+    const li = document.createElement("li");
+    li.className = "unseated-item";
+    if (student.id === selectedStudentId) li.classList.add("unseated-item-selected");
+    li.textContent = student.name || "(unnamed)";
+    li.addEventListener("click", () => {
+      selectedStudentId = selectedStudentId === student.id ? null : student.id;
+      renderSeating();
+    });
+    el.unseatedList.appendChild(li);
+  });
+
+  // ----- Grid -----
+  el.seatingGrid.innerHTML = "";
+  el.seatingGrid.style.gridTemplateColumns = `repeat(${SeatingModule.cols}, 1fr)`;
+
+  for (let r = 0; r < SeatingModule.rows; r++) {
+    for (let c = 0; c < SeatingModule.cols; c++) {
+      const studentId = SeatingModule.studentAt(r, c);
+      const student = studentId ? RosterModule.students.find((s) => s.id === studentId) : null;
+
+      const desk = document.createElement("button");
+      desk.type = "button";
+      desk.className = "desk" + (student ? " desk-occupied" : " desk-empty");
+      desk.textContent = student ? student.name || "(unnamed)" : "+";
+      desk.title = student
+        ? `${student.name} — click to remove`
+        : selectedStudentId
+        ? "Click to seat the selected student here"
+        : "Select a student first";
+
+      desk.addEventListener("click", () => {
+        if (SeatingModule.studentAt(r, c)) {
+          SeatingModule.unseatAt(r, c);
+          renderSeating();
+        } else if (selectedStudentId) {
+          SeatingModule.seatStudent(r, c, selectedStudentId);
+          selectedStudentId = null;
+          renderSeating();
+        }
+      });
+
+      el.seatingGrid.appendChild(desk);
+    }
+  }
+}
+
+el.applyGridSizeBtn.addEventListener("click", () => {
+  SeatingModule.setSize(Number(el.gridRows.value), Number(el.gridCols.value));
+  renderSeating();
+});
+
+el.autoFillBtn.addEventListener("click", () => {
+  const seatedIds = SeatingModule.seatedStudentIds();
+  const unseatedIds = RosterModule.students
+    .filter((s) => !seatedIds.has(s.id))
+    .map((s) => s.id);
+  SeatingModule.autoFill(unseatedIds);
+  selectedStudentId = null;
+  renderSeating();
+});
+
+el.clearSeatingBtn.addEventListener("click", () => {
+  if (!confirm("Remove every student from the seating chart? Your roster is unaffected.")) return;
+  SeatingModule.clear();
+  selectedStudentId = null;
+  renderSeating();
+});
+
+el.saveSeatingBtn.addEventListener("click", async () => {
+  el.seatingStatus.textContent = "Saving…";
+  try {
+    await SeatingModule.save();
+    el.seatingStatus.textContent = "Saved to Google Drive ✓";
+  } catch (err) {
+    el.seatingStatus.textContent = `Save failed: ${err.message}`;
   }
 });
 

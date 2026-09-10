@@ -494,3 +494,195 @@ textarea {
 [data-theme="cyberpunk"] .section-header h2 {
   letter-spacing: 0.03em;
 }
+
+/* ===== Course detail tabs ===== */
+
+.tab-row {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+
+.tab-btn {
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 4px;
+  margin-right: 20px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  color: var(--ink);
+}
+
+.tab-btn-active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+  font-weight: 600;
+}
+
+[data-theme="cyberpunk"] .tab-btn-active {
+  text-shadow: 0 0 6px rgba(255, 46, 110, 0.5);
+}
+
+.panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panel-toolbar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ===== Seating chart ===== */
+
+.grid-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.grid-size-controls select {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+}
+
+.seating-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.unseated-panel {
+  flex: 0 0 180px;
+}
+
+.unseated-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-family: var(--font-body);
+  color: var(--ink-soft);
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.unseated-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.unseated-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  font-size: 0.88rem;
+  cursor: pointer;
+  background: var(--card);
+}
+
+.unseated-item:hover {
+  border-color: var(--green);
+}
+
+.unseated-item-selected {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+[data-theme="cyberpunk"] .unseated-item-selected {
+  box-shadow: var(--glow);
+}
+
+.seating-grid {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+}
+
+.desk {
+  aspect-ratio: 1;
+  min-height: 44px;
+  border-radius: var(--radius-small);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.desk-empty {
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  color: var(--ink-soft);
+}
+
+.desk-empty:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.desk-occupied {
+  background: var(--card);
+  border: 1px solid var(--green);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.desk-occupied:hover {
+  border-color: var(--marker);
+}
+
+[data-theme="cyberpunk"] .desk-occupied {
+  border-color: var(--secondary, #21e6c1);
+  box-shadow: 0 0 8px rgba(33, 230, 193, 0.35);
+}
+
+[data-theme="cyberpunk"] .desk-occupied:hover {
+  box-shadow: 0 0 12px rgba(255, 197, 61, 0.6);
+  border-color: var(--marker);
+}
+
+[data-theme="cyberpunk"] .desk-empty:hover {
+  box-shadow: var(--focus-glow);
+}
+
+@media (max-width: 640px) {
+  .seating-layout {
+    flex-direction: column;
+  }
+  .unseated-panel {
+    flex: none;
+    width: 100%;
+  }
+}
