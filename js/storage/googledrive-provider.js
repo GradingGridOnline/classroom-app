@@ -27,6 +27,19 @@ class GoogleDriveProvider extends StorageProvider {
       scope: this.config.google.scopes,
       callback: () => {}, // overridden per-call in _requestToken()
     });
+
+    // Try to restore a session silently (no visible popup) — succeeds
+    // if the browser still has an active Google session and you've
+    // already granted access before. Fails quietly otherwise (e.g. no
+    // session, or the browser blocks silent auth — Safari does this
+    // more aggressively than Chrome) and just leaves you signed out,
+    // same as today.
+    try {
+      await this._requestToken({ prompt: "" });
+      await this._loadUserEmail();
+    } catch (e) {
+      // No existing session to restore — normal, not an error.
+    }
   }
 
   async signIn() {

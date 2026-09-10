@@ -47,3 +47,6 @@ const CoursesModule = {
     return this.courses.find((c) => c.id === id);
   },
 };
+
+// Exposed for the read-only pop-out window (popout.html) — see seating.js.
+window.CoursesModule = CoursesModule;
