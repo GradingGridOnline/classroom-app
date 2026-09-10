@@ -61,3 +61,6 @@ const ThemeModule = {
     }
   },
 };
+
+// Exposed for the read-only pop-out window (popout.html) — see seating.js.
+window.ThemeModule = ThemeModule;
