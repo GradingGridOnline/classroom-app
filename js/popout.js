@@ -3,10 +3,14 @@
 // the main app window (window.opener) rather than keeping its own
 // copy — click "Refresh" any time the main chart changes.
 //
-// "Reversed perspective": rows are rendered in reverse order (last
-// row first), so the row that was nearest the front in the main
-// editor now appears at the top here, matching the "Front of
-// Classroom" label moving from the bottom to the top.
+// "Reversed perspective": two changes from the main editor.
+//  1. Rows render back-to-front reversed (last row first), so the row
+//     nearest the front in the main editor now appears at the top
+//     here, matching the "Front of Classroom" label moving to the top.
+//  2. Columns render right-to-left (mirrored), because when two people
+//     face each other, left and right swap — a desk on the teacher's
+//     right is on the students' left, same as "stage right" being the
+//     audience's left in a theater.
 
 function render() {
   const statusEl = document.getElementById("popout-status");
@@ -40,9 +44,9 @@ function render() {
   grid.innerHTML = "";
   grid.style.gridTemplateColumns = `repeat(${seating.cols}, 1fr)`;
 
-  // Reversed row order — see comment above.
+  // Reversed row order AND mirrored column order — see comment above.
   for (let r = seating.rows - 1; r >= 0; r--) {
-    for (let c = 0; c < seating.cols; c++) {
+    for (let c = seating.cols - 1; c >= 0; c--) {
       const active = seating.isActive(r, c);
       const studentId = active ? seating.studentAt(r, c) : null;
       const student = studentId ? roster.students.find((s) => s.id === studentId) : null;
