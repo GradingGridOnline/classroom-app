@@ -1,46 +1,45 @@
 // ===== Seating chart module =====
 // One seating chart per course, stored as seating-<courseId>.json.
 //
-// - seats: sparse map "row-col" -> studentId. Missing key = empty desk.
-// - locks: sparse map "row-col" -> true. Only ever set on an occupied
+// Every grid cell starts INACTIVE — meaning no desk exists there yet.
+// Clicking an inactive cell activates it; only an active desk can hold
+// a student, a lock, a group color, or a label.
+//
+// - active: sparse map "row-col" -> true. Whether a desk exists here.
+// - seats:  sparse map "row-col" -> studentId. Missing key = empty desk.
+// - locks:  sparse map "row-col" -> true. Only ever set on an occupied
 //   desk; a locked desk is skipped by Clear Seating and by Auto-Fill.
-// - groups: sparse map "row-col" -> group number (1-8). This is a
-//   property of the DESK POSITION, not the student — it represents a
+// - groups: sparse map "row-col" -> group number (1-MAX_GROUP). A
+//   property of the DESK POSITION, not the student — represents a
 //   physical table-group color in the room, so it survives Clear
-//   Seating and stays put even if the desk is empty or the student
-//   assigned to it changes.
+//   Seating and stays put even if the desk is empty.
+// - labels: sparse map "row-col" -> free-text note (e.g. "do not sit
+//   here"). Also a desk-position property, survives Clear Seating.
+// Deactivating a desk clears all four of the above for that position.
 
 const MAX_GRID_SIZE = 10;
 const MAX_BANKS = 6;
 const DEFAULT_GRID_SIZE = 6;
-const MAX_GROUP = 8;
-
-// A cohesive 8-color palette. Used as a light background tint in the
-// default theme, and as a border/glow color (over a dark fill) in the
-// cyberpunk theme — see the [data-theme="cyberpunk"] .desk-grouped
-// rule in style.css.
-const GROUP_COLORS = [
-  "#e8b4b8", // 1 dusty rose
-  "#b4d8e8", // 2 dusty blue
-  "#c8e8b4", // 3 sage green
-  "#e8d8b4", // 4 wheat
-  "#d4b4e8", // 5 lavender
-  "#e8c8b4", // 6 peach
-  "#b4e8d8", // 7 mint
-  "#d8b4c8", // 8 mauve
-];
+const MAX_GROUP = 20;
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+/** Hue (degrees, 0-360) for a group number — used by a CSS custom property rather than a fixed color list, so it scales cleanly to any MAX_GROUP. */
+function groupHueDeg(group) {
+  return Math.round(((group - 1) * 360) / MAX_GROUP);
+}
+
 const SeatingModule = {
   rows: DEFAULT_GRID_SIZE,
   cols: DEFAULT_GRID_SIZE,
+  active: {},
   seats: {},
   locks: {},
   groups: {},
-  banks: new Array(MAX_BANKS).fill(null), // 6 memory-bank slots — see saveBank/loadBank/deleteBank below
+  labels: {},
+  banks: SeatingModule_defaultBanks(),
   currentCourseId: null,
 
   fileName(courseId) {
@@ -56,22 +55,48 @@ const SeatingModule = {
       this.seats = data.seats || {};
       this.locks = data.locks || {};
       this.groups = data.groups || {};
+      this.labels = data.labels || {};
+      // Backward compatibility: charts saved before the "active desk"
+      // system existed have no `active` map at all. Treat every
+      // position that already has a seat, lock, or group as active,
+      // so nothing already saved appears to vanish.
+      if (data.active) {
+        this.active = data.active;
+      } else {
+        this.active = {};
+        for (const key of new Set([
+          ...Object.keys(this.seats),
+          ...Object.keys(this.locks),
+          ...Object.keys(this.groups),
+        ])) {
+          this.active[key] = true;
+        }
+      }
       this.banks = this._normalizeBanks(data.banks);
     } else {
       this.rows = DEFAULT_GRID_SIZE;
       this.cols = DEFAULT_GRID_SIZE;
+      this.active = {};
       this.seats = {};
       this.locks = {};
       this.groups = {};
-      this.banks = new Array(MAX_BANKS).fill(null);
+      this.labels = {};
+      this.banks = SeatingModule_defaultBanks();
     }
   },
 
-  /** Always returns an array of exactly MAX_BANKS slots, however the saved data looked. */
+  /** Always returns an array of exactly MAX_BANKS { name, snapshot } slots, migrating older saved shapes. */
   _normalizeBanks(banks) {
     const arr = Array.isArray(banks) ? banks.slice(0, MAX_BANKS) : [];
-    while (arr.length < MAX_BANKS) arr.push(null);
-    return arr;
+    const normalized = arr.map((entry, i) => {
+      if (!entry) return { name: `Bank ${i + 1}`, snapshot: null };
+      if ("snapshot" in entry) return entry; // already the current shape
+      return { name: `Bank ${i + 1}`, snapshot: entry }; // old shape: a bare snapshot
+    });
+    while (normalized.length < MAX_BANKS) {
+      normalized.push({ name: `Bank ${normalized.length + 1}`, snapshot: null });
+    }
+    return normalized;
   },
 
   async save() {
@@ -79,14 +104,16 @@ const SeatingModule = {
     await storage.saveFile(this.fileName(this.currentCourseId), {
       rows: this.rows,
       cols: this.cols,
+      active: this.active,
       seats: this.seats,
       locks: this.locks,
       groups: this.groups,
+      labels: this.labels,
       banks: this.banks,
     });
   },
 
-  /** Resizing keeps any seats/locks/groups that still fall within the new bounds. */
+  /** Resizing keeps anything that still falls within the new bounds. */
   setSize(rows, cols) {
     rows = clamp(rows, 1, MAX_GRID_SIZE);
     cols = clamp(cols, 1, MAX_GRID_SIZE);
@@ -99,9 +126,11 @@ const SeatingModule = {
       for (const key in map) if (inBounds(key)) kept[key] = map[key];
       return kept;
     };
+    this.active = filterMap(this.active);
     this.seats = filterMap(this.seats);
     this.locks = filterMap(this.locks);
     this.groups = filterMap(this.groups);
+    this.labels = filterMap(this.labels);
     this.rows = rows;
     this.cols = cols;
   },
@@ -110,11 +139,29 @@ const SeatingModule = {
     return `${r}-${c}`;
   },
 
+  isActive(r, c) {
+    return !!this.active[this.key(r, c)];
+  },
+
+  activate(r, c) {
+    this.active[this.key(r, c)] = true;
+  },
+
+  /** Removes the desk entirely: clears active, seat, lock, group, and label for this position. */
+  deactivate(r, c) {
+    const key = this.key(r, c);
+    delete this.active[key];
+    delete this.seats[key];
+    delete this.locks[key];
+    delete this.groups[key];
+    delete this.labels[key];
+  },
+
   studentAt(r, c) {
     return this.seats[this.key(r, c)] || null;
   },
 
-  /** Seats a student at (r, c), first removing them from any other seat. */
+  /** Seats a student at (r, c) — the desk must already be active. First removes them from any other seat. */
   seatStudent(r, c, studentId) {
     this.unseatStudent(studentId);
     this.seats[this.key(r, c)] = studentId;
@@ -157,15 +204,29 @@ const SeatingModule = {
     return this.groups[this.key(r, c)] || 0;
   },
 
-  /** Cycles a desk's group: none -> 1 -> 2 -> ... -> MAX_GROUP -> none. */
-  cycleGroup(r, c) {
+  /** Sets a desk's group (1-MAX_GROUP). 0 or blank clears it. */
+  setGroup(r, c, value) {
     const key = this.key(r, c);
-    const next = (this.groups[key] || 0) + 1;
-    if (next > MAX_GROUP) delete this.groups[key];
-    else this.groups[key] = next;
+    const n = Math.round(Number(value));
+    if (!n || n < 1) {
+      delete this.groups[key];
+    } else {
+      this.groups[key] = clamp(n, 1, MAX_GROUP);
+    }
   },
 
-  /** Removes every unlocked student. Locked desks, and all group colors, are untouched. */
+  getLabel(r, c) {
+    return this.labels[this.key(r, c)] || "";
+  },
+
+  setLabel(r, c, text) {
+    const key = this.key(r, c);
+    const trimmed = (text || "").trim();
+    if (trimmed) this.labels[key] = trimmed;
+    else delete this.labels[key];
+  },
+
+  /** Removes every unlocked student. Locked desks, and all group colors/labels, are untouched. */
   clear() {
     for (const key in this.seats) {
       if (!this.locks[key]) delete this.seats[key];
@@ -173,49 +234,62 @@ const SeatingModule = {
   },
 
   // ----- Memory banks -----
-  // Each bank is a full snapshot of the grid (size + seats + locks +
-  // groups). Save/Load/Delete all persist to Drive immediately, so a
-  // bank action always sticks right away rather than waiting for a
-  // separate "Save Seating Chart" click.
+  // Each bank is { name, snapshot }. snapshot is a full grid capture
+  // (size + active + seats + locks + groups + labels) or null if
+  // that slot hasn't been saved into yet. A slot's name persists
+  // independently of its snapshot, so you can label a slot before
+  // ever saving into it. Save/Load/Delete/Rename all persist to
+  // Drive immediately, rather than waiting for a separate "Save
+  // Seating Chart" click.
 
   bankIsEmpty(index) {
-    return !this.banks[index];
+    return !this.banks[index].snapshot;
   },
 
   async saveBank(index) {
-    this.banks[index] = {
+    this.banks[index].snapshot = {
       rows: this.rows,
       cols: this.cols,
+      active: { ...this.active },
       seats: { ...this.seats },
       locks: { ...this.locks },
       groups: { ...this.groups },
+      labels: { ...this.labels },
       savedAt: new Date().toISOString(),
     };
     await this.save();
   },
 
   async loadBank(index) {
-    const bank = this.banks[index];
-    if (!bank) throw new Error("That memory bank is empty.");
-    this.rows = bank.rows;
-    this.cols = bank.cols;
-    this.seats = { ...bank.seats };
-    this.locks = { ...bank.locks };
-    this.groups = { ...bank.groups };
+    const snapshot = this.banks[index].snapshot;
+    if (!snapshot) throw new Error("That memory bank is empty.");
+    this.rows = snapshot.rows;
+    this.cols = snapshot.cols;
+    this.active = { ...(snapshot.active || {}) };
+    this.seats = { ...snapshot.seats };
+    this.locks = { ...snapshot.locks };
+    this.groups = { ...snapshot.groups };
+    this.labels = { ...(snapshot.labels || {}) };
     await this.save();
   },
 
   async deleteBank(index) {
-    this.banks[index] = null;
+    this.banks[index].snapshot = null;
     await this.save();
   },
 
-  /** Fills empty desks, in row-major order, with the given student IDs. Locked desks are already occupied, so they're naturally skipped. */
+  async renameBank(index, name) {
+    const trimmed = (name || "").trim();
+    this.banks[index].name = trimmed || `Bank ${index + 1}`;
+    await this.save();
+  },
+
+  /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs. */
   autoFill(studentIds) {
     let i = 0;
     for (let r = 0; r < this.rows && i < studentIds.length; r++) {
       for (let c = 0; c < this.cols && i < studentIds.length; c++) {
-        if (!this.studentAt(r, c)) {
+        if (this.isActive(r, c) && !this.studentAt(r, c)) {
           this.seats[this.key(r, c)] = studentIds[i++];
         }
       }
@@ -223,9 +297,15 @@ const SeatingModule = {
   },
 };
 
+function SeatingModule_defaultBanks() {
+  const arr = [];
+  for (let i = 0; i < MAX_BANKS; i++) arr.push({ name: `Bank ${i + 1}`, snapshot: null });
+  return arr;
+}
+
 // Exposed on window so the read-only pop-out window (popout.html) can
 // read live data from this window via window.opener, without needing
 // its own Google sign-in or a duplicate copy of the data.
 window.SeatingModule = SeatingModule;
-window.GROUP_COLORS = GROUP_COLORS;
 window.MAX_GROUP = MAX_GROUP;
+window.groupHueDeg = groupHueDeg;

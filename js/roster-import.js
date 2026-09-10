@@ -37,7 +37,15 @@ const RosterImport = {
       );
 
     const nameIdx = find(["name", "氏名", "名前"]);
-    const idIdx = find(["id", "student id", "学籍番号", "番号"]);
+    const idIdx = find(["student id", "school id", "学籍番号", "学籍"]);
+    const classNumberIdx = find([
+      "class number",
+      "class #",
+      "attendance",
+      "roll",
+      "出席番号",
+      "出席番",
+    ]);
     const pronunciationIdx = find([
       "pronunciation",
       "reading",
@@ -48,20 +56,18 @@ const RosterImport = {
 
     return {
       name: nameIdx !== -1 ? nameIdx : 0,
-      schoolId: idIdx !== -1 ? idIdx : this.headers.length > 1 ? 1 : -1,
-      pronunciation:
-        pronunciationIdx !== -1
-          ? pronunciationIdx
-          : this.headers.length > 2
-          ? 2
-          : -1,
+      classNumber: classNumberIdx,
+      schoolId: idIdx,
+      pronunciation: pronunciationIdx,
     };
   },
 
-  /** mapping: { name: colIndex, schoolId: colIndex|-1, pronunciation: colIndex|-1 } */
+  /** mapping: { name: colIndex, classNumber: colIndex|-1, schoolId: colIndex|-1, pronunciation: colIndex|-1 } */
   buildStudents(mapping) {
     return this.rows.map((row) => ({
       name: String(row[mapping.name] ?? "").trim(),
+      classNumber:
+        mapping.classNumber >= 0 ? String(row[mapping.classNumber] ?? "").trim() : "",
       schoolId:
         mapping.schoolId >= 0 ? String(row[mapping.schoolId] ?? "").trim() : "",
       pronunciation:

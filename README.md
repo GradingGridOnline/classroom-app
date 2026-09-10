@@ -196,3 +196,38 @@ Building on the basic grid:
   slot; Load replaces your current arrangement with a slot's contents;
   Delete clears a slot. All three write to Google Drive immediately —
   they don't wait for the main "Save Seating Chart" button.
+
+## Seating chart — active desks, Class Numbers, wider layout
+
+Several refinements on top of the seating chart:
+
+- **Wider layout** — the whole app now uses most of the screen width
+  instead of a fixed narrow column.
+- **Active desks** — every grid cell starts as "no desk." Click an
+  empty cell to activate it (creating a usable desk there); click an
+  active-but-empty desk again to remove it. If you have a student
+  selected when you click an inactive cell, it activates *and* seats
+  them in one click. This lets your grid match your room's real
+  layout — gaps, aisles, or fewer desks than the max grid size.
+- **Group numbers are now a text field** (1-20, up from a 1-8 click
+  cycle) — type a number into the small box in a desk's corner.
+  Leaving it blank (or 0) clears the color.
+- **Desk labels** — the 🏷 button on any active desk opens a prompt
+  for a short note (e.g. "do not sit here"). It shows as the desk's
+  text when that desk is empty, and survives Clear Seating like group
+  colors do.
+- **Auto-Fill now only fills active desks** — inactive cells are
+  skipped, same as locked ones.
+- **Class Number** — every student gets a persistent roll-call number
+  (1-100), separate from their university School ID. It's assigned
+  automatically (lowest number not in use) when a student is added or
+  imported, shown as its own editable column in the roster table and
+  in the unseated list, and you can hand-edit it (the app blocks
+  duplicates within a course). CSV/Excel import now has an optional
+  "Class Number" column mapping too, in case your university's file
+  already includes an attendance number — leave it as "(not in this
+  file)" to have numbers assigned automatically in file order instead.
+- **Memory banks are now nameable** — click "Rename" on any bank to
+  give it a name like "Exam Seating" instead of the default "Bank 3."
+  A bank's name persists independently of whether anything is saved
+  into it yet.

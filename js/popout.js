@@ -22,7 +22,7 @@ function render() {
   const roster = opener.RosterModule;
   const courses = opener.CoursesModule;
   const theme = opener.ThemeModule;
-  const groupColors = opener.GROUP_COLORS;
+  const groupHueDeg = opener.groupHueDeg;
 
   // Match the main app's current theme.
   if (theme.current === "default") {
@@ -43,13 +43,17 @@ function render() {
   // Reversed row order — see comment above.
   for (let r = seating.rows - 1; r >= 0; r--) {
     for (let c = 0; c < seating.cols; c++) {
-      const studentId = seating.studentAt(r, c);
+      const active = seating.isActive(r, c);
+      const studentId = active ? seating.studentAt(r, c) : null;
       const student = studentId ? roster.students.find((s) => s.id === studentId) : null;
-      const group = seating.getGroup(r, c);
+      const group = active ? seating.getGroup(r, c) : 0;
 
       const desk = document.createElement("div");
-      desk.className = "desk" + (student ? " desk-occupied" : " desk-empty") + (group ? " desk-grouped" : "");
-      if (group) desk.style.setProperty("--group-color", groupColors[group - 1]);
+      desk.className =
+        "desk" +
+        (!active ? " desk-inactive" : student ? " desk-occupied" : " desk-empty") +
+        (group ? " desk-grouped" : "");
+      if (group) desk.style.setProperty("--group-hue", String(groupHueDeg(group)));
 
       const nameEl = document.createElement("span");
       nameEl.className = "desk-name";

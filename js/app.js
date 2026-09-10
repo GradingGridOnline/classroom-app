@@ -34,6 +34,7 @@ const el = {
   mappingPanel: document.getElementById("mapping-panel"),
   mappingHint: document.getElementById("mapping-hint"),
   mapName: document.getElementById("map-name"),
+  mapClassNumber: document.getElementById("map-classnumber"),
   mapSchoolId: document.getElementById("map-schoolid"),
   mapPronunciation: document.getElementById("map-pronunciation"),
   confirmImportBtn: document.getElementById("confirm-import-btn"),
@@ -280,6 +281,7 @@ function renderRoster() {
 
   RosterModule.students.forEach((student) => {
     const tr = document.createElement("tr");
+    tr.appendChild(makeClassNumberCell(student));
     tr.appendChild(makeEditableCell(student, "name"));
     tr.appendChild(makeEditableCell(student, "schoolId"));
     tr.appendChild(makeEditableCell(student, "pronunciation"));
@@ -306,6 +308,33 @@ function makeEditableCell(student, field) {
   input.value = student[field];
   input.addEventListener("input", () => {
     RosterModule.updateStudent(student.id, { [field]: input.value });
+  });
+  td.appendChild(input);
+  return td;
+}
+
+/** Class Number gets its own cell: numeric, 1-100, and validated for uniqueness on commit (not on every keystroke). */
+function makeClassNumberCell(student) {
+  const td = document.createElement("td");
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.max = String(MAX_STUDENTS);
+  input.className = "class-number-input";
+  input.value = student.classNumber || "";
+  input.addEventListener("change", () => {
+    const n = Number(input.value);
+    if (!n || n < 1 || n > MAX_STUDENTS) {
+      alert(`Class Number must be between 1 and ${MAX_STUDENTS}.`);
+      input.value = student.classNumber || "";
+      return;
+    }
+    if (RosterModule.isClassNumberTaken(n, student.id)) {
+      alert(`Class Number ${n} is already used by another student in this course.`);
+      input.value = student.classNumber || "";
+      return;
+    }
+    RosterModule.updateStudent(student.id, { classNumber: n });
   });
   td.appendChild(input);
   return td;
@@ -369,11 +398,13 @@ function openMappingPanel(headers, rowCount) {
   };
 
   fillSelect(el.mapName, false);
+  fillSelect(el.mapClassNumber, true);
   fillSelect(el.mapSchoolId, true);
   fillSelect(el.mapPronunciation, true);
 
   const guess = RosterImport.guessMapping();
   el.mapName.value = String(guess.name);
+  el.mapClassNumber.value = String(guess.classNumber);
   el.mapSchoolId.value = String(guess.schoolId);
   el.mapPronunciation.value = String(guess.pronunciation);
 
@@ -387,6 +418,7 @@ el.cancelImportBtn.addEventListener("click", () => {
 el.confirmImportBtn.addEventListener("click", () => {
   const mapping = {
     name: Number(el.mapName.value),
+    classNumber: Number(el.mapClassNumber.value),
     schoolId: Number(el.mapSchoolId.value),
     pronunciation: Number(el.mapPronunciation.value),
   };
@@ -431,13 +463,20 @@ function renderSeating() {
   const seatedIds = SeatingModule.seatedStudentIds();
   const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
 
-  // ----- Unseated list: name, pronunciation, school ID -----
+  // ----- Unseated list: class #, name, pronunciation, school ID -----
   el.unseatedCount.textContent = String(unseated.length);
   el.unseatedList.innerHTML = "";
   unseated.forEach((student) => {
     const li = document.createElement("li");
     li.className = "unseated-item";
     if (student.id === selectedStudentId) li.classList.add("unseated-item-selected");
+
+    if (student.classNumber) {
+      const numEl = document.createElement("span");
+      numEl.className = "unseated-classnumber";
+      numEl.textContent = `#${student.classNumber}`;
+      li.appendChild(numEl);
+    }
 
     const nameEl = document.createElement("span");
     nameEl.className = "unseated-name";
@@ -478,35 +517,59 @@ function renderSeating() {
   renderBanks();
 }
 
-/** Builds one desk: the seat/unseat area, plus a lock toggle (when occupied) and a group-color badge. */
+/**
+ * Builds one desk. States:
+ *  - inactive: no desk here yet. Click activates it (and seats the
+ *    selected student in the same click, if one is selected).
+ *  - active + empty, nothing selected: click deactivates it again.
+ *  - active + empty, student selected: click seats them.
+ *  - active + occupied: click unseats (unless locked — unlock first).
+ * Group number (text input) and label (button, opens a prompt) are
+ * available on any active desk, regardless of occupancy.
+ */
 function buildDeskElement(r, c) {
+  const active = SeatingModule.isActive(r, c);
   const studentId = SeatingModule.studentAt(r, c);
   const student = studentId ? RosterModule.students.find((s) => s.id === studentId) : null;
   const locked = SeatingModule.isLocked(r, c);
   const group = SeatingModule.getGroup(r, c);
+  const label = SeatingModule.getLabel(r, c);
 
   const desk = document.createElement("div");
   desk.className =
     "desk" +
-    (student ? " desk-occupied" : " desk-empty") +
+    (!active ? " desk-inactive" : student ? " desk-occupied" : " desk-empty") +
     (locked ? " desk-locked" : "") +
     (group ? " desk-grouped" : "");
-  if (group) desk.style.setProperty("--group-color", GROUP_COLORS[group - 1]);
+  if (group) desk.style.setProperty("--group-hue", String(groupHueDeg(group)));
 
-  desk.title = student
+  desk.title = !active
+    ? "Click to add a desk here"
+    : student
     ? locked
       ? `${student.name} — locked (click the lock icon to unlock before removing)`
       : `${student.name} — click to remove`
+    : label
+    ? `${label} — click to remove this desk, or select a student to seat here`
     : selectedStudentId
     ? "Click to seat the selected student here"
-    : "Select a student first";
+    : "Select a student, or click to remove this desk";
 
   const nameEl = document.createElement("span");
   nameEl.className = "desk-name";
-  nameEl.textContent = student ? student.name || "(unnamed)" : "+";
+  nameEl.textContent = !active ? "" : student ? student.name || "(unnamed)" : label ? label : "+";
   desk.appendChild(nameEl);
 
   desk.addEventListener("click", () => {
+    if (!active) {
+      SeatingModule.activate(r, c);
+      if (selectedStudentId) {
+        SeatingModule.seatStudent(r, c, selectedStudentId);
+        selectedStudentId = null;
+      }
+      renderSeating();
+      return;
+    }
     if (student) {
       if (locked) return; // unlock first
       SeatingModule.unseatAt(r, c);
@@ -514,6 +577,9 @@ function buildDeskElement(r, c) {
     } else if (selectedStudentId) {
       SeatingModule.seatStudent(r, c, selectedStudentId);
       selectedStudentId = null;
+      renderSeating();
+    } else {
+      SeatingModule.deactivate(r, c);
       renderSeating();
     }
   });
@@ -532,17 +598,36 @@ function buildDeskElement(r, c) {
     desk.appendChild(lockBtn);
   }
 
-  const groupBtn = document.createElement("button");
-  groupBtn.type = "button";
-  groupBtn.className = "desk-group-btn";
-  groupBtn.textContent = group ? String(group) : "";
-  groupBtn.title = group ? `Group ${group} — click to change` : "Click to assign a group color to this desk";
-  groupBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    SeatingModule.cycleGroup(r, c);
-    renderSeating();
-  });
-  desk.appendChild(groupBtn);
+  if (active) {
+    const groupInput = document.createElement("input");
+    groupInput.type = "number";
+    groupInput.min = "1";
+    groupInput.max = String(MAX_GROUP);
+    groupInput.className = "desk-group-input";
+    groupInput.placeholder = "grp";
+    groupInput.value = group ? String(group) : "";
+    groupInput.title = `Group number (1-${MAX_GROUP}) — colors this desk`;
+    groupInput.addEventListener("click", (e) => e.stopPropagation());
+    groupInput.addEventListener("change", () => {
+      SeatingModule.setGroup(r, c, groupInput.value);
+      renderSeating();
+    });
+    desk.appendChild(groupInput);
+
+    const labelBtn = document.createElement("button");
+    labelBtn.type = "button";
+    labelBtn.className = "desk-label-btn" + (label ? " desk-label-btn-active" : "");
+    labelBtn.textContent = "🏷";
+    labelBtn.title = label ? `Label: "${label}" — click to edit or clear` : "Add a label to this desk";
+    labelBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const next = prompt("Desk label (e.g. \"do not sit here\"). Leave blank to remove.", label);
+      if (next === null) return; // cancelled
+      SeatingModule.setLabel(r, c, next);
+      renderSeating();
+    });
+    desk.appendChild(labelBtn);
+  }
 
   return desk;
 }
@@ -551,19 +636,21 @@ function renderBanks() {
   el.banksList.innerHTML = "";
 
   SeatingModule.banks.forEach((bank, index) => {
+    const isEmpty = !bank.snapshot;
+
     const card = document.createElement("div");
     card.className = "bank-card";
 
     const label = document.createElement("div");
     label.className = "bank-label";
-    label.textContent = `Bank ${index + 1}`;
+    label.textContent = bank.name;
     card.appendChild(label);
 
     const status = document.createElement("div");
     status.className = "bank-status";
-    status.textContent = bank
-      ? `Saved ${new Date(bank.savedAt).toLocaleString()}`
-      : "Empty";
+    status.textContent = isEmpty
+      ? "Empty"
+      : `Saved ${new Date(bank.snapshot.savedAt).toLocaleString()}`;
     card.appendChild(status);
 
     const buttonRow = document.createElement("div");
@@ -574,11 +661,11 @@ function renderBanks() {
     saveBtn.className = "btn btn-ghost btn-small";
     saveBtn.textContent = "Save";
     saveBtn.addEventListener("click", async () => {
-      if (bank && !confirm(`Overwrite Bank ${index + 1} with the current arrangement?`)) return;
+      if (!isEmpty && !confirm(`Overwrite "${bank.name}" with the current arrangement?`)) return;
       el.seatingStatus.textContent = "Saving to memory bank…";
       try {
         await SeatingModule.saveBank(index);
-        el.seatingStatus.textContent = `Saved to Bank ${index + 1} ✓`;
+        el.seatingStatus.textContent = `Saved to "${bank.name}" ✓`;
         renderBanks();
       } catch (err) {
         el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
@@ -590,32 +677,50 @@ function renderBanks() {
     loadBtn.type = "button";
     loadBtn.className = "btn btn-ghost btn-small";
     loadBtn.textContent = "Load";
-    loadBtn.disabled = !bank;
+    loadBtn.disabled = isEmpty;
     loadBtn.addEventListener("click", async () => {
-      if (!confirm(`Load Bank ${index + 1}? This replaces your current seating arrangement (including grid size).`)) return;
+      if (!confirm(`Load "${bank.name}"? This replaces your current seating arrangement (including grid size).`)) return;
       el.seatingStatus.textContent = "Loading memory bank…";
       try {
         await SeatingModule.loadBank(index);
         selectedStudentId = null;
         renderSeating();
-        el.seatingStatus.textContent = `Loaded Bank ${index + 1} ✓`;
+        el.seatingStatus.textContent = `Loaded "${bank.name}" ✓`;
       } catch (err) {
         el.seatingStatus.textContent = `Couldn't load: ${err.message}`;
       }
     });
     buttonRow.appendChild(loadBtn);
 
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "btn btn-ghost btn-small";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", async () => {
+      const next = prompt("Name this memory bank:", bank.name);
+      if (next === null) return;
+      el.seatingStatus.textContent = "Renaming…";
+      try {
+        await SeatingModule.renameBank(index, next);
+        renderBanks();
+        el.seatingStatus.textContent = "";
+      } catch (err) {
+        el.seatingStatus.textContent = `Couldn't rename: ${err.message}`;
+      }
+    });
+    buttonRow.appendChild(renameBtn);
+
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "btn btn-ghost btn-small";
     deleteBtn.textContent = "Delete";
-    deleteBtn.disabled = !bank;
+    deleteBtn.disabled = isEmpty;
     deleteBtn.addEventListener("click", async () => {
-      if (!confirm(`Delete Bank ${index + 1}? This can't be undone.`)) return;
+      if (!confirm(`Delete the saved arrangement in "${bank.name}"? This can't be undone.`)) return;
       el.seatingStatus.textContent = "Deleting…";
       try {
         await SeatingModule.deleteBank(index);
-        el.seatingStatus.textContent = `Bank ${index + 1} deleted.`;
+        el.seatingStatus.textContent = `"${bank.name}" cleared.`;
         renderBanks();
       } catch (err) {
         el.seatingStatus.textContent = `Couldn't delete: ${err.message}`;

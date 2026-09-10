@@ -63,9 +63,10 @@ body {
 }
 
 .wrap {
-  max-width: 880px;
+  max-width: 1600px;
+  width: 94%;
   margin: 0 auto;
-  padding: 48px 20px 80px;
+  padding: 36px 20px 80px;
   position: relative;
   z-index: 1;
 }
@@ -656,7 +657,7 @@ textarea {
 .desk {
   position: relative;
   aspect-ratio: 1;
-  min-height: 50px;
+  min-height: 56px;
   border-radius: var(--radius-small);
   font-family: var(--font-body);
   font-size: 0.75rem;
@@ -676,7 +677,7 @@ textarea {
 }
 
 .desk-lock-btn,
-.desk-group-btn {
+.desk-label-btn {
   position: absolute;
   top: 2px;
   width: 18px;
@@ -694,15 +695,57 @@ textarea {
   left: 2px;
 }
 
-.desk-group-btn {
+.desk-label-btn {
   right: 2px;
-  border: 1px solid var(--line);
-  color: var(--ink-soft);
-  background: var(--card);
+  opacity: 0.35;
 }
 
-.desk-group-btn:hover {
+.desk-label-btn:hover {
+  opacity: 1;
+}
+
+.desk-label-btn-active {
+  opacity: 1;
+}
+
+.desk-group-input {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 30px;
+  height: 16px;
+  font-size: 0.62rem;
+  text-align: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--card);
+  color: var(--ink-soft);
+}
+
+.desk-group-input:focus {
+  outline: none;
   border-color: var(--green);
+  color: var(--ink);
+}
+
+/* Chrome/Safari number-input spinner arrows — hidden, the box is too small for them */
+.desk-group-input::-webkit-inner-spin-button,
+.desk-group-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Inactive — no desk here yet. Faint, minimal, still clickable. */
+.desk-inactive {
+  background: transparent;
+  border: 1px dashed var(--line);
+  opacity: 0.4;
+}
+
+.desk-inactive:hover {
+  opacity: 0.8;
+  border-color: var(--ink-soft);
 }
 
 .desk-empty {
@@ -732,11 +775,12 @@ textarea {
   border-width: 3px;
 }
 
-/* Group color — default theme: a light tint of the group color */
+/* Group color: driven by --group-hue (a plain degree number set inline
+   by JS), not a fixed color list, so it scales to any number of groups. */
 .desk-grouped.desk-empty,
 .desk-grouped.desk-occupied {
-  background: color-mix(in srgb, var(--group-color) 35%, var(--card));
-  border-color: var(--group-color);
+  background: hsl(var(--group-hue), 55%, 84%);
+  border-color: hsl(var(--group-hue), 55%, 50%);
 }
 
 [data-theme="cyberpunk"] .desk-occupied {
@@ -753,12 +797,16 @@ textarea {
   box-shadow: var(--focus-glow);
 }
 
+[data-theme="cyberpunk"] .desk-inactive {
+  border-color: var(--line);
+}
+
 /* Group color — cyberpunk theme: keep the dark fill, color the border/glow instead */
 [data-theme="cyberpunk"] .desk-grouped.desk-empty,
 [data-theme="cyberpunk"] .desk-grouped.desk-occupied {
   background: var(--card);
-  border-color: var(--group-color);
-  box-shadow: 0 0 10px var(--group-color);
+  border-color: hsl(var(--group-hue), 85%, 60%);
+  box-shadow: 0 0 10px hsl(var(--group-hue), 85%, 60%);
 }
 
 .front-label {
@@ -834,4 +882,37 @@ textarea {
 
 [data-theme="cyberpunk"] .bank-card {
   box-shadow: var(--card-shadow);
+}
+
+/* Class Number column in the roster table */
+.class-number-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.92rem;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  text-align: center;
+}
+
+.class-number-input:hover,
+.class-number-input:focus {
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+/* Class Number badge in the unseated list */
+.unseated-classnumber {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--green-dark);
+  background: var(--paper);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.unseated-item-selected .unseated-classnumber {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
 }
