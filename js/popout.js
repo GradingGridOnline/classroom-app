@@ -48,8 +48,8 @@ function render() {
   // Size desks to fill most of the window, in both directions — not
   // just stretch to the width. Leaves a margin for the header, the
   // "Front of Classroom" labels, and the status line.
-  const reservedHeight = 150;
-  const availableWidth = window.innerWidth * 0.96;
+  const reservedHeight = 80;
+  const availableWidth = window.innerWidth * 0.99;
   const availableHeight = window.innerHeight - reservedHeight;
   const deskSize = Math.max(
     30,
