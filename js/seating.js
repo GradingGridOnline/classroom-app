@@ -40,6 +40,7 @@ const SeatingModule = {
   groups: {},
   labels: {},
   banks: SeatingModule_defaultBanks(),
+  showGroupsInPopout: true,
   currentCourseId: null,
 
   fileName(courseId) {
@@ -73,6 +74,7 @@ const SeatingModule = {
         }
       }
       this.banks = this._normalizeBanks(data.banks);
+      this.showGroupsInPopout = data.showGroupsInPopout !== false; // default true
     } else {
       this.rows = DEFAULT_GRID_SIZE;
       this.cols = DEFAULT_GRID_SIZE;
@@ -82,6 +84,7 @@ const SeatingModule = {
       this.groups = {};
       this.labels = {};
       this.banks = SeatingModule_defaultBanks();
+      this.showGroupsInPopout = true;
     }
   },
 
@@ -110,7 +113,13 @@ const SeatingModule = {
       groups: this.groups,
       labels: this.labels,
       banks: this.banks,
+      showGroupsInPopout: this.showGroupsInPopout,
     });
+  },
+
+  async toggleShowGroupsInPopout() {
+    this.showGroupsInPopout = !this.showGroupsInPopout;
+    await this.save();
   },
 
   /** Resizing keeps anything that still falls within the new bounds. */

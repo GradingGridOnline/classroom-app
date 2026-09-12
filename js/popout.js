@@ -50,7 +50,7 @@ function render() {
       const active = seating.isActive(r, c);
       const studentId = active ? seating.studentAt(r, c) : null;
       const student = studentId ? roster.students.find((s) => s.id === studentId) : null;
-      const group = active ? seating.getGroup(r, c) : 0;
+      const group = active && seating.showGroupsInPopout ? seating.getGroup(r, c) : 0;
 
       const desk = document.createElement("div");
       desk.className =
@@ -59,9 +59,26 @@ function render() {
         (group ? " desk-grouped" : "");
       if (group) desk.style.setProperty("--group-hue", String(groupHueDeg(group)));
 
+      if (group) {
+        const groupBadge = document.createElement("span");
+        groupBadge.className = "popout-group-badge";
+        groupBadge.textContent = String(group);
+        desk.appendChild(groupBadge);
+      }
+
       const nameEl = document.createElement("span");
       nameEl.className = "desk-name";
-      nameEl.textContent = student ? student.name || "" : "";
+      if (student) {
+        if (student.classNumber) {
+          const numEl = document.createElement("span");
+          numEl.className = "desk-classnumber-tag";
+          numEl.textContent = `#${student.classNumber}`;
+          nameEl.appendChild(numEl);
+        }
+        const textEl = document.createElement("span");
+        textEl.textContent = student.name || "";
+        nameEl.appendChild(textEl);
+      }
       desk.appendChild(nameEl);
 
       grid.appendChild(desk);
@@ -73,4 +90,3 @@ function render() {
 
 document.getElementById("popout-refresh-btn").addEventListener("click", render);
 render();
-

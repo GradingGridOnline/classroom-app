@@ -61,6 +61,20 @@
       border: none;
       opacity: 0;
     }
+    .popout-group-badge {
+      position: absolute;
+      top: 2px;
+      right: 4px;
+      font-size: 1.6rem;
+      font-weight: 800;
+      line-height: 1;
+      color: hsl(var(--group-hue), 75%, 30%);
+      font-family: var(--font-heading);
+    }
+    [data-theme="cyberpunk"] .popout-group-badge {
+      color: hsl(var(--group-hue), 95%, 65%);
+      text-shadow: 0 0 8px hsl(var(--group-hue), 95%, 55%);
+    }
   </style>
 </head>
 <body>
