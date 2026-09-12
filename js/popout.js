@@ -1,7 +1,9 @@
 // ===== Pop-out seating chart =====
 // Read-only, name-only display for projecting. Pulls live data from
 // the main app window (window.opener) rather than keeping its own
-// copy — click "Refresh" any time the main chart changes.
+// copy — it re-checks that data automatically (see the polling
+// interval at the bottom), so it stays in sync without any action
+// needed in this window.
 //
 // "Reversed perspective": two changes from the main editor.
 //  1. Rows render back-to-front reversed (last row first), so the row
@@ -68,17 +70,7 @@ function render() {
 
       const nameEl = document.createElement("span");
       nameEl.className = "desk-name";
-      if (student) {
-        if (student.classNumber) {
-          const numEl = document.createElement("span");
-          numEl.className = "desk-classnumber-tag";
-          numEl.textContent = `#${student.classNumber}`;
-          nameEl.appendChild(numEl);
-        }
-        const textEl = document.createElement("span");
-        textEl.textContent = student.name || "";
-        nameEl.appendChild(textEl);
-      }
+      nameEl.textContent = student ? student.name || "" : "";
       desk.appendChild(nameEl);
 
       grid.appendChild(desk);
@@ -88,5 +80,5 @@ function render() {
   statusEl.textContent = "";
 }
 
-document.getElementById("popout-refresh-btn").addEventListener("click", render);
 render();
+setInterval(render, 1000);

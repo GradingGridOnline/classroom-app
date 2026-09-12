@@ -257,3 +257,13 @@ Several refinements on top of the seating chart:
   chart is now noticeably larger than other section headings.
 - **Group colors** are bolder and more saturated in both the main
   editor and the pop-out, in both themes.
+
+## Pop-out: name-only again, auto-refreshing
+
+- Class Numbers are no longer shown in the pop-out (still shown in the
+  main editor's desks and unseated list) — the pop-out is back to
+  name-only, per the original design.
+- The pop-out no longer has a manual Refresh button. It now checks
+  the main window automatically about once a second and updates
+  itself — so any change or toggle you make in the main app appears
+  in the pop-out within a second, with nothing to click over there.
