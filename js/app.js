@@ -20,8 +20,10 @@ const el = {
   backToCoursesBtn: document.getElementById("back-to-courses-btn"),
   tabRosterBtn: document.getElementById("tab-roster-btn"),
   tabSeatingBtn: document.getElementById("tab-seating-btn"),
+  tabAttendanceBtn: document.getElementById("tab-attendance-btn"),
   rosterPanel: document.getElementById("roster-panel"),
   seatingPanel: document.getElementById("seating-panel"),
+  attendancePanel: document.getElementById("attendance-panel"),
 
   rosterCount: document.getElementById("roster-count"),
   rosterFileInput: document.getElementById("roster-file-input"),
@@ -54,12 +56,19 @@ const el = {
   seatingStatus: document.getElementById("seating-status"),
   banksList: document.getElementById("banks-list"),
 
+  addSessionBtn: document.getElementById("add-session-btn"),
+  attendanceStatus: document.getElementById("attendance-status"),
+  attendanceTable: document.getElementById("attendance-table"),
+  toggleAttendanceSettingsBtn: document.getElementById("toggle-attendance-settings-btn"),
+  attendanceSettingsBody: document.getElementById("attendance-settings-body"),
+
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
   themeList: document.getElementById("theme-list"),
 };
 
 let selectedStudentId = null; // currently-selected student in the "Unseated" list
+let attendanceSettingsEditing = false;
 
 async function main() {
   ThemeModule.initLocal();
@@ -239,6 +248,7 @@ async function openCourseDetail(course) {
 
   el.rosterStatus.textContent = "Loading roster…";
   el.seatingStatus.textContent = "Loading seating chart…";
+  el.attendanceStatus.textContent = "Loading attendance…";
 
   try {
     await RosterModule.load(course.id);
@@ -255,24 +265,37 @@ async function openCourseDetail(course) {
   } catch (err) {
     el.seatingStatus.textContent = `Couldn't load seating chart: ${err.message}`;
   }
+
+  try {
+    await AttendanceModule.load(course.id);
+    renderAttendance();
+    el.attendanceStatus.textContent = "";
+  } catch (err) {
+    el.attendanceStatus.textContent = `Couldn't load attendance: ${err.message}`;
+  }
 }
 
 el.backToCoursesBtn.addEventListener("click", showCourses);
 
 function showTab(tab) {
-  const isRoster = tab === "roster";
-  el.rosterPanel.hidden = !isRoster;
-  el.seatingPanel.hidden = isRoster;
-  el.tabRosterBtn.classList.toggle("tab-btn-active", isRoster);
-  el.tabSeatingBtn.classList.toggle("tab-btn-active", !isRoster);
-  if (!isRoster) {
+  el.rosterPanel.hidden = tab !== "roster";
+  el.seatingPanel.hidden = tab !== "seating";
+  el.attendancePanel.hidden = tab !== "attendance";
+  el.tabRosterBtn.classList.toggle("tab-btn-active", tab === "roster");
+  el.tabSeatingBtn.classList.toggle("tab-btn-active", tab === "seating");
+  el.tabAttendanceBtn.classList.toggle("tab-btn-active", tab === "attendance");
+
+  if (tab === "seating") {
     selectedStudentId = null;
     renderSeating(); // roster may have changed since the tab was last shown
+  } else if (tab === "attendance") {
+    renderAttendance(); // roster may have changed since the tab was last shown
   }
 }
 
 el.tabRosterBtn.addEventListener("click", () => showTab("roster"));
 el.tabSeatingBtn.addEventListener("click", () => showTab("seating"));
+el.tabAttendanceBtn.addEventListener("click", () => showTab("attendance"));
 
 function renderRoster() {
   el.rosterCount.textContent = `${RosterModule.students.length} / ${MAX_STUDENTS}`;
@@ -795,5 +818,322 @@ el.saveSeatingBtn.addEventListener("click", async () => {
     el.seatingStatus.textContent = `Save failed: ${err.message}`;
   }
 });
+
+// ===== Attendance =====
+
+function renderAttendance() {
+  el.attendanceTable.innerHTML = "";
+
+  const thead = document.createElement("thead");
+  thead.appendChild(buildAttendanceHeaderRow());
+  el.attendanceTable.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  RosterModule.students.forEach((student) => {
+    tbody.appendChild(buildAttendanceStudentRow(student));
+  });
+  el.attendanceTable.appendChild(tbody);
+
+  renderAttendanceSettings();
+}
+
+function buildAttendanceHeaderRow() {
+  const tr = document.createElement("tr");
+
+  ["Student", "Notes", "Score", "Attended", "Absences"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    tr.appendChild(th);
+  });
+
+  AttendanceModule.sessions.forEach((session) => {
+    const th = document.createElement("th");
+    th.className = "session-header-cell";
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "session-remove-btn";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Remove this class session";
+    removeBtn.addEventListener("click", async () => {
+      if (!confirm(`Remove class ${session.number}? This deletes all recorded attendance for it.`)) return;
+      AttendanceModule.removeSession(session.id);
+      await saveAttendanceThen(renderAttendance);
+    });
+
+    const numberEl = document.createElement("div");
+    numberEl.className = "session-number";
+    numberEl.textContent = session.number;
+
+    const dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.className = "session-date-input";
+    dateInput.value = session.date || "";
+    dateInput.addEventListener("change", async () => {
+      AttendanceModule.setSessionDate(session.id, dateInput.value);
+      await saveAttendanceThen();
+    });
+
+    const presentBtn = document.createElement("button");
+    presentBtn.type = "button";
+    presentBtn.className = "btn btn-primary btn-small session-present-btn";
+    presentBtn.textContent = "P";
+    presentBtn.title = "Mark everyone present for this class";
+    presentBtn.addEventListener("click", async () => {
+      AttendanceModule.markAllPresent(session.id, RosterModule.students.map((s) => s.id));
+      await saveAttendanceThen(renderAttendance);
+    });
+
+    th.append(removeBtn, numberEl, dateInput, presentBtn);
+    tr.appendChild(th);
+  });
+
+  return tr;
+}
+
+function buildAttendanceStudentRow(student) {
+  const tr = document.createElement("tr");
+  tr.dataset.studentId = student.id;
+
+  // ----- Student info: pronunciation above, name + school ID in one row -----
+  const infoTd = document.createElement("td");
+  infoTd.className = "attendance-student-cell";
+  if (student.pronunciation) {
+    const pron = document.createElement("div");
+    pron.className = "attendance-pronunciation";
+    pron.textContent = student.pronunciation;
+    infoTd.appendChild(pron);
+  }
+  const nameRow = document.createElement("div");
+  nameRow.className = "attendance-name-row";
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "attendance-name";
+  nameSpan.textContent = student.name || "(unnamed)";
+  nameRow.appendChild(nameSpan);
+  if (student.schoolId) {
+    const idSpan = document.createElement("span");
+    idSpan.className = "attendance-schoolid";
+    idSpan.textContent = student.schoolId;
+    nameRow.appendChild(idSpan);
+  }
+  infoTd.appendChild(nameRow);
+  tr.appendChild(infoTd);
+
+  // ----- Notes (general, ongoing) -----
+  const notesTd = document.createElement("td");
+  const notesInput = document.createElement("input");
+  notesInput.type = "text";
+  notesInput.className = "attendance-notes-input";
+  notesInput.placeholder = "Notes…";
+  notesInput.value = AttendanceModule.getNote(student.id);
+  notesInput.addEventListener("change", async () => {
+    AttendanceModule.setNote(student.id, notesInput.value);
+    await saveAttendanceThen();
+  });
+  notesTd.appendChild(notesInput);
+  tr.appendChild(notesTd);
+
+  // ----- Score / Attended / Absences -----
+  const stats = AttendanceModule.stats(student.id);
+  [stats.score === null ? "—" : `${stats.score}%`, stats.attended, stats.absences].forEach((val) => {
+    const td = document.createElement("td");
+    td.className = "attendance-stat-cell";
+    td.textContent = val;
+    tr.appendChild(td);
+  });
+
+  // ----- One cell per class session -----
+  AttendanceModule.sessions.forEach((session) => {
+    const td = document.createElement("td");
+    td.className = "attendance-session-cell";
+    const record = AttendanceModule.getRecord(student.id, session.id);
+
+    const codeSelect = document.createElement("select");
+    codeSelect.className = "attendance-code-select";
+    ATTENDANCE_CODES.forEach((code) => {
+      const opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = code || "—";
+      if (code === record.code) opt.selected = true;
+      codeSelect.appendChild(opt);
+    });
+    codeSelect.addEventListener("change", async () => {
+      AttendanceModule.setRecord(student.id, session.id, { code: codeSelect.value });
+      await saveAttendanceThen();
+      refreshAttendanceStatsRow(student.id);
+    });
+
+    const infractionSelect = document.createElement("select");
+    infractionSelect.className = "attendance-infraction-select";
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = "No infraction";
+    infractionSelect.appendChild(noneOpt);
+    AttendanceModule.settings.infractionOptions.forEach((opt) => {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      if (opt === record.infraction) o.selected = true;
+      infractionSelect.appendChild(o);
+    });
+    infractionSelect.addEventListener("change", async () => {
+      AttendanceModule.setRecord(student.id, session.id, { infraction: infractionSelect.value });
+      await saveAttendanceThen();
+    });
+
+    const memoInput = document.createElement("input");
+    memoInput.type = "text";
+    memoInput.className = "attendance-memo-input";
+    memoInput.placeholder = "Memo";
+    memoInput.value = record.memo || "";
+    memoInput.addEventListener("change", async () => {
+      AttendanceModule.setRecord(student.id, session.id, { memo: memoInput.value });
+      await saveAttendanceThen();
+    });
+
+    td.append(codeSelect, infractionSelect, memoInput);
+    tr.appendChild(td);
+  });
+
+  return tr;
+}
+
+/** Updates just one student's Score/Attended/Absences cells, without rebuilding the whole table. */
+function refreshAttendanceStatsRow(studentId) {
+  const row = el.attendanceTable.querySelector(`tr[data-student-id="${studentId}"]`);
+  if (!row) return;
+  const stats = AttendanceModule.stats(studentId);
+  const statCells = row.querySelectorAll(".attendance-stat-cell");
+  if (statCells.length === 3) {
+    statCells[0].textContent = stats.score === null ? "—" : `${stats.score}%`;
+    statCells[1].textContent = stats.attended;
+    statCells[2].textContent = stats.absences;
+  }
+}
+
+async function saveAttendanceThen(after) {
+  el.attendanceStatus.textContent = "Saving…";
+  try {
+    await AttendanceModule.save();
+    el.attendanceStatus.textContent = "";
+  } catch (err) {
+    el.attendanceStatus.textContent = `Couldn't save: ${err.message}`;
+  }
+  if (after) after();
+}
+
+el.addSessionBtn.addEventListener("click", async () => {
+  AttendanceModule.addSession();
+  await saveAttendanceThen(renderAttendance);
+});
+
+el.toggleAttendanceSettingsBtn.addEventListener("click", () => {
+  attendanceSettingsEditing = !attendanceSettingsEditing;
+  el.toggleAttendanceSettingsBtn.textContent = attendanceSettingsEditing ? "Done Editing" : "Edit Settings";
+  renderAttendanceSettings();
+});
+
+function renderAttendanceSettings() {
+  el.attendanceSettingsBody.innerHTML = "";
+
+  if (!attendanceSettingsEditing) {
+    const infractionsP = document.createElement("p");
+    infractionsP.className = "hint";
+    infractionsP.textContent =
+      "Infraction options: " + (AttendanceModule.settings.infractionOptions.join(", ") || "(none)");
+    el.attendanceSettingsBody.appendChild(infractionsP);
+
+    const points = AttendanceModule.settings.points;
+    const pointsP = document.createElement("p");
+    pointsP.className = "hint";
+    pointsP.textContent = `Score points — P: ${points.P}, L: ${points.L}, E: ${points.E}, A: ${points.A}`;
+    el.attendanceSettingsBody.appendChild(pointsP);
+    return;
+  }
+
+  // ----- Edit mode: infraction options -----
+  const infractionsWrap = document.createElement("div");
+  infractionsWrap.className = "attendance-settings-block";
+  const infractionsLabel = document.createElement("h4");
+  infractionsLabel.textContent = "Infraction options";
+  infractionsWrap.appendChild(infractionsLabel);
+
+  const list = document.createElement("ul");
+  list.className = "infraction-edit-list";
+  AttendanceModule.settings.infractionOptions.forEach((opt, idx) => {
+    const li = document.createElement("li");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = opt;
+    input.addEventListener("change", async () => {
+      const opts = [...AttendanceModule.settings.infractionOptions];
+      opts[idx] = input.value.trim();
+      AttendanceModule.updateSettings({ infractionOptions: opts.filter(Boolean) });
+      await saveAttendanceThen(renderAttendance);
+    });
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-ghost btn-small";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", async () => {
+      const opts = AttendanceModule.settings.infractionOptions.filter((_, i) => i !== idx);
+      AttendanceModule.updateSettings({ infractionOptions: opts });
+      await saveAttendanceThen(renderAttendance);
+    });
+    li.append(input, removeBtn);
+    list.appendChild(li);
+  });
+  infractionsWrap.appendChild(list);
+
+  const addRow = document.createElement("div");
+  addRow.className = "add-course-row";
+  const newInfractionInput = document.createElement("input");
+  newInfractionInput.type = "text";
+  newInfractionInput.placeholder = "New infraction option";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn btn-primary btn-small";
+  addBtn.textContent = "+ Add";
+  addBtn.addEventListener("click", async () => {
+    const val = newInfractionInput.value.trim();
+    if (!val) return;
+    AttendanceModule.updateSettings({
+      infractionOptions: [...AttendanceModule.settings.infractionOptions, val],
+    });
+    newInfractionInput.value = "";
+    await saveAttendanceThen(renderAttendance);
+  });
+  addRow.append(newInfractionInput, addBtn);
+  infractionsWrap.appendChild(addRow);
+  el.attendanceSettingsBody.appendChild(infractionsWrap);
+
+  // ----- Edit mode: score points per code -----
+  const pointsWrap = document.createElement("div");
+  pointsWrap.className = "attendance-settings-block";
+  const pointsLabel = document.createElement("h4");
+  pointsLabel.textContent = "Score points per code";
+  pointsWrap.appendChild(pointsLabel);
+
+  ["P", "L", "E", "A"].forEach((code) => {
+    const row = document.createElement("div");
+    row.className = "mapping-row";
+    const label = document.createElement("label");
+    label.textContent = ATTENDANCE_CODE_LABELS[code];
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = "0.1";
+    input.min = "0";
+    input.max = "1";
+    input.value = AttendanceModule.settings.points[code];
+    input.addEventListener("change", async () => {
+      const points = { ...AttendanceModule.settings.points, [code]: Number(input.value) };
+      AttendanceModule.updateSettings({ points });
+      await saveAttendanceThen(renderAttendance);
+    });
+    row.append(label, input);
+    pointsWrap.appendChild(row);
+  });
+  el.attendanceSettingsBody.appendChild(pointsWrap);
+}
 
 main();

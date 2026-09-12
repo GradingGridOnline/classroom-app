@@ -936,3 +936,208 @@ textarea {
   color: #fff;
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* ===== Attendance ===== */
+
+.attendance-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+}
+
+.attendance-table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.attendance-table th,
+.attendance-table td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.attendance-table thead th {
+  background: var(--paper);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  position: sticky;
+  top: 0;
+}
+
+.attendance-student-cell,
+.attendance-notes-input {
+  white-space: normal;
+}
+
+.attendance-student-cell {
+  min-width: 170px;
+}
+
+.attendance-pronunciation {
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.attendance-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.attendance-name {
+  font-weight: 600;
+}
+
+.attendance-schoolid {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.attendance-notes-input {
+  width: 160px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.attendance-stat-cell {
+  text-align: center;
+  font-weight: 600;
+  color: var(--green-dark);
+}
+
+/* Session header: number, date, and the bulk "mark all present" button */
+.session-header-cell {
+  position: relative;
+  text-align: center;
+  min-width: 108px;
+}
+
+.session-number {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--green-dark);
+  margin-bottom: 3px;
+}
+
+.session-date-input {
+  width: 100%;
+  font-size: 0.72rem;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin-bottom: 4px;
+}
+
+.session-present-btn {
+  width: 100%;
+  padding: 3px 0;
+}
+
+.session-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.session-remove-btn:hover {
+  color: var(--marker);
+}
+
+/* Per-student, per-session cell: code, infraction, memo stacked */
+.attendance-session-cell {
+  min-width: 118px;
+}
+
+.attendance-code-select,
+.attendance-infraction-select,
+.attendance-memo-input {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.76rem;
+  padding: 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin-bottom: 3px;
+  background: var(--card);
+}
+
+.attendance-memo-input {
+  margin-bottom: 0;
+}
+
+.attendance-memo-input::placeholder {
+  color: var(--ink-soft);
+}
+
+/* Attendance settings (always visible; edit mode adds inputs) */
+
+.attendance-settings {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.attendance-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.attendance-settings-header h3 {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  margin: 0;
+  color: var(--green-dark);
+}
+
+.attendance-settings-block {
+  margin-bottom: 16px;
+}
+
+.attendance-settings-block h4 {
+  font-size: 0.85rem;
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.infraction-edit-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.infraction-edit-list li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.infraction-edit-list input {
+  flex: 1;
+  max-width: 260px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}

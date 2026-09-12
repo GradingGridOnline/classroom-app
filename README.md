@@ -276,3 +276,39 @@ number text scales along with it. Since it already re-checks the main
 window automatically, simply resizing or dragging the pop-out onto a
 bigger display picks up the new size within about a second — nothing
 to click.
+
+## Attendance (new tab)
+
+A third tab, **Attendance**, alongside Roster and Seating Chart. Stored
+as `attendance-<courseId>.json`, one file per course.
+
+- **Student column**: pronunciation above, name and School ID together
+  in one row below it.
+- **Notes**: a general, ongoing note field per student (separate from
+  anything attendance-specific).
+- **Score / Attended / Absences**: computed automatically from
+  whatever's been recorded so far. Score is a weighted percentage
+  based on the point values in Attendance Settings (defaults: Present
+  = 1, Late = 0.5, Excused = 1, Absent = 0); sessions with nothing
+  recorded yet don't count toward it.
+- **+ Add Class Session** adds a new column. Each column header has
+  the class number, an editable date, and a **P** button that marks
+  every student present for that class in one click. Click the small
+  **×** in a header to remove that session entirely (asks to confirm
+  first, since it deletes that column's recorded attendance).
+- Each student × session cell has three stacked controls: the
+  attendance code (a dropdown — blank, P, A, L, or E), an infraction
+  dropdown (configurable — see Settings), and a free-text memo for
+  that specific class.
+- **Attendance Settings**, always visible at the bottom of the tab:
+  the infraction option list and the point value for each code. Click
+  **Edit Settings** to add/rename/remove infraction options or change
+  point values; click **Done Editing** to return to the plain summary
+  view. Everything saves immediately.
+
+This is a first pass — a few things worth knowing:
+- The infraction picker is single-select for now (one infraction per
+  student per class). Let me know if you need to record more than one
+  at a time.
+- The table can get wide with many sessions — it scrolls horizontally
+  within its own box rather than the whole page.
