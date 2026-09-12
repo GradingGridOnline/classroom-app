@@ -73,3 +73,4 @@ function render() {
 
 document.getElementById("popout-refresh-btn").addEventListener("click", render);
 render();
+
