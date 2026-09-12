@@ -267,3 +267,12 @@ Several refinements on top of the seating chart:
   the main window automatically about once a second and updates
   itself — so any change or toggle you make in the main app appears
   in the pop-out within a second, with nothing to click over there.
+
+## Pop-out: fills the window, scales with it
+
+The pop-out grid now sizes itself to fill most of the window in both
+width and height (not just stretch sideways), and desk name/group
+number text scales along with it. Since it already re-checks the main
+window automatically, simply resizing or dragging the pop-out onto a
+bigger display picks up the new size within about a second — nothing
+to click.

@@ -26,14 +26,14 @@
       padding: 24px;
     }
     .popout-wrap {
-      width: 100%;
-      max-width: 900px;
+      width: auto;
+      max-width: none;
     }
     .popout-header {
       display: flex;
       align-items: baseline;
-      justify-content: space-between;
-      margin-bottom: 14px;
+      justify-content: center;
+      margin-bottom: 10px;
     }
     .popout-header h1 {
       font-family: var(--font-heading);
@@ -46,11 +46,12 @@
       color: var(--ink-soft);
       font-size: 0.85rem;
       letter-spacing: 0.05em;
-      margin: 14px 0 0;
+      margin: 10px 0 0;
     }
     .popout-status {
       color: var(--ink-soft);
       font-size: 0.9rem;
+      text-align: center;
     }
     #popout-grid .desk-lock-btn,
     #popout-grid .desk-group-input,
@@ -61,11 +62,14 @@
       border: none;
       opacity: 0;
     }
+    #popout-grid .desk-name {
+      font-size: var(--popout-name-size, 0.9rem);
+    }
     .popout-group-badge {
       position: absolute;
-      top: 2px;
-      right: 4px;
-      font-size: 1.6rem;
+      top: 2%;
+      right: 3%;
+      font-size: var(--popout-badge-size, 1.6rem);
       font-weight: 800;
       line-height: 1;
       color: hsl(var(--group-hue), 75%, 30%);

@@ -44,7 +44,22 @@ function render() {
 
   const grid = document.getElementById("popout-grid");
   grid.innerHTML = "";
-  grid.style.gridTemplateColumns = `repeat(${seating.cols}, 1fr)`;
+
+  // Size desks to fill most of the window, in both directions — not
+  // just stretch to the width. Leaves a margin for the header, the
+  // "Front of Classroom" labels, and the status line.
+  const reservedHeight = 150;
+  const availableWidth = window.innerWidth * 0.96;
+  const availableHeight = window.innerHeight - reservedHeight;
+  const deskSize = Math.max(
+    30,
+    Math.floor(Math.min(availableWidth / seating.cols, availableHeight / seating.rows))
+  );
+
+  grid.style.gridTemplateColumns = `repeat(${seating.cols}, ${deskSize}px)`;
+  grid.style.gridTemplateRows = `repeat(${seating.rows}, ${deskSize}px)`;
+  grid.style.setProperty("--popout-name-size", `${Math.max(10, Math.round(deskSize * 0.16))}px`);
+  grid.style.setProperty("--popout-badge-size", `${Math.max(14, Math.round(deskSize * 0.3))}px`);
 
   // Reversed row order AND mirrored column order — see comment above.
   for (let r = seating.rows - 1; r >= 0; r--) {
