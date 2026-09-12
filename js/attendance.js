@@ -1,29 +1,35 @@
 // ===== Attendance module =====
 // One file per course: attendance-<courseId>.json
 //
-// - sessions: ordered list of class meetings [{ id, number, date }]
+// - sessions: one per class meeting, count driven entirely by
+//   settings.termClassCount (see setTermClassCount) rather than
+//   added/removed one at a time.
 // - records: sparse map "studentId|sessionId" -> { code, infraction, memo }
-//   code is "" (not recorded), "P" (present), "A" (absent), "L" (late),
-//   or "E" (excused).
+//   code is "" (not recorded) or one of settings.participationTypes.
 // - notes: studentId -> a general, ongoing note about that student
 //   (separate from the per-session memo).
-// - settings: editable configuration — the infraction option list, and
-//   the point value each attendance code contributes toward the
-//   computed "current score".
+// - settings: editable configuration.
+//   - participationTypes: always starts with the fixed "P" and "A"
+//     codes (the bulk-present button and the Absences count both
+//     depend on these exact codes existing), followed by any number
+//     of custom types (default: "L", "E") that can be freely renamed,
+//     added, or removed.
+//   - infractionOptions: a freely editable list.
+//   - points / infractionPoints: the point value each participation
+//     type / infraction contributes toward the computed score.
+//   - termClassCount: how many session columns exist.
+//   - scoreDisplayMode: "percent" or "points".
 
-const ATTENDANCE_CODES = ["", "P", "A", "L", "E"];
-const ATTENDANCE_CODE_LABELS = {
-  "": "—",
-  P: "P (Present)",
-  A: "A (Absent)",
-  L: "L (Late)",
-  E: "E (Excused)",
-};
+const FIXED_PARTICIPATION_TYPES = ["P", "A"];
 
 function defaultAttendanceSettings() {
   return {
+    participationTypes: ["P", "A", "L", "E"],
     infractionOptions: ["Sleeping", "Phone use", "Talking too much"],
-    points: { P: 1, L: 0.5, E: 1, A: 0 },
+    points: { P: 1, A: 0, L: 0.5, E: 1 },
+    infractionPoints: { Sleeping: -0.2, "Phone use": -0.2, "Talking too much": -0.2 },
+    termClassCount: 0,
+    scoreDisplayMode: "percent",
   };
 }
 
@@ -41,21 +47,27 @@ const AttendanceModule = {
   async load(courseId) {
     this.currentCourseId = courseId;
     const data = await storage.loadFile(this.fileName(courseId));
+    const defaults = defaultAttendanceSettings();
+
     if (data) {
       this.sessions = Array.isArray(data.sessions) ? data.sessions : [];
       this.records = data.records || {};
       this.notes = data.notes || {};
-      const defaults = defaultAttendanceSettings();
+      const saved = data.settings || {};
       this.settings = {
-        infractionOptions:
-          (data.settings && data.settings.infractionOptions) || defaults.infractionOptions,
-        points: { ...defaults.points, ...(data.settings && data.settings.points) },
+        participationTypes: this._withFixedTypes(saved.participationTypes || defaults.participationTypes),
+        infractionOptions: saved.infractionOptions || defaults.infractionOptions,
+        points: { ...defaults.points, ...saved.points },
+        infractionPoints: { ...defaults.infractionPoints, ...saved.infractionPoints },
+        termClassCount:
+          typeof saved.termClassCount === "number" ? saved.termClassCount : this.sessions.length,
+        scoreDisplayMode: saved.scoreDisplayMode === "points" ? "points" : "percent",
       };
     } else {
       this.sessions = [];
       this.records = {};
       this.notes = {};
-      this.settings = defaultAttendanceSettings();
+      this.settings = defaults;
     }
   },
 
@@ -69,26 +81,36 @@ const AttendanceModule = {
     });
   },
 
-  // ----- Sessions (class meetings / columns) -----
-
-  addSession() {
-    const nextNumber = this.sessions.length
-      ? Math.max(...this.sessions.map((s) => s.number)) + 1
-      : 1;
-    const session = {
-      id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      number: nextNumber,
-      date: "",
-    };
-    this.sessions.push(session);
-    return session;
+  _withFixedTypes(list) {
+    const rest = list.filter((t) => !FIXED_PARTICIPATION_TYPES.includes(t));
+    return [...FIXED_PARTICIPATION_TYPES, ...rest];
   },
 
-  removeSession(sessionId) {
-    this.sessions = this.sessions.filter((s) => s.id !== sessionId);
-    Object.keys(this.records).forEach((key) => {
-      if (key.endsWith(`|${sessionId}`)) delete this.records[key];
-    });
+  // ----- Sessions (class meetings / columns) -----
+  // The number of sessions is controlled entirely by term class count.
+
+  setTermClassCount(count) {
+    count = Math.max(0, Math.min(100, Math.round(Number(count) || 0)));
+
+    if (count > this.sessions.length) {
+      while (this.sessions.length < count) {
+        this.sessions.push({
+          id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          number: this.sessions.length + 1,
+          date: "",
+        });
+      }
+    } else if (count < this.sessions.length) {
+      const removed = this.sessions.slice(count);
+      this.sessions = this.sessions.slice(0, count);
+      removed.forEach((s) => {
+        Object.keys(this.records).forEach((key) => {
+          if (key.endsWith(`|${s.id}`)) delete this.records[key];
+        });
+      });
+    }
+
+    this.settings.termClassCount = count;
   },
 
   setSessionDate(sessionId, date) {
@@ -129,12 +151,50 @@ const AttendanceModule = {
     else delete this.notes[studentId];
   },
 
+  // ----- Settings: participation types -----
+
+  /** Renames/adds/removes participation types, always keeping P and A first and fixed. */
+  setParticipationTypes(list) {
+    const custom = list.map((s) => s.trim()).filter((s) => s && !FIXED_PARTICIPATION_TYPES.includes(s));
+    const cleaned = this._withFixedTypes(custom);
+    const newPoints = {};
+    cleaned.forEach((t) => {
+      newPoints[t] = this.settings.points[t] ?? 1;
+    });
+    this.settings.participationTypes = cleaned;
+    this.settings.points = newPoints;
+  },
+
+  setPointValue(type, value) {
+    this.settings.points[type] = Number(value) || 0;
+  },
+
+  // ----- Settings: infractions -----
+
+  setInfractionOptions(list) {
+    const cleaned = list.map((s) => s.trim()).filter(Boolean);
+    const newPoints = {};
+    cleaned.forEach((t) => {
+      newPoints[t] = this.settings.infractionPoints[t] ?? -0.2;
+    });
+    this.settings.infractionOptions = cleaned;
+    this.settings.infractionPoints = newPoints;
+  },
+
+  setInfractionPointValue(infraction, value) {
+    this.settings.infractionPoints[infraction] = Number(value) || 0;
+  },
+
+  setScoreDisplayMode(mode) {
+    this.settings.scoreDisplayMode = mode === "points" ? "points" : "percent";
+  },
+
   // ----- Summary stats, computed from recorded sessions only -----
 
   stats(studentId) {
     let attended = 0;
     let absences = 0;
-    let points = 0;
+    let totalPoints = 0;
     let counted = 0;
 
     this.sessions.forEach((s) => {
@@ -143,20 +203,18 @@ const AttendanceModule = {
       counted++;
       if (rec.code === "A") absences++;
       else attended++;
-      points += this.settings.points[rec.code] ?? 0;
+
+      let pts = this.settings.points[rec.code] ?? 0;
+      if (rec.infraction) pts += this.settings.infractionPoints[rec.infraction] ?? 0;
+      totalPoints += pts;
     });
 
     return {
-      score: counted > 0 ? Math.round((points / counted) * 100) : null,
+      percent: counted > 0 ? Math.round((totalPoints / counted) * 100) : null,
+      points: counted > 0 ? Math.round(totalPoints * 10) / 10 : null,
       attended,
       absences,
     };
-  },
-
-  // ----- Settings -----
-
-  updateSettings(next) {
-    this.settings = { ...this.settings, ...next };
   },
 };
 

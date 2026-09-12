@@ -312,3 +312,29 @@ This is a first pass — a few things worth knowing:
   at a time.
 - The table can get wide with many sessions — it scrolls horizontally
   within its own box rather than the whole page.
+
+## Attendance refinements
+
+- **Session count is now a setting, not a button.** In Attendance
+  Settings (Edit Settings), set "Number of classes in this term" and
+  that many columns appear automatically. Shrinking the number
+  removes trailing columns (and their recorded attendance — no
+  confirmation prompt currently, so double-check the number before
+  lowering it).
+- The **P** button is smaller now and sits directly under each
+  column's date, sized to fit within that column rather than
+  stretching full-width.
+- **Participation types** (the attendance code dropdown — P, A, L, E
+  by default) are now editable in settings, same as infractions: add
+  new ones, rename, or remove them. **P** and **A** specifically stay
+  fixed — the bulk "P" button and the Absences count both depend on
+  those exact codes — but their point values are still editable, and
+  everything else is completely free to change.
+- **Point values** are now editable for both participation types and
+  infractions. An infraction's point value acts as a modifier on top
+  of that session's participation-type points (so a "P" with a
+  "Talking too much" infraction nets less than a plain "P" once you
+  set the infraction to a negative value).
+- **Score** column header is now a small toggle — click it to switch
+  between a percentage and a raw points total. The choice is saved
+  per course.

@@ -56,7 +56,6 @@ const el = {
   seatingStatus: document.getElementById("seating-status"),
   banksList: document.getElementById("banks-list"),
 
-  addSessionBtn: document.getElementById("add-session-btn"),
   attendanceStatus: document.getElementById("attendance-status"),
   attendanceTable: document.getElementById("attendance-table"),
   toggleAttendanceSettingsBtn: document.getElementById("toggle-attendance-settings-btn"),
@@ -840,7 +839,29 @@ function renderAttendance() {
 function buildAttendanceHeaderRow() {
   const tr = document.createElement("tr");
 
-  ["Student", "Notes", "Score", "Attended", "Absences"].forEach((label) => {
+  ["Student", "Notes"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    tr.appendChild(th);
+  });
+
+  const scoreTh = document.createElement("th");
+  const scoreToggleBtn = document.createElement("button");
+  scoreToggleBtn.type = "button";
+  scoreToggleBtn.className = "score-toggle-btn";
+  scoreToggleBtn.textContent =
+    AttendanceModule.settings.scoreDisplayMode === "points" ? "Score (pts) ⇄" : "Score (%) ⇄";
+  scoreToggleBtn.title = "Click to switch between percent and points";
+  scoreToggleBtn.addEventListener("click", async () => {
+    AttendanceModule.setScoreDisplayMode(
+      AttendanceModule.settings.scoreDisplayMode === "points" ? "percent" : "points"
+    );
+    await saveAttendanceThen(renderAttendance);
+  });
+  scoreTh.appendChild(scoreToggleBtn);
+  tr.appendChild(scoreTh);
+
+  ["Attended", "Absences"].forEach((label) => {
     const th = document.createElement("th");
     th.textContent = label;
     tr.appendChild(th);
@@ -849,17 +870,6 @@ function buildAttendanceHeaderRow() {
   AttendanceModule.sessions.forEach((session) => {
     const th = document.createElement("th");
     th.className = "session-header-cell";
-
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "session-remove-btn";
-    removeBtn.textContent = "×";
-    removeBtn.title = "Remove this class session";
-    removeBtn.addEventListener("click", async () => {
-      if (!confirm(`Remove class ${session.number}? This deletes all recorded attendance for it.`)) return;
-      AttendanceModule.removeSession(session.id);
-      await saveAttendanceThen(renderAttendance);
-    });
 
     const numberEl = document.createElement("div");
     numberEl.className = "session-number";
@@ -876,7 +886,7 @@ function buildAttendanceHeaderRow() {
 
     const presentBtn = document.createElement("button");
     presentBtn.type = "button";
-    presentBtn.className = "btn btn-primary btn-small session-present-btn";
+    presentBtn.className = "session-present-btn";
     presentBtn.textContent = "P";
     presentBtn.title = "Mark everyone present for this class";
     presentBtn.addEventListener("click", async () => {
@@ -884,7 +894,7 @@ function buildAttendanceHeaderRow() {
       await saveAttendanceThen(renderAttendance);
     });
 
-    th.append(removeBtn, numberEl, dateInput, presentBtn);
+    th.append(numberEl, dateInput, presentBtn);
     tr.appendChild(th);
   });
 
@@ -934,13 +944,7 @@ function buildAttendanceStudentRow(student) {
   tr.appendChild(notesTd);
 
   // ----- Score / Attended / Absences -----
-  const stats = AttendanceModule.stats(student.id);
-  [stats.score === null ? "—" : `${stats.score}%`, stats.attended, stats.absences].forEach((val) => {
-    const td = document.createElement("td");
-    td.className = "attendance-stat-cell";
-    td.textContent = val;
-    tr.appendChild(td);
-  });
+  appendAttendanceStatCells(tr, student.id);
 
   // ----- One cell per class session -----
   AttendanceModule.sessions.forEach((session) => {
@@ -950,11 +954,15 @@ function buildAttendanceStudentRow(student) {
 
     const codeSelect = document.createElement("select");
     codeSelect.className = "attendance-code-select";
-    ATTENDANCE_CODES.forEach((code) => {
+    const blankOpt = document.createElement("option");
+    blankOpt.value = "";
+    blankOpt.textContent = "—";
+    codeSelect.appendChild(blankOpt);
+    AttendanceModule.settings.participationTypes.forEach((type) => {
       const opt = document.createElement("option");
-      opt.value = code;
-      opt.textContent = code || "—";
-      if (code === record.code) opt.selected = true;
+      opt.value = type;
+      opt.textContent = type;
+      if (type === record.code) opt.selected = true;
       codeSelect.appendChild(opt);
     });
     codeSelect.addEventListener("change", async () => {
@@ -979,6 +987,7 @@ function buildAttendanceStudentRow(student) {
     infractionSelect.addEventListener("change", async () => {
       AttendanceModule.setRecord(student.id, session.id, { infraction: infractionSelect.value });
       await saveAttendanceThen();
+      refreshAttendanceStatsRow(student.id);
     });
 
     const memoInput = document.createElement("input");
@@ -998,6 +1007,32 @@ function buildAttendanceStudentRow(student) {
   return tr;
 }
 
+function formatAttendanceScore(stats) {
+  if (AttendanceModule.settings.scoreDisplayMode === "points") {
+    return stats.points === null ? "—" : String(stats.points);
+  }
+  return stats.percent === null ? "—" : `${stats.percent}%`;
+}
+
+function appendAttendanceStatCells(tr, studentId) {
+  const stats = AttendanceModule.stats(studentId);
+
+  const scoreTd = document.createElement("td");
+  scoreTd.className = "attendance-stat-cell attendance-score-cell";
+  scoreTd.textContent = formatAttendanceScore(stats);
+  tr.appendChild(scoreTd);
+
+  const attendedTd = document.createElement("td");
+  attendedTd.className = "attendance-stat-cell";
+  attendedTd.textContent = stats.attended;
+  tr.appendChild(attendedTd);
+
+  const absencesTd = document.createElement("td");
+  absencesTd.className = "attendance-stat-cell";
+  absencesTd.textContent = stats.absences;
+  tr.appendChild(absencesTd);
+}
+
 /** Updates just one student's Score/Attended/Absences cells, without rebuilding the whole table. */
 function refreshAttendanceStatsRow(studentId) {
   const row = el.attendanceTable.querySelector(`tr[data-student-id="${studentId}"]`);
@@ -1005,7 +1040,7 @@ function refreshAttendanceStatsRow(studentId) {
   const stats = AttendanceModule.stats(studentId);
   const statCells = row.querySelectorAll(".attendance-stat-cell");
   if (statCells.length === 3) {
-    statCells[0].textContent = stats.score === null ? "—" : `${stats.score}%`;
+    statCells[0].textContent = formatAttendanceScore(stats);
     statCells[1].textContent = stats.attended;
     statCells[2].textContent = stats.absences;
   }
@@ -1022,11 +1057,6 @@ async function saveAttendanceThen(after) {
   if (after) after();
 }
 
-el.addSessionBtn.addEventListener("click", async () => {
-  AttendanceModule.addSession();
-  await saveAttendanceThen(renderAttendance);
-});
-
 el.toggleAttendanceSettingsBtn.addEventListener("click", () => {
   attendanceSettingsEditing = !attendanceSettingsEditing;
   el.toggleAttendanceSettingsBtn.textContent = attendanceSettingsEditing ? "Done Editing" : "Edit Settings";
@@ -1037,103 +1067,190 @@ function renderAttendanceSettings() {
   el.attendanceSettingsBody.innerHTML = "";
 
   if (!attendanceSettingsEditing) {
-    const infractionsP = document.createElement("p");
-    infractionsP.className = "hint";
-    infractionsP.textContent =
-      "Infraction options: " + (AttendanceModule.settings.infractionOptions.join(", ") || "(none)");
-    el.attendanceSettingsBody.appendChild(infractionsP);
-
-    const points = AttendanceModule.settings.points;
-    const pointsP = document.createElement("p");
-    pointsP.className = "hint";
-    pointsP.textContent = `Score points — P: ${points.P}, L: ${points.L}, E: ${points.E}, A: ${points.A}`;
-    el.attendanceSettingsBody.appendChild(pointsP);
+    const lines = [
+      `Classes in term: ${AttendanceModule.settings.termClassCount}`,
+      `Participation types: ${AttendanceModule.settings.participationTypes
+        .map((t) => `${t} (${AttendanceModule.settings.points[t]})`)
+        .join(", ")}`,
+      `Infractions: ${AttendanceModule.settings.infractionOptions
+        .map((o) => `${o} (${AttendanceModule.settings.infractionPoints[o]})`)
+        .join(", ") || "(none)"}`,
+      `Score display: ${AttendanceModule.settings.scoreDisplayMode === "points" ? "Points" : "Percent"}`,
+    ];
+    lines.forEach((line) => {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = line;
+      el.attendanceSettingsBody.appendChild(p);
+    });
     return;
   }
 
-  // ----- Edit mode: infraction options -----
-  const infractionsWrap = document.createElement("div");
-  infractionsWrap.className = "attendance-settings-block";
-  const infractionsLabel = document.createElement("h4");
-  infractionsLabel.textContent = "Infraction options";
-  infractionsWrap.appendChild(infractionsLabel);
+  // ----- Edit mode: number of classes in term -----
+  const termWrap = document.createElement("div");
+  termWrap.className = "attendance-settings-block";
+  const termLabel = document.createElement("h4");
+  termLabel.textContent = "Number of classes in this term";
+  termWrap.appendChild(termLabel);
+
+  const termRow = document.createElement("div");
+  termRow.className = "mapping-row";
+  const termInput = document.createElement("input");
+  termInput.type = "number";
+  termInput.min = "0";
+  termInput.max = "100";
+  termInput.value = AttendanceModule.settings.termClassCount;
+  termInput.addEventListener("change", async () => {
+    AttendanceModule.setTermClassCount(termInput.value);
+    await saveAttendanceThen(renderAttendance);
+  });
+  const termHint = document.createElement("label");
+  termHint.textContent = "Sets how many class-session columns appear in the table.";
+  termRow.append(termInput, termHint);
+  termWrap.appendChild(termRow);
+  el.attendanceSettingsBody.appendChild(termWrap);
+
+  // ----- Edit mode: participation types -----
+  el.attendanceSettingsBody.appendChild(
+    buildEditableTypeList({
+      title: "Participation types",
+      items: AttendanceModule.settings.participationTypes,
+      points: AttendanceModule.settings.points,
+      fixedItems: ["P", "A"],
+      addPlaceholder: "New participation type (e.g. Sick)",
+      onRename: async (list) => {
+        AttendanceModule.setParticipationTypes(list);
+        await saveAttendanceThen(renderAttendance);
+      },
+      onPointChange: async (item, value) => {
+        AttendanceModule.setPointValue(item, value);
+        await saveAttendanceThen(renderAttendance);
+      },
+      onRemove: async (item) => {
+        AttendanceModule.setParticipationTypes(
+          AttendanceModule.settings.participationTypes.filter((t) => t !== item)
+        );
+        await saveAttendanceThen(renderAttendance);
+      },
+      onAdd: async (value) => {
+        AttendanceModule.setParticipationTypes([...AttendanceModule.settings.participationTypes, value]);
+        await saveAttendanceThen(renderAttendance);
+      },
+    })
+  );
+
+  // ----- Edit mode: infractions -----
+  el.attendanceSettingsBody.appendChild(
+    buildEditableTypeList({
+      title: "Infraction options",
+      items: AttendanceModule.settings.infractionOptions,
+      points: AttendanceModule.settings.infractionPoints,
+      fixedItems: [],
+      addPlaceholder: "New infraction option",
+      onRename: async (list) => {
+        AttendanceModule.setInfractionOptions(list);
+        await saveAttendanceThen(renderAttendance);
+      },
+      onPointChange: async (item, value) => {
+        AttendanceModule.setInfractionPointValue(item, value);
+        await saveAttendanceThen(renderAttendance);
+      },
+      onRemove: async (item) => {
+        AttendanceModule.setInfractionOptions(
+          AttendanceModule.settings.infractionOptions.filter((t) => t !== item)
+        );
+        await saveAttendanceThen(renderAttendance);
+      },
+      onAdd: async (value) => {
+        AttendanceModule.setInfractionOptions([...AttendanceModule.settings.infractionOptions, value]);
+        await saveAttendanceThen(renderAttendance);
+      },
+    })
+  );
+}
+
+/**
+ * Shared builder for an editable "name + point value + remove" list,
+ * used for both participation types and infractions. Items in
+ * fixedItems show their name as plain text (no rename, no remove) —
+ * only their point value is editable.
+ */
+function buildEditableTypeList(config) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+
+  const heading = document.createElement("h4");
+  heading.textContent = config.title;
+  wrap.appendChild(heading);
 
   const list = document.createElement("ul");
   list.className = "infraction-edit-list";
-  AttendanceModule.settings.infractionOptions.forEach((opt, idx) => {
+
+  config.items.forEach((item) => {
     const li = document.createElement("li");
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = opt;
-    input.addEventListener("change", async () => {
-      const opts = [...AttendanceModule.settings.infractionOptions];
-      opts[idx] = input.value.trim();
-      AttendanceModule.updateSettings({ infractionOptions: opts.filter(Boolean) });
-      await saveAttendanceThen(renderAttendance);
+    const isFixed = config.fixedItems.includes(item);
+
+    if (isFixed) {
+      const label = document.createElement("span");
+      label.className = "fixed-type-label";
+      label.textContent = item;
+      li.appendChild(label);
+    } else {
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = item;
+      nameInput.addEventListener("change", async () => {
+        const newList = config.items.map((i) => (i === item ? nameInput.value.trim() : i));
+        await config.onRename(newList);
+      });
+      li.appendChild(nameInput);
+    }
+
+    const pointInput = document.createElement("input");
+    pointInput.type = "number";
+    pointInput.step = "0.1";
+    pointInput.className = "point-value-input";
+    pointInput.value = config.points[item] ?? 0;
+    pointInput.title = "Point value";
+    pointInput.addEventListener("change", async () => {
+      await config.onPointChange(item, pointInput.value);
     });
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "btn btn-ghost btn-small";
-    removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", async () => {
-      const opts = AttendanceModule.settings.infractionOptions.filter((_, i) => i !== idx);
-      AttendanceModule.updateSettings({ infractionOptions: opts });
-      await saveAttendanceThen(renderAttendance);
-    });
-    li.append(input, removeBtn);
+    li.appendChild(pointInput);
+
+    if (!isFixed) {
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-ghost btn-small";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", async () => {
+        await config.onRemove(item);
+      });
+      li.appendChild(removeBtn);
+    }
+
     list.appendChild(li);
   });
-  infractionsWrap.appendChild(list);
+  wrap.appendChild(list);
 
   const addRow = document.createElement("div");
   addRow.className = "add-course-row";
-  const newInfractionInput = document.createElement("input");
-  newInfractionInput.type = "text";
-  newInfractionInput.placeholder = "New infraction option";
+  const newInput = document.createElement("input");
+  newInput.type = "text";
+  newInput.placeholder = config.addPlaceholder;
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "btn btn-primary btn-small";
   addBtn.textContent = "+ Add";
   addBtn.addEventListener("click", async () => {
-    const val = newInfractionInput.value.trim();
+    const val = newInput.value.trim();
     if (!val) return;
-    AttendanceModule.updateSettings({
-      infractionOptions: [...AttendanceModule.settings.infractionOptions, val],
-    });
-    newInfractionInput.value = "";
-    await saveAttendanceThen(renderAttendance);
+    newInput.value = "";
+    await config.onAdd(val);
   });
-  addRow.append(newInfractionInput, addBtn);
-  infractionsWrap.appendChild(addRow);
-  el.attendanceSettingsBody.appendChild(infractionsWrap);
+  addRow.append(newInput, addBtn);
+  wrap.appendChild(addRow);
 
-  // ----- Edit mode: score points per code -----
-  const pointsWrap = document.createElement("div");
-  pointsWrap.className = "attendance-settings-block";
-  const pointsLabel = document.createElement("h4");
-  pointsLabel.textContent = "Score points per code";
-  pointsWrap.appendChild(pointsLabel);
-
-  ["P", "L", "E", "A"].forEach((code) => {
-    const row = document.createElement("div");
-    row.className = "mapping-row";
-    const label = document.createElement("label");
-    label.textContent = ATTENDANCE_CODE_LABELS[code];
-    const input = document.createElement("input");
-    input.type = "number";
-    input.step = "0.1";
-    input.min = "0";
-    input.max = "1";
-    input.value = AttendanceModule.settings.points[code];
-    input.addEventListener("change", async () => {
-      const points = { ...AttendanceModule.settings.points, [code]: Number(input.value) };
-      AttendanceModule.updateSettings({ points });
-      await saveAttendanceThen(renderAttendance);
-    });
-    row.append(label, input);
-    pointsWrap.appendChild(row);
-  });
-  el.attendanceSettingsBody.appendChild(pointsWrap);
+  return wrap;
 }
 
 main();
