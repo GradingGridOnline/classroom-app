@@ -894,7 +894,10 @@ function buildAttendanceHeaderRow() {
       await saveAttendanceThen(renderAttendance);
     });
 
-    th.append(numberEl, dateInput, presentBtn);
+    const inner = document.createElement("div");
+    inner.className = "session-header-inner";
+    inner.append(numberEl, dateInput, presentBtn);
+    th.appendChild(inner);
     tr.appendChild(th);
   });
 

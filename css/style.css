@@ -1018,6 +1018,9 @@ textarea {
 .session-header-cell {
   text-align: center;
   min-width: 100px;
+}
+
+.session-header-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
