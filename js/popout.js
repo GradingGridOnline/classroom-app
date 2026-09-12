@@ -53,6 +53,7 @@ function render() {
       const studentId = active ? seating.studentAt(r, c) : null;
       const student = studentId ? roster.students.find((s) => s.id === studentId) : null;
       const group = active && seating.showGroupsInPopout ? seating.getGroup(r, c) : 0;
+      const label = active ? seating.getLabel(r, c) : "";
 
       const desk = document.createElement("div");
       desk.className =
@@ -70,7 +71,7 @@ function render() {
 
       const nameEl = document.createElement("span");
       nameEl.className = "desk-name";
-      nameEl.textContent = student ? student.name || "" : "";
+      nameEl.textContent = student ? student.name || "" : label || "";
       desk.appendChild(nameEl);
 
       grid.appendChild(desk);
