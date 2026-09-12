@@ -24,12 +24,10 @@
   <div class="wrap">
     <header class="header">
       <div class="header-row">
-        <div>
-          <h1>GradingGridOnline</h1>
-          <p class="subtitle">Courses &amp; class rosters</p>
-        </div>
+        <h1>GradingGridOnline</h1>
         <div class="settings-wrap">
           <button id="settings-btn" class="btn btn-ghost btn-small" aria-label="Settings" title="Settings">⚙ Settings</button>
+          <button id="sign-out-btn" class="btn btn-ghost btn-small" hidden>Sign out</button>
           <div id="settings-panel" class="settings-panel" hidden>
             <h3>Theme</h3>
             <ul id="theme-list" class="theme-list"></ul>
@@ -40,11 +38,8 @@
 
     <main class="card">
       <div class="auth-row">
-        <span id="auth-status" class="status">Loading…</span>
-        <div class="auth-buttons">
-          <button id="sign-in-btn" class="btn btn-primary" hidden>Sign in with Google</button>
-          <button id="sign-out-btn" class="btn btn-ghost" hidden>Sign out</button>
-        </div>
+        <span id="auth-status" class="status"></span>
+        <button id="sign-in-btn" class="btn btn-primary" hidden>Sign in with Google</button>
       </div>
 
       <!-- ===== Course list view ===== -->
@@ -144,6 +139,7 @@
               <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
               <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating</button>
               <button id="popout-btn" class="btn btn-ghost">Pop Out ↗</button>
+              <button id="toggle-popout-groups-btn" class="btn btn-ghost">Hide Group Colors in Pop-Out</button>
               <button id="save-seating-btn" class="btn btn-primary">Save Seating Chart</button>
             </div>
           </div>

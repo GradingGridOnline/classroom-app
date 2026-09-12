@@ -46,6 +46,7 @@ const el = {
   autoFillBtn: document.getElementById("auto-fill-btn"),
   clearSeatingBtn: document.getElementById("clear-seating-btn"),
   popoutBtn: document.getElementById("popout-btn"),
+  togglePopoutGroupsBtn: document.getElementById("toggle-popout-groups-btn"),
   saveSeatingBtn: document.getElementById("save-seating-btn"),
   unseatedList: document.getElementById("unseated-list"),
   unseatedCount: document.getElementById("unseated-count"),
@@ -118,9 +119,7 @@ function renderAuth() {
   el.signInBtn.hidden = signedIn;
   el.signOutBtn.hidden = !signedIn;
   el.courseSection.hidden = !signedIn;
-  el.status.textContent = signedIn
-    ? `Signed in as ${storage.getUserName()}`
-    : "Not signed in";
+  el.status.textContent = "";
 
   if (signedIn) {
     showCourses();
@@ -459,6 +458,9 @@ function renderSeating() {
   populateGridSizeSelects();
   el.gridRows.value = String(SeatingModule.rows);
   el.gridCols.value = String(SeatingModule.cols);
+  el.togglePopoutGroupsBtn.textContent = SeatingModule.showGroupsInPopout
+    ? "Hide Group Colors in Pop-Out"
+    : "Show Group Colors in Pop-Out";
 
   const seatedIds = SeatingModule.seatedStudentIds();
   const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
@@ -557,7 +559,19 @@ function buildDeskElement(r, c) {
 
   const nameEl = document.createElement("span");
   nameEl.className = "desk-name";
-  nameEl.textContent = !active ? "" : student ? student.name || "(unnamed)" : label ? label : "+";
+  if (active && student) {
+    if (student.classNumber) {
+      const numEl = document.createElement("span");
+      numEl.className = "desk-classnumber-tag";
+      numEl.textContent = `#${student.classNumber}`;
+      nameEl.appendChild(numEl);
+    }
+    const textEl = document.createElement("span");
+    textEl.textContent = student.name || "(unnamed)";
+    nameEl.appendChild(textEl);
+  } else {
+    nameEl.textContent = !active ? "" : label ? label : "+";
+  }
   desk.appendChild(nameEl);
 
   desk.addEventListener("click", () => {
@@ -757,6 +771,19 @@ el.clearSeatingBtn.addEventListener("click", () => {
 
 el.popoutBtn.addEventListener("click", () => {
   window.open("popout.html", "ggo-seating-popout", "width=900,height=700");
+});
+
+el.togglePopoutGroupsBtn.addEventListener("click", async () => {
+  el.seatingStatus.textContent = "Saving…";
+  try {
+    await SeatingModule.toggleShowGroupsInPopout();
+    el.togglePopoutGroupsBtn.textContent = SeatingModule.showGroupsInPopout
+      ? "Hide Group Colors in Pop-Out"
+      : "Show Group Colors in Pop-Out";
+    el.seatingStatus.textContent = "";
+  } catch (err) {
+    el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
+  }
 });
 
 el.saveSeatingBtn.addEventListener("click", async () => {

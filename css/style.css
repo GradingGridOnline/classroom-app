@@ -77,9 +77,9 @@ body {
 
 .header h1 {
   font-family: var(--font-heading);
-  font-size: 2rem;
+  font-size: 1.3rem;
   font-weight: 700;
-  margin: 0 0 4px;
+  margin: 0;
   color: var(--green-dark);
 }
 
@@ -246,6 +246,10 @@ textarea {
   font-size: 1.2rem;
   margin: 0;
   color: var(--green-dark);
+}
+
+#course-detail-title {
+  font-size: 1.9rem;
 }
 
 .count-badge {
@@ -430,6 +434,10 @@ textarea {
 
 .settings-wrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .settings-panel {
@@ -571,7 +579,7 @@ textarea {
 }
 
 .unseated-panel {
-  flex: 0 0 180px;
+  flex: 0 0 340px;
 }
 
 .unseated-panel h3 {
@@ -672,8 +680,18 @@ textarea {
 }
 
 .desk-name {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   word-break: break-word;
   padding: 0 2px;
+}
+
+.desk-classnumber-tag {
+  font-size: 0.6rem;
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 .desk-lock-btn,
@@ -779,8 +797,9 @@ textarea {
    by JS), not a fixed color list, so it scales to any number of groups. */
 .desk-grouped.desk-empty,
 .desk-grouped.desk-occupied {
-  background: hsl(var(--group-hue), 55%, 84%);
-  border-color: hsl(var(--group-hue), 55%, 50%);
+  background: hsl(var(--group-hue), 70%, 68%);
+  border-color: hsl(var(--group-hue), 70%, 38%);
+  border-width: 2px;
 }
 
 [data-theme="cyberpunk"] .desk-occupied {
@@ -805,8 +824,9 @@ textarea {
 [data-theme="cyberpunk"] .desk-grouped.desk-empty,
 [data-theme="cyberpunk"] .desk-grouped.desk-occupied {
   background: var(--card);
-  border-color: hsl(var(--group-hue), 85%, 60%);
-  box-shadow: 0 0 10px hsl(var(--group-hue), 85%, 60%);
+  border-color: hsl(var(--group-hue), 95%, 62%);
+  border-width: 2px;
+  box-shadow: 0 0 6px hsl(var(--group-hue), 95%, 62%), 0 0 16px hsl(var(--group-hue), 95%, 55%);
 }
 
 .front-label {

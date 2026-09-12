@@ -231,3 +231,29 @@ Several refinements on top of the seating chart:
   give it a name like "Exam Seating" instead of the default "Bank 3."
   A bank's name persists independently of whether anything is saved
   into it yet.
+
+## Seating chart — wider list, Class Numbers on desks, pop-out group toggle
+
+- The **Unseated** list is wider now, with room for Class #, Name,
+  Pronunciation, and School ID all at once.
+- **Desks** (both the main editor and the pop-out) now show a
+  student's Class Number as a small line above their name.
+- A new **"Hide/Show Group Colors in Pop-Out"** button in the Seating
+  Chart toolbar lets you turn group coloring off in the projected
+  pop-out view without affecting the colors in your own editing
+  view. It's saved per course, alongside the rest of the chart.
+
+## Header cleanup and bolder group colors
+
+- **Sign Out** moved from the main content area to directly under the
+  ⚙ Settings button, top-right.
+- The "Signed in as ___" / "Not signed in" label is gone — whether
+  you're signed in is now shown by which buttons are visible, not a
+  text label. (Error messages during sign-in still show there if
+  something goes wrong.)
+- The "GradingGridOnline" title is smaller, and the "Courses & class
+  rosters" subtitle is gone.
+- The course title shown while you're working on its roster/seating
+  chart is now noticeably larger than other section headings.
+- **Group colors** are bolder and more saturated in both the main
+  editor and the pop-out, in both themes.
