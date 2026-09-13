@@ -485,7 +485,7 @@ function renderSeating() {
     : "Show Group Colors in Pop-Out";
 
   const seatedIds = SeatingModule.seatedStudentIds();
-  const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+  const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id) && !s.excludeFromSeating);
 
   // ----- Unseated list: class #, name, pronunciation, school ID -----
   el.unseatedCount.textContent = String(unseated.length);
@@ -833,6 +833,10 @@ function renderAttendance() {
   });
   el.attendanceTable.appendChild(tbody);
 
+  const tfoot = document.createElement("tfoot");
+  tfoot.appendChild(buildAttendanceFooterRow());
+  el.attendanceTable.appendChild(tfoot);
+
   renderAttendanceSettings();
 }
 
@@ -944,6 +948,57 @@ function buildAttendanceStudentRow(student) {
     await saveAttendanceThen();
   });
   notesTd.appendChild(notesInput);
+
+  const excludeRow = document.createElement("div");
+  excludeRow.className = "exclude-toggle-row";
+
+  const excludeSeatingBtn = document.createElement("button");
+  excludeSeatingBtn.type = "button";
+  excludeSeatingBtn.className =
+    "exclude-toggle-btn" + (student.excludeFromSeating ? " exclude-toggle-btn-active" : "");
+  excludeSeatingBtn.textContent = "Seating";
+  excludeSeatingBtn.title = student.excludeFromSeating
+    ? "Excluded from the seating chart — click to include again"
+    : "Click to exclude this student from the seating chart";
+  excludeSeatingBtn.addEventListener("click", async () => {
+    RosterModule.toggleExcludeFromSeating(student.id);
+    if (student.excludeFromSeating) {
+      SeatingModule.unseatStudent(student.id);
+      try {
+        await SeatingModule.save();
+      } catch (err) {
+        el.attendanceStatus.textContent = `Couldn't save seating chart: ${err.message}`;
+      }
+    }
+    try {
+      await RosterModule.save();
+    } catch (err) {
+      el.attendanceStatus.textContent = `Couldn't save roster: ${err.message}`;
+    }
+    renderAttendance();
+  });
+  excludeRow.appendChild(excludeSeatingBtn);
+
+  const excludeScoringBtn = document.createElement("button");
+  excludeScoringBtn.type = "button";
+  excludeScoringBtn.className =
+    "exclude-toggle-btn" + (student.excludeFromScoring ? " exclude-toggle-btn-active" : "");
+  excludeScoringBtn.textContent = "Scoring";
+  excludeScoringBtn.title = student.excludeFromScoring
+    ? "Excluded from scoring (once built) — click to include again"
+    : "Click to exclude this student from the scoring system (once built)";
+  excludeScoringBtn.addEventListener("click", async () => {
+    RosterModule.toggleExcludeFromScoring(student.id);
+    try {
+      await RosterModule.save();
+    } catch (err) {
+      el.attendanceStatus.textContent = `Couldn't save roster: ${err.message}`;
+    }
+    renderAttendance();
+  });
+  excludeRow.appendChild(excludeScoringBtn);
+
+  notesTd.appendChild(excludeRow);
   tr.appendChild(notesTd);
 
   // ----- Score / Attended / Absences -----
@@ -968,8 +1023,10 @@ function buildAttendanceStudentRow(student) {
       if (type === record.code) opt.selected = true;
       codeSelect.appendChild(opt);
     });
+    applyAttendanceCodeColor(codeSelect, record.code);
     codeSelect.addEventListener("change", async () => {
       AttendanceModule.setRecord(student.id, session.id, { code: codeSelect.value });
+      applyAttendanceCodeColor(codeSelect, codeSelect.value);
       await saveAttendanceThen();
       refreshAttendanceStatsRow(student.id);
     });
@@ -1010,6 +1067,25 @@ function buildAttendanceStudentRow(student) {
   return tr;
 }
 
+// Fixed, literal colors for these three specific codes — independent
+// of any custom renaming, since the request was for exactly A/L/E.
+const ATTENDANCE_CODE_COLORS = { A: "#e57373", L: "#ffd54f", E: "#64b5f6" };
+
+function applyAttendanceCodeColor(select, code) {
+  const color = ATTENDANCE_CODE_COLORS[code];
+  select.style.backgroundColor = color || "";
+  select.style.color = color ? "#1a1a1a" : "";
+}
+
+/** Orange at the configured absence limit, red beyond it, default color under it. */
+function absenceCellColor(absences) {
+  const limit = AttendanceModule.settings.absenceLimit;
+  if (!limit || limit <= 0) return "";
+  if (absences > limit) return "#e57373"; // red
+  if (absences === limit) return "#ffb74d"; // orange
+  return "";
+}
+
 function formatAttendanceScore(stats) {
   if (AttendanceModule.settings.scoreDisplayMode === "points") {
     return stats.points === null ? "—" : String(stats.points);
@@ -1033,6 +1109,7 @@ function appendAttendanceStatCells(tr, studentId) {
   const absencesTd = document.createElement("td");
   absencesTd.className = "attendance-stat-cell";
   absencesTd.textContent = stats.absences;
+  absencesTd.style.backgroundColor = absenceCellColor(stats.absences);
   tr.appendChild(absencesTd);
 }
 
@@ -1046,6 +1123,7 @@ function refreshAttendanceStatsRow(studentId) {
     statCells[0].textContent = formatAttendanceScore(stats);
     statCells[1].textContent = stats.attended;
     statCells[2].textContent = stats.absences;
+    statCells[2].style.backgroundColor = absenceCellColor(stats.absences);
   }
 }
 
@@ -1113,6 +1191,30 @@ function renderAttendanceSettings() {
   termWrap.appendChild(termRow);
   el.attendanceSettingsBody.appendChild(termWrap);
 
+  // ----- Edit mode: absence color limit -----
+  const limitWrap = document.createElement("div");
+  limitWrap.className = "attendance-settings-block";
+  const limitLabel = document.createElement("h4");
+  limitLabel.textContent = "Absence warning limit";
+  limitWrap.appendChild(limitLabel);
+
+  const limitRow = document.createElement("div");
+  limitRow.className = "mapping-row";
+  const limitInput = document.createElement("input");
+  limitInput.type = "number";
+  limitInput.min = "0";
+  limitInput.value = AttendanceModule.settings.absenceLimit || "";
+  limitInput.placeholder = "(none)";
+  limitInput.addEventListener("change", async () => {
+    AttendanceModule.setAbsenceLimit(limitInput.value);
+    await saveAttendanceThen(renderAttendance);
+  });
+  const limitHint = document.createElement("label");
+  limitHint.textContent = "At this many absences the count turns orange; beyond it, red. Leave blank to disable.";
+  limitRow.append(limitInput, limitHint);
+  limitWrap.appendChild(limitRow);
+  el.attendanceSettingsBody.appendChild(limitWrap);
+
   // ----- Edit mode: participation types -----
   el.attendanceSettingsBody.appendChild(
     buildEditableTypeList({
@@ -1170,6 +1272,9 @@ function renderAttendanceSettings() {
       },
     })
   );
+
+  // ----- Edit mode: LMS export template -----
+  el.attendanceSettingsBody.appendChild(buildExportTemplateBlock());
 }
 
 /**
@@ -1254,6 +1359,168 @@ function buildEditableTypeList(config) {
   wrap.appendChild(addRow);
 
   return wrap;
+}
+
+function buildExportTemplateBlock() {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "LMS export template";
+  wrap.appendChild(heading);
+
+  const tpl = AttendanceModule.settings.exportTemplate;
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = tpl
+    ? `Template loaded: ${tpl.headers.length} columns, ${tpl.rows.length} rows.`
+    : "Upload a CSV template from your LMS. After uploading, choose which column identifies each student and which column receives their attendance code.";
+  wrap.appendChild(hint);
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".csv,.xlsx,.xls";
+  fileInput.hidden = true;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (rows.length === 0) throw new Error("That file appears to be empty.");
+      const headers = rows[0].map((h) => String(h));
+      const dataRows = rows.slice(1);
+      AttendanceModule.setExportTemplate(headers, dataRows);
+      await saveAttendanceThen(renderAttendance);
+    } catch (err) {
+      el.attendanceStatus.textContent = `Couldn't read that file: ${err.message}`;
+    }
+  });
+  wrap.appendChild(fileInput);
+
+  const uploadBtn = document.createElement("button");
+  uploadBtn.type = "button";
+  uploadBtn.className = "btn btn-ghost btn-small";
+  uploadBtn.textContent = tpl ? "Replace Template" : "Upload Template";
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  wrap.appendChild(uploadBtn);
+
+  if (!tpl) return wrap;
+
+  const clearBtn = document.createElement("button");
+  clearBtn.type = "button";
+  clearBtn.className = "btn btn-ghost btn-small";
+  clearBtn.textContent = "Remove Template";
+  clearBtn.addEventListener("click", async () => {
+    if (!confirm("Remove the uploaded export template?")) return;
+    AttendanceModule.clearExportTemplate();
+    await saveAttendanceThen(renderAttendance);
+  });
+  wrap.appendChild(clearBtn);
+
+  const buildColumnSelect = (selectedIdx, onChange) => {
+    const select = document.createElement("select");
+    tpl.headers.forEach((h, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = h || `Column ${idx + 1}`;
+      if (idx === selectedIdx) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", onChange);
+    return select;
+  };
+
+  const idRow = document.createElement("div");
+  idRow.className = "mapping-row";
+  const idLabel = document.createElement("label");
+  idLabel.textContent = "Identifier column";
+  const idSelect = buildColumnSelect(tpl.identifierColumn, async () => {
+    AttendanceModule.updateExportMapping({ identifierColumn: Number(idSelect.value) });
+    await saveAttendanceThen();
+  });
+  idRow.append(idLabel, idSelect);
+  wrap.appendChild(idRow);
+
+  const fieldRow = document.createElement("div");
+  fieldRow.className = "mapping-row";
+  const fieldLabel = document.createElement("label");
+  fieldLabel.textContent = "Match by";
+  const fieldSelect = document.createElement("select");
+  [
+    ["schoolId", "School ID"],
+    ["name", "Name"],
+  ].forEach(([val, label]) => {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    if (val === tpl.identifierField) opt.selected = true;
+    fieldSelect.appendChild(opt);
+  });
+  fieldSelect.addEventListener("change", async () => {
+    AttendanceModule.updateExportMapping({ identifierField: fieldSelect.value });
+    await saveAttendanceThen();
+  });
+  fieldRow.append(fieldLabel, fieldSelect);
+  wrap.appendChild(fieldRow);
+
+  const valueRow = document.createElement("div");
+  valueRow.className = "mapping-row";
+  const valueLabel = document.createElement("label");
+  valueLabel.textContent = "Attendance value column";
+  const valueSelect = buildColumnSelect(tpl.valueColumn, async () => {
+    AttendanceModule.updateExportMapping({ valueColumn: Number(valueSelect.value) });
+    await saveAttendanceThen();
+  });
+  valueRow.append(valueLabel, valueSelect);
+  wrap.appendChild(valueRow);
+
+  return wrap;
+}
+
+function downloadCsv(content, filename) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function buildAttendanceFooterRow() {
+  const tr = document.createElement("tr");
+
+  const labelTd = document.createElement("td");
+  labelTd.colSpan = 5;
+  labelTd.className = "attendance-footer-label";
+  labelTd.textContent = "Export to LMS:";
+  tr.appendChild(labelTd);
+
+  AttendanceModule.sessions.forEach((session) => {
+    const td = document.createElement("td");
+    td.className = "session-header-cell";
+    const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
+    exportBtn.className = "btn btn-ghost btn-small";
+    exportBtn.textContent = "Export";
+    exportBtn.addEventListener("click", () => {
+      try {
+        const csv = AttendanceModule.buildExportCsv(session.id, RosterModule.students);
+        downloadCsv(csv, `class-${session.number}-attendance.csv`);
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    td.appendChild(exportBtn);
+    tr.appendChild(td);
+  });
+
+  return tr;
 }
 
 main();

@@ -24,6 +24,7 @@ const RosterModule = {
     const data = await storage.loadFile(this.fileName(courseId));
     this.students = data && Array.isArray(data.students) ? data.students : [];
     this._backfillClassNumbers();
+    this._backfillExclusionFlags();
     return this.students;
   },
 
@@ -39,6 +40,24 @@ const RosterModule = {
     this.students.forEach((s) => {
       if (!s.classNumber) s.classNumber = this.nextAvailableClassNumber();
     });
+  },
+
+  /** Ensures older saved rosters (from before these flags existed) get sensible defaults. */
+  _backfillExclusionFlags() {
+    this.students.forEach((s) => {
+      if (typeof s.excludeFromSeating !== "boolean") s.excludeFromSeating = false;
+      if (typeof s.excludeFromScoring !== "boolean") s.excludeFromScoring = false;
+    });
+  },
+
+  toggleExcludeFromSeating(id) {
+    const student = this.students.find((s) => s.id === id);
+    if (student) student.excludeFromSeating = !student.excludeFromSeating;
+  },
+
+  toggleExcludeFromScoring(id) {
+    const student = this.students.find((s) => s.id === id);
+    if (student) student.excludeFromScoring = !student.excludeFromScoring;
   },
 
   /** The lowest Class Number (1-MAX_STUDENTS) not currently in use. */
@@ -65,6 +84,8 @@ const RosterModule = {
       name: fields.name || "",
       schoolId: fields.schoolId || "",
       pronunciation: fields.pronunciation || "",
+      excludeFromSeating: false,
+      excludeFromScoring: false,
     };
     this.students.push(student);
     return student;
@@ -122,6 +143,8 @@ const RosterModule = {
       name: s.name || "",
       schoolId: s.schoolId || "",
       pronunciation: s.pronunciation || "",
+      excludeFromSeating: false,
+      excludeFromScoring: false,
     }));
   },
 

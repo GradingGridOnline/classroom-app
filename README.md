@@ -338,3 +338,33 @@ This is a first pass — a few things worth knowing:
 - **Score** column header is now a small toggle — click it to switch
   between a percentage and a raw points total. The choice is saved
   per course.
+
+## Attendance: colors, absence limit, LMS export, exclusion toggles
+
+- **Attendance codes are color-coded**: A turns the cell red, L turns
+  it yellow, E turns it blue — tied to those exact letters regardless
+  of any renaming, since the colors were requested for those specific
+  codes.
+- **Absence warning limit** (in Attendance Settings): set a number,
+  and a student's Absences count turns orange at that number, red
+  beyond it. Leave it blank to turn this off.
+- **LMS export**: in Attendance Settings, upload a CSV template from
+  your LMS. Once uploaded, choose which column identifies a student
+  (matched against either School ID or Name) and which column should
+  receive the attendance code. Each class-session column now has an
+  **Export** button in a row at the bottom of the table — clicking it
+  downloads a CSV shaped exactly like your uploaded template, with
+  that one class's attendance codes filled in for every row it could
+  match to a student. Unmatched template rows are left untouched.
+- **Exclude from Seating / Exclude from Scoring**: two small toggle
+  buttons under each student's Notes field. "Exclude from Seating"
+  removes them from the seating chart's Unseated list immediately
+  (and un-seats them if they were already placed); "Exclude from
+  Scoring" just stores the flag for now, ready for when the scoring
+  module exists.
+
+Honest gaps worth knowing: lowering the term class count still has no
+undo, and the LMS export assumes your template's student-matching
+column lines up with either School ID or Name exactly as typed in
+your roster — worth a test export before relying on it for something
+that matters.

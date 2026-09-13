@@ -30,6 +30,8 @@ function defaultAttendanceSettings() {
     infractionPoints: { Sleeping: -0.2, "Phone use": -0.2, "Talking too much": -0.2 },
     termClassCount: 0,
     scoreDisplayMode: "percent",
+    absenceLimit: null,
+    exportTemplate: null,
   };
 }
 
@@ -62,6 +64,8 @@ const AttendanceModule = {
         termClassCount:
           typeof saved.termClassCount === "number" ? saved.termClassCount : this.sessions.length,
         scoreDisplayMode: saved.scoreDisplayMode === "points" ? "points" : "percent",
+        absenceLimit: typeof saved.absenceLimit === "number" ? saved.absenceLimit : null,
+        exportTemplate: saved.exportTemplate || null,
       };
     } else {
       this.sessions = [];
@@ -187,6 +191,63 @@ const AttendanceModule = {
 
   setScoreDisplayMode(mode) {
     this.settings.scoreDisplayMode = mode === "points" ? "points" : "percent";
+  },
+
+  setAbsenceLimit(n) {
+    const num = Number(n);
+    this.settings.absenceLimit = num > 0 ? num : null;
+  },
+
+  // ----- LMS export template -----
+  // A CSV uploaded once per course, whose structure (headers + rows)
+  // is kept as-is. Exporting a session copies that template and fills
+  // in one column with each matched student's attendance code for
+  // that session, leaving everything else untouched.
+
+  setExportTemplate(headers, rows) {
+    const existing = this.settings.exportTemplate;
+    this.settings.exportTemplate = {
+      headers,
+      rows,
+      identifierColumn: existing ? existing.identifierColumn : -1,
+      valueColumn: existing ? existing.valueColumn : -1,
+      identifierField: existing ? existing.identifierField : "schoolId",
+    };
+  },
+
+  updateExportMapping(fields) {
+    if (!this.settings.exportTemplate) return;
+    Object.assign(this.settings.exportTemplate, fields);
+  },
+
+  clearExportTemplate() {
+    this.settings.exportTemplate = null;
+  },
+
+  /** Builds a CSV string for one session, using the uploaded template and current column mapping. */
+  buildExportCsv(sessionId, students) {
+    const tpl = this.settings.exportTemplate;
+    if (!tpl || !tpl.headers) throw new Error("No export template uploaded yet.");
+    if (tpl.identifierColumn < 0 || tpl.valueColumn < 0) {
+      throw new Error("Choose both the identifier column and the attendance value column first.");
+    }
+
+    const outRows = tpl.rows.map((row) => {
+      const newRow = [...row];
+      const idValue = String(row[tpl.identifierColumn] ?? "").trim();
+      const student = students.find((s) => {
+        const field = tpl.identifierField === "name" ? s.name : s.schoolId;
+        return String(field || "").trim() === idValue && idValue !== "";
+      });
+      if (student) {
+        const record = this.getRecord(student.id, sessionId);
+        newRow[tpl.valueColumn] = record.code || "";
+      }
+      return newRow;
+    });
+
+    const sheet = XLSX.utils.aoa_to_sheet([tpl.headers, ...outRows]);
+    return XLSX.utils.sheet_to_csv(sheet);
   },
 
   // ----- Summary stats, computed from recorded sessions only -----
