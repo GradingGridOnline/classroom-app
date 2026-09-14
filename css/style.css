@@ -1239,47 +1239,17 @@ textarea {
   text-align: center;
   min-width: 90px;
   background: var(--paper);
-}
-
-.category-name-input {
-  width: 100%;
-  font-family: inherit;
   font-weight: 700;
   font-size: 0.85rem;
-  text-align: center;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  margin-bottom: 4px;
-  background: var(--card);
+  color: var(--green-dark);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 /* Item sub-header (row 2): name + max points */
 .item-header-cell {
   text-align: center;
   min-width: 90px;
-}
-
-.item-name-input {
-  display: block;
-  width: 100%;
-  font-family: inherit;
-  font-size: 0.72rem;
-  padding: 3px 4px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  margin-bottom: 3px;
-  background: var(--card);
-}
-
-.item-points-input {
-  display: block;
-  width: 100%;
-  font-size: 0.7rem;
-  padding: 2px 4px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  text-align: center;
 }
 
 /* Per-student score cell */
@@ -1364,4 +1334,63 @@ textarea {
   border-color: #ff2e6e;
   color: #ff2e6e;
   box-shadow: 0 0 8px rgba(255, 46, 110, 0.5);
+}
+
+/* Scoring settings: category management with nested item editing */
+.category-manage-item {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--paper);
+}
+
+.category-manage-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-manage-top-row input[type="text"] {
+  flex: 1;
+  max-width: 220px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.category-items-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 18px;
+  border-left: 2px solid var(--line);
+}
+
+.category-item-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-item-edit-row input[type="text"] {
+  flex: 1;
+  max-width: 200px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+/* Read-only item sub-header points line */
+.item-points-label {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  font-weight: 400;
 }

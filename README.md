@@ -424,3 +424,10 @@ This is the first step, as discussed — a few honest limitations:
 - A **weight total** box sits under the category weights (both in the
   plain view and while editing) — turns **green** at exactly 100,
   **red** if it goes over 100, neutral otherwise.
+
+## Scoring: naming moved to Settings too
+
+The table headers are now pure read-only labels — category name and
+each item's name/max points. All of that editing (category name, item
+names, item point values, item counts, add/remove) now lives together
+in Scoring Settings under Edit Settings, nested under each category.

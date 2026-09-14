@@ -1603,44 +1603,20 @@ function buildScoringHeaderRows() {
     const th = document.createElement("th");
     th.className = "category-header-cell";
     th.colSpan = Math.max(1, category.items.length);
-
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.className = "category-name-input";
-    nameInput.value = category.name;
-    nameInput.addEventListener("change", async () => {
-      ScoringModule.setCategoryName(category.id, nameInput.value);
-      await saveScoringThen(renderScoring);
-    });
-
-    th.appendChild(nameInput);
+    th.textContent = category.name;
     row1.appendChild(th);
 
     category.items.forEach((item) => {
       const itemTh = document.createElement("th");
       itemTh.className = "item-header-cell";
 
-      const itemNameInput = document.createElement("input");
-      itemNameInput.type = "text";
-      itemNameInput.className = "item-name-input";
-      itemNameInput.value = item.name;
-      itemNameInput.addEventListener("change", async () => {
-        ScoringModule.setItemName(item.id, itemNameInput.value);
-        await saveScoringThen();
-      });
+      const nameLine = document.createElement("div");
+      nameLine.textContent = item.name;
+      const pointsLine = document.createElement("div");
+      pointsLine.className = "item-points-label";
+      pointsLine.textContent = `/${item.maxPoints}`;
 
-      const pointsInput = document.createElement("input");
-      pointsInput.type = "number";
-      pointsInput.min = "0";
-      pointsInput.className = "item-points-input";
-      pointsInput.value = item.maxPoints;
-      pointsInput.title = "Max points";
-      pointsInput.addEventListener("change", async () => {
-        ScoringModule.setItemMaxPoints(item.id, pointsInput.value);
-        await saveScoringThen(renderScoring); // total scores depend on this
-      });
-
-      itemTh.append(itemNameInput, pointsInput);
+      itemTh.append(nameLine, pointsLine);
       row2.appendChild(itemTh);
     });
   });
@@ -1676,7 +1652,7 @@ function renderScoringSettings() {
     return;
   }
 
-  // ----- Edit mode: manage categories (name shown read-only here — it's editable in the table header itself) -----
+  // ----- Edit mode: manage categories, their names, item counts, and each item's name/points -----
   const manageWrap = document.createElement("div");
   manageWrap.className = "attendance-settings-block";
   const manageHeading = document.createElement("h4");
@@ -1684,14 +1660,22 @@ function renderScoringSettings() {
   manageWrap.appendChild(manageHeading);
 
   const list = document.createElement("ul");
-  list.className = "infraction-edit-list";
+  list.className = "infraction-edit-list category-manage-list";
   ScoringModule.categories.forEach((category) => {
     const li = document.createElement("li");
+    li.className = "category-manage-item";
 
-    const nameLabel = document.createElement("span");
-    nameLabel.className = "fixed-type-label";
-    nameLabel.textContent = category.name;
-    li.appendChild(nameLabel);
+    const topRow = document.createElement("div");
+    topRow.className = "category-manage-top-row";
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = category.name;
+    nameInput.addEventListener("change", async () => {
+      ScoringModule.setCategoryName(category.id, nameInput.value);
+      await saveScoringThen(renderScoring);
+    });
+    topRow.appendChild(nameInput);
 
     const countLabel = document.createElement("label");
     countLabel.textContent = "Items:";
@@ -1705,7 +1689,7 @@ function renderScoringSettings() {
       ScoringModule.setItemCount(category.id, countInput.value);
       await saveScoringThen(renderScoring);
     });
-    li.append(countLabel, countInput);
+    topRow.append(countLabel, countInput);
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
@@ -1716,7 +1700,41 @@ function renderScoringSettings() {
       ScoringModule.removeCategory(category.id);
       await saveScoringThen(renderScoring);
     });
-    li.appendChild(removeBtn);
+    topRow.appendChild(removeBtn);
+
+    li.appendChild(topRow);
+
+    if (category.items.length > 0) {
+      const itemsList = document.createElement("div");
+      itemsList.className = "category-items-edit-list";
+      category.items.forEach((item) => {
+        const itemRow = document.createElement("div");
+        itemRow.className = "category-item-edit-row";
+
+        const itemNameInput = document.createElement("input");
+        itemNameInput.type = "text";
+        itemNameInput.value = item.name;
+        itemNameInput.addEventListener("change", async () => {
+          ScoringModule.setItemName(item.id, itemNameInput.value);
+          await saveScoringThen(renderScoring);
+        });
+
+        const itemPointsInput = document.createElement("input");
+        itemPointsInput.type = "number";
+        itemPointsInput.min = "0";
+        itemPointsInput.className = "point-value-input";
+        itemPointsInput.value = item.maxPoints;
+        itemPointsInput.title = "Max points";
+        itemPointsInput.addEventListener("change", async () => {
+          ScoringModule.setItemMaxPoints(item.id, itemPointsInput.value);
+          await saveScoringThen(renderScoring); // total scores depend on this
+        });
+
+        itemRow.append(itemNameInput, itemPointsInput);
+        itemsList.appendChild(itemRow);
+      });
+      li.appendChild(itemsList);
+    }
 
     list.appendChild(li);
   });
@@ -1850,6 +1868,7 @@ function buildScoringStudentRow(student) {
       const input = document.createElement("input");
       input.type = "text";
       input.className = "scoring-score-input";
+      input.dataset.itemId = item.id;
       input.value = ScoringModule.getRecord(student.id, item.id);
       input.placeholder = `/${item.maxPoints}`;
       input.title = `Out of ${item.maxPoints} — or "E" for exempt`;
@@ -1863,6 +1882,17 @@ function buildScoringStudentRow(student) {
         }
         await saveScoringThen();
         refreshScoringTotalCell(student.id);
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault(); // moving focus below triggers the change handler above via blur
+        const nextRow = tr.nextElementSibling;
+        if (!nextRow) return;
+        const nextInput = nextRow.querySelector(`.scoring-score-input[data-item-id="${item.id}"]`);
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.select();
+        }
       });
 
       td.appendChild(input);
