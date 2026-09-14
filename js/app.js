@@ -21,9 +21,11 @@ const el = {
   tabRosterBtn: document.getElementById("tab-roster-btn"),
   tabSeatingBtn: document.getElementById("tab-seating-btn"),
   tabAttendanceBtn: document.getElementById("tab-attendance-btn"),
+  tabScoringBtn: document.getElementById("tab-scoring-btn"),
   rosterPanel: document.getElementById("roster-panel"),
   seatingPanel: document.getElementById("seating-panel"),
   attendancePanel: document.getElementById("attendance-panel"),
+  scoringPanel: document.getElementById("scoring-panel"),
 
   rosterCount: document.getElementById("roster-count"),
   rosterFileInput: document.getElementById("roster-file-input"),
@@ -60,6 +62,9 @@ const el = {
   attendanceTable: document.getElementById("attendance-table"),
   toggleAttendanceSettingsBtn: document.getElementById("toggle-attendance-settings-btn"),
   attendanceSettingsBody: document.getElementById("attendance-settings-body"),
+
+  scoringStatus: document.getElementById("scoring-status"),
+  scoringTable: document.getElementById("scoring-table"),
 
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
@@ -248,6 +253,7 @@ async function openCourseDetail(course) {
   el.rosterStatus.textContent = "Loading roster…";
   el.seatingStatus.textContent = "Loading seating chart…";
   el.attendanceStatus.textContent = "Loading attendance…";
+  el.scoringStatus.textContent = "Loading scoring…";
 
   try {
     await RosterModule.load(course.id);
@@ -272,6 +278,14 @@ async function openCourseDetail(course) {
   } catch (err) {
     el.attendanceStatus.textContent = `Couldn't load attendance: ${err.message}`;
   }
+
+  try {
+    await ScoringModule.load(course.id);
+    renderScoring();
+    el.scoringStatus.textContent = "";
+  } catch (err) {
+    el.scoringStatus.textContent = `Couldn't load scoring: ${err.message}`;
+  }
 }
 
 el.backToCoursesBtn.addEventListener("click", showCourses);
@@ -280,21 +294,26 @@ function showTab(tab) {
   el.rosterPanel.hidden = tab !== "roster";
   el.seatingPanel.hidden = tab !== "seating";
   el.attendancePanel.hidden = tab !== "attendance";
+  el.scoringPanel.hidden = tab !== "scoring";
   el.tabRosterBtn.classList.toggle("tab-btn-active", tab === "roster");
   el.tabSeatingBtn.classList.toggle("tab-btn-active", tab === "seating");
   el.tabAttendanceBtn.classList.toggle("tab-btn-active", tab === "attendance");
+  el.tabScoringBtn.classList.toggle("tab-btn-active", tab === "scoring");
 
   if (tab === "seating") {
     selectedStudentId = null;
     renderSeating(); // roster may have changed since the tab was last shown
   } else if (tab === "attendance") {
     renderAttendance(); // roster may have changed since the tab was last shown
+  } else if (tab === "scoring") {
+    renderScoring(); // roster/attendance may have changed since the tab was last shown
   }
 }
 
 el.tabRosterBtn.addEventListener("click", () => showTab("roster"));
 el.tabSeatingBtn.addEventListener("click", () => showTab("seating"));
 el.tabAttendanceBtn.addEventListener("click", () => showTab("attendance"));
+el.tabScoringBtn.addEventListener("click", () => showTab("scoring"));
 
 function renderRoster() {
   el.rosterCount.textContent = `${RosterModule.students.length} / ${MAX_STUDENTS}`;
@@ -1521,6 +1540,267 @@ function buildAttendanceFooterRow() {
   });
 
   return tr;
+}
+
+// ===== Scoring =====
+
+function renderScoring() {
+  el.scoringTable.innerHTML = "";
+
+  if (RosterModule.students.length === 0) {
+    const emptyMsg = document.createElement("p");
+    emptyMsg.className = "hint";
+    emptyMsg.textContent = "Add students on the Roster tab first — the scoring table needs a roster to work from.";
+    el.scoringTable.replaceWith(emptyMsg);
+    emptyMsg.id = "scoring-table"; // keep the id so a later render can find/replace it again
+    el.scoringTable = emptyMsg;
+    return;
+  }
+
+  // If a previous render swapped the table out for the empty-state
+  // message, put a real <table> back now that there are students.
+  if (el.scoringTable.tagName !== "TABLE") {
+    const freshTable = document.createElement("table");
+    freshTable.id = "scoring-table";
+    freshTable.className = "attendance-table scoring-table";
+    el.scoringTable.replaceWith(freshTable);
+    el.scoringTable = freshTable;
+  }
+
+  const thead = document.createElement("thead");
+  const { row1, row2 } = buildScoringHeaderRows();
+  thead.append(row1, row2);
+  el.scoringTable.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  RosterModule.students.forEach((student) => {
+    tbody.appendChild(buildScoringStudentRow(student));
+  });
+  el.scoringTable.appendChild(tbody);
+}
+
+function buildScoringHeaderRows() {
+  const row1 = document.createElement("tr");
+  const row2 = document.createElement("tr");
+
+  const studentTh = document.createElement("th");
+  studentTh.rowSpan = 2;
+  studentTh.textContent = "Student";
+  row1.appendChild(studentTh);
+
+  const totalTh = document.createElement("th");
+  totalTh.rowSpan = 2;
+  totalTh.textContent = "Total Score";
+  row1.appendChild(totalTh);
+
+  const controlTh = document.createElement("th");
+  controlTh.rowSpan = 2;
+  controlTh.className = "control-panel-cell";
+  controlTh.appendChild(buildControlPanel());
+  row1.appendChild(controlTh);
+
+  ScoringModule.categories.forEach((category) => {
+    const th = document.createElement("th");
+    th.className = "category-header-cell";
+    th.colSpan = Math.max(1, category.items.length);
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "category-name-input";
+    nameInput.value = category.name;
+    nameInput.addEventListener("change", async () => {
+      ScoringModule.setCategoryName(category.id, nameInput.value);
+      await saveScoringThen(renderScoring);
+    });
+
+    const countRow = document.createElement("div");
+    countRow.className = "category-item-count-row";
+    const countLabel = document.createElement("label");
+    countLabel.textContent = "Items:";
+    const countInput = document.createElement("input");
+    countInput.type = "number";
+    countInput.min = "0";
+    countInput.max = String(MAX_ITEMS_PER_CATEGORY);
+    countInput.className = "category-item-count-input";
+    countInput.value = category.items.length;
+    countInput.addEventListener("change", async () => {
+      ScoringModule.setItemCount(category.id, countInput.value);
+      await saveScoringThen(renderScoring);
+    });
+    countRow.append(countLabel, countInput);
+
+    th.append(nameInput, countRow);
+    row1.appendChild(th);
+
+    category.items.forEach((item) => {
+      const itemTh = document.createElement("th");
+      itemTh.className = "item-header-cell";
+
+      const itemNameInput = document.createElement("input");
+      itemNameInput.type = "text";
+      itemNameInput.className = "item-name-input";
+      itemNameInput.value = item.name;
+      itemNameInput.addEventListener("change", async () => {
+        ScoringModule.setItemName(item.id, itemNameInput.value);
+        await saveScoringThen();
+      });
+
+      const pointsInput = document.createElement("input");
+      pointsInput.type = "number";
+      pointsInput.min = "0";
+      pointsInput.className = "item-points-input";
+      pointsInput.value = item.maxPoints;
+      pointsInput.title = "Max points";
+      pointsInput.addEventListener("change", async () => {
+        ScoringModule.setItemMaxPoints(item.id, pointsInput.value);
+        await saveScoringThen(renderScoring); // total scores depend on this
+      });
+
+      itemTh.append(itemNameInput, pointsInput);
+      row2.appendChild(itemTh);
+    });
+  });
+
+  return { row1, row2 };
+}
+
+function buildControlPanel() {
+  const panel = document.createElement("div");
+  panel.className = "control-panel";
+
+  const heading = document.createElement("div");
+  heading.className = "control-panel-heading";
+  heading.textContent = "Category Weights";
+  panel.appendChild(heading);
+
+  ScoringModule.categories.forEach((category) => {
+    panel.appendChild(buildWeightRow(category.name, ScoringModule.weights[category.id], (value) => {
+      ScoringModule.setWeight(category.id, value);
+    }));
+  });
+
+  panel.appendChild(
+    buildWeightRow("Attendance", ScoringModule.weights.attendance, (value) => {
+      ScoringModule.setWeight("attendance", value);
+    })
+  );
+
+  return panel;
+}
+
+function buildWeightRow(label, value, onChange) {
+  const row = document.createElement("div");
+  row.className = "weight-row";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "weight-label";
+  labelEl.textContent = label;
+
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.className = "weight-input";
+  input.value = value || 0;
+  input.addEventListener("change", async () => {
+    onChange(input.value);
+    await saveScoringThen(renderScoring); // total scores depend on weights
+  });
+
+  row.append(labelEl, input);
+  return row;
+}
+
+function buildScoringStudentRow(student) {
+  const tr = document.createElement("tr");
+  tr.dataset.studentId = student.id;
+
+  // ----- Student info: class #, pronunciation, name + school ID -----
+  const infoTd = document.createElement("td");
+  infoTd.className = "attendance-student-cell";
+  if (student.classNumber) {
+    const numEl = document.createElement("div");
+    numEl.className = "unseated-classnumber";
+    numEl.textContent = `#${student.classNumber}`;
+    infoTd.appendChild(numEl);
+  }
+  if (student.pronunciation) {
+    const pron = document.createElement("div");
+    pron.className = "attendance-pronunciation";
+    pron.textContent = student.pronunciation;
+    infoTd.appendChild(pron);
+  }
+  const nameRow = document.createElement("div");
+  nameRow.className = "attendance-name-row";
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "attendance-name";
+  nameSpan.textContent = student.name || "(unnamed)";
+  nameRow.appendChild(nameSpan);
+  if (student.schoolId) {
+    const idSpan = document.createElement("span");
+    idSpan.className = "attendance-schoolid";
+    idSpan.textContent = student.schoolId;
+    nameRow.appendChild(idSpan);
+  }
+  infoTd.appendChild(nameRow);
+  tr.appendChild(infoTd);
+
+  // ----- Total score -----
+  const totalTd = document.createElement("td");
+  totalTd.className = "attendance-stat-cell attendance-score-cell";
+  const total = ScoringModule.totalScore(student.id);
+  totalTd.textContent = total === null ? "—" : `${total}%`;
+  tr.appendChild(totalTd);
+
+  // ----- One cell per item, grouped by category (no separate cell needed — colspan lives in the header) -----
+  ScoringModule.categories.forEach((category) => {
+    category.items.forEach((item) => {
+      const td = document.createElement("td");
+      td.className = "scoring-item-cell";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "scoring-score-input";
+      input.value = ScoringModule.getRecord(student.id, item.id);
+      input.placeholder = `/${item.maxPoints}`;
+      input.title = `Out of ${item.maxPoints} — or "E" for exempt`;
+      input.addEventListener("change", async () => {
+        try {
+          ScoringModule.setRecord(student.id, item.id, input.value);
+        } catch (err) {
+          alert(err.message);
+          input.value = ScoringModule.getRecord(student.id, item.id);
+          return;
+        }
+        await saveScoringThen();
+        refreshScoringTotalCell(student.id);
+      });
+
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+  });
+
+  return tr;
+}
+
+function refreshScoringTotalCell(studentId) {
+  const row = el.scoringTable.querySelector(`tr[data-student-id="${studentId}"]`);
+  if (!row) return;
+  const cell = row.querySelector(".attendance-score-cell");
+  if (!cell) return;
+  const total = ScoringModule.totalScore(studentId);
+  cell.textContent = total === null ? "—" : `${total}%`;
+}
+
+async function saveScoringThen(after) {
+  el.scoringStatus.textContent = "Saving…";
+  try {
+    await ScoringModule.save();
+    el.scoringStatus.textContent = "";
+  } catch (err) {
+    el.scoringStatus.textContent = `Couldn't save: ${err.message}`;
+  }
+  if (after) after();
 }
 
 main();

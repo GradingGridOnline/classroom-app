@@ -1226,3 +1226,142 @@ textarea {
   background: var(--paper);
   text-align: center;
 }
+
+/* ===== Scoring ===== */
+
+.scoring-table th,
+.scoring-table td {
+  white-space: normal;
+}
+
+/* Category group header (row 1): name + item-count setting */
+.category-header-cell {
+  text-align: center;
+  min-width: 90px;
+  background: var(--paper);
+}
+
+.category-name-input {
+  width: 100%;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  background: var(--card);
+}
+
+.category-item-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.category-item-count-input {
+  width: 44px;
+  font-size: 0.72rem;
+  padding: 1px 2px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+/* Item sub-header (row 2): name + max points */
+.item-header-cell {
+  text-align: center;
+  min-width: 90px;
+}
+
+.item-name-input {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin-bottom: 3px;
+  background: var(--card);
+}
+
+.item-points-input {
+  display: block;
+  width: 100%;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  text-align: center;
+}
+
+/* Per-student score cell */
+.scoring-item-cell {
+  min-width: 70px;
+  text-align: center;
+}
+
+.scoring-score-input {
+  width: 100%;
+  text-align: center;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 5px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--card);
+}
+
+/* Control panel: weights, sits in the header between Total Score and the categories */
+.control-panel-cell {
+  vertical-align: top;
+  background: var(--paper);
+  min-width: 200px;
+}
+
+.control-panel {
+  text-align: left;
+  padding: 4px;
+}
+
+.control-panel-heading {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--green-dark);
+  margin-bottom: 6px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.weight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.weight-label {
+  font-size: 0.75rem;
+  color: var(--ink);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  flex: 1;
+}
+
+.weight-input {
+  width: 50px;
+  font-size: 0.78rem;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  text-align: center;
+  flex-shrink: 0;
+}

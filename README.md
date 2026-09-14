@@ -368,3 +368,37 @@ undo, and the LMS export assumes your template's student-matching
 column lines up with either School ID or Name exactly as typed in
 your roster — worth a test export before relying on it for something
 that matters.
+
+## Scoring (new tab)
+
+A fourth tab, **Scoring**, alongside Roster, Seating Chart, and
+Attendance. Stored as `scoring-<courseId>.json`, one file per course.
+
+- **10 fixed categories** (like the seating chart's 6 memory banks —
+  always present, renamable, not addable/removable). Each category's
+  header has its name and a "number of items" setting — set that
+  number and that many item-columns appear underneath it, each with
+  its own editable name and max-point value.
+- **Score cells** accept a number (0 up to that item's max points) or
+  the letter **E** for exempt — exempt items are excluded from both
+  the earned and possible totals for that student.
+- **Student column** shows Class #, pronunciation, name, and School
+  ID, same as the other tabs.
+- **Total Score** is a weighted average across all 10 categories plus
+  Attendance, using the weights you set in the Control Panel. It's
+  normalized by whatever weights are actually entered — so weights
+  don't need to add up to exactly 100 for the math to make sense.
+  Categories with nothing recorded yet, or unweighted categories, are
+  simply excluded rather than counted as zero.
+- **Control Panel**: sits in the header, immediately after Total
+  Score, since weights are a course-wide setting rather than
+  per-student data — one weight input per category, plus one for
+  Attendance (pulled live from that student's Attendance score).
+
+This is the first step, as discussed — a few honest limitations:
+- Lowering a category's item count deletes that category's trailing
+  items' recorded scores, no confirmation prompt yet (same rough edge
+  as Attendance's term count).
+- The table isn't sticky/frozen — scrolling right to reach later
+  categories scrolls the Student/Total Score/Control Panel columns
+  out of view too, same as Attendance's table today.
