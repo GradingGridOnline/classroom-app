@@ -1236,9 +1236,26 @@ textarea {
 
 /* Category group header (row 1): name + item-count setting */
 .category-header-cell {
+  position: relative;
   text-align: center;
   min-width: 90px;
   background: var(--paper);
+}
+
+.category-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.category-remove-btn:hover {
+  color: var(--marker);
 }
 
 .category-name-input {
@@ -1317,27 +1334,6 @@ textarea {
 }
 
 /* Control panel: weights, sits in the header between Total Score and the categories */
-.control-panel-cell {
-  vertical-align: top;
-  background: var(--paper);
-  min-width: 200px;
-}
-
-.control-panel {
-  text-align: left;
-  padding: 4px;
-}
-
-.control-panel-heading {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--green-dark);
-  margin-bottom: 6px;
-  text-transform: none;
-  letter-spacing: normal;
-}
-
 .weight-row {
   display: flex;
   align-items: center;

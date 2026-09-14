@@ -402,3 +402,14 @@ This is the first step, as discussed — a few honest limitations:
 - The table isn't sticky/frozen — scrolling right to reach later
   categories scrolls the Student/Total Score/Control Panel columns
   out of view too, same as Attendance's table today.
+
+## Scoring: weights moved to Settings, categories now add-as-needed
+
+- **Category Weights** live in a Scoring Settings section at the
+  bottom now, with the same view/edit toggle pattern as Attendance
+  Settings — no longer crammed into the table header.
+- **Categories are add-as-needed** (up to the same cap of 10) rather
+  than 10 fixed slots — a **+ Add Category** button sits in the
+  toolbar. Each category header also has a small **×** to remove it
+  (asks to confirm first, since it deletes that category's recorded
+  scores).

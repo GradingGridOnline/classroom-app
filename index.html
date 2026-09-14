@@ -188,10 +188,19 @@
         <!-- ----- Scoring panel ----- -->
         <div id="scoring-panel" class="tab-panel" hidden>
           <div class="panel-toolbar">
+            <button id="add-category-btn" class="btn btn-ghost">+ Add Category</button>
             <span id="scoring-status" class="result"></span>
           </div>
           <div class="attendance-table-wrap">
             <table id="scoring-table" class="attendance-table scoring-table"></table>
+          </div>
+
+          <div class="attendance-settings">
+            <div class="attendance-settings-header">
+              <h3>Scoring Settings</h3>
+              <button id="toggle-scoring-settings-btn" class="btn btn-ghost btn-small">Edit Settings</button>
+            </div>
+            <div id="scoring-settings-body"></div>
           </div>
         </div>
       </section>

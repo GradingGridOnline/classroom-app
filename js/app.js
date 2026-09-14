@@ -65,6 +65,9 @@ const el = {
 
   scoringStatus: document.getElementById("scoring-status"),
   scoringTable: document.getElementById("scoring-table"),
+  addCategoryBtn: document.getElementById("add-category-btn"),
+  toggleScoringSettingsBtn: document.getElementById("toggle-scoring-settings-btn"),
+  scoringSettingsBody: document.getElementById("scoring-settings-body"),
 
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
@@ -73,6 +76,7 @@ const el = {
 
 let selectedStudentId = null; // currently-selected student in the "Unseated" list
 let attendanceSettingsEditing = false;
+let scoringSettingsEditing = false;
 
 async function main() {
   ThemeModule.initLocal();
@@ -1554,6 +1558,7 @@ function renderScoring() {
     el.scoringTable.replaceWith(emptyMsg);
     emptyMsg.id = "scoring-table"; // keep the id so a later render can find/replace it again
     el.scoringTable = emptyMsg;
+    renderScoringSettings();
     return;
   }
 
@@ -1577,6 +1582,8 @@ function renderScoring() {
     tbody.appendChild(buildScoringStudentRow(student));
   });
   el.scoringTable.appendChild(tbody);
+
+  renderScoringSettings();
 }
 
 function buildScoringHeaderRows() {
@@ -1592,12 +1599,6 @@ function buildScoringHeaderRows() {
   totalTh.rowSpan = 2;
   totalTh.textContent = "Total Score";
   row1.appendChild(totalTh);
-
-  const controlTh = document.createElement("th");
-  controlTh.rowSpan = 2;
-  controlTh.className = "control-panel-cell";
-  controlTh.appendChild(buildControlPanel());
-  row1.appendChild(controlTh);
 
   ScoringModule.categories.forEach((category) => {
     const th = document.createElement("th");
@@ -1629,7 +1630,18 @@ function buildScoringHeaderRows() {
     });
     countRow.append(countLabel, countInput);
 
-    th.append(nameInput, countRow);
+    const removeCategoryBtn = document.createElement("button");
+    removeCategoryBtn.type = "button";
+    removeCategoryBtn.className = "category-remove-btn";
+    removeCategoryBtn.textContent = "×";
+    removeCategoryBtn.title = "Remove this category";
+    removeCategoryBtn.addEventListener("click", async () => {
+      if (!confirm(`Remove "${category.name}"? This deletes all recorded scores in it.`)) return;
+      ScoringModule.removeCategory(category.id);
+      await saveScoringThen(renderScoring);
+    });
+
+    th.append(removeCategoryBtn, nameInput, countRow);
     row1.appendChild(th);
 
     category.items.forEach((item) => {
@@ -1664,28 +1676,67 @@ function buildScoringHeaderRows() {
   return { row1, row2 };
 }
 
-function buildControlPanel() {
-  const panel = document.createElement("div");
-  panel.className = "control-panel";
+el.addCategoryBtn.addEventListener("click", async () => {
+  try {
+    ScoringModule.addCategory();
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  await saveScoringThen(renderScoring);
+});
 
-  const heading = document.createElement("div");
-  heading.className = "control-panel-heading";
-  heading.textContent = "Category Weights";
-  panel.appendChild(heading);
+el.toggleScoringSettingsBtn.addEventListener("click", () => {
+  scoringSettingsEditing = !scoringSettingsEditing;
+  el.toggleScoringSettingsBtn.textContent = scoringSettingsEditing ? "Done Editing" : "Edit Settings";
+  renderScoringSettings();
+});
+
+function renderScoringSettings() {
+  el.scoringSettingsBody.innerHTML = "";
+
+  if (ScoringModule.categories.length === 0) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Add a category above to set its weight here.";
+    el.scoringSettingsBody.appendChild(hint);
+    return;
+  }
+
+  if (!scoringSettingsEditing) {
+    const lines = ScoringModule.categories
+      .map((c) => `${c.name}: ${ScoringModule.weights[c.id] || 0}`)
+      .concat(`Attendance: ${ScoringModule.weights.attendance || 0}`);
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "Category weights — " + lines.join(", ");
+    el.scoringSettingsBody.appendChild(p);
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Category weights";
+  wrap.appendChild(heading);
 
   ScoringModule.categories.forEach((category) => {
-    panel.appendChild(buildWeightRow(category.name, ScoringModule.weights[category.id], (value) => {
-      ScoringModule.setWeight(category.id, value);
-    }));
+    wrap.appendChild(
+      buildWeightRow(category.name, ScoringModule.weights[category.id], async (value) => {
+        ScoringModule.setWeight(category.id, value);
+        await saveScoringThen(renderScoring);
+      })
+    );
   });
 
-  panel.appendChild(
-    buildWeightRow("Attendance", ScoringModule.weights.attendance, (value) => {
+  wrap.appendChild(
+    buildWeightRow("Attendance", ScoringModule.weights.attendance, async (value) => {
       ScoringModule.setWeight("attendance", value);
+      await saveScoringThen(renderScoring);
     })
   );
 
-  return panel;
+  el.scoringSettingsBody.appendChild(wrap);
 }
 
 function buildWeightRow(label, value, onChange) {
@@ -1701,10 +1752,7 @@ function buildWeightRow(label, value, onChange) {
   input.min = "0";
   input.className = "weight-input";
   input.value = value || 0;
-  input.addEventListener("change", async () => {
-    onChange(input.value);
-    await saveScoringThen(renderScoring); // total scores depend on weights
-  });
+  input.addEventListener("change", () => onChange(input.value));
 
   row.append(labelEl, input);
   return row;

@@ -13,20 +13,8 @@
 //   "attendance" — pulled from AttendanceModule's percent score
 //   rather than stored here.
 
-const MAX_CATEGORIES = 10;
+const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categories as needed
 const MAX_ITEMS_PER_CATEGORY = 50;
-
-function defaultScoringCategories() {
-  const categories = [];
-  for (let i = 0; i < MAX_CATEGORIES; i++) {
-    categories.push({
-      id: `category-${i + 1}`,
-      name: `Category ${i + 1}`,
-      items: [],
-    });
-  }
-  return categories;
-}
 
 function defaultScoringWeights(categories) {
   const weights = { attendance: 0 };
@@ -37,7 +25,7 @@ function defaultScoringWeights(categories) {
 }
 
 const ScoringModule = {
-  categories: defaultScoringCategories(),
+  categories: [],
   records: {},
   weights: {},
   currentCourseId: null,
@@ -54,9 +42,9 @@ const ScoringModule = {
       this.records = data.records || {};
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
     } else {
-      this.categories = defaultScoringCategories();
+      this.categories = [];
       this.records = {};
-      this.weights = defaultScoringWeights(this.categories);
+      this.weights = { attendance: 0 };
     }
   },
 
@@ -69,17 +57,39 @@ const ScoringModule = {
     });
   },
 
-  /** Always exactly MAX_CATEGORIES slots, however the saved data looked. */
   _normalizeCategories(categories) {
     const arr = Array.isArray(categories) ? categories.slice(0, MAX_CATEGORIES) : [];
-    while (arr.length < MAX_CATEGORIES) {
-      arr.push({ id: `category-${arr.length + 1}`, name: `Category ${arr.length + 1}`, items: [] });
-    }
     return arr.map((c, i) => ({
-      id: c.id || `category-${i + 1}`,
+      id: c.id || `category-${i + 1}-${Date.now()}`,
       name: c.name || `Category ${i + 1}`,
       items: Array.isArray(c.items) ? c.items : [],
     }));
+  },
+
+  addCategory() {
+    if (this.categories.length >= MAX_CATEGORIES) {
+      throw new Error(`You've reached the limit of ${MAX_CATEGORIES} categories.`);
+    }
+    const category = {
+      id: `category-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `Category ${this.categories.length + 1}`,
+      items: [],
+    };
+    this.categories.push(category);
+    this.weights[category.id] = 0;
+    return category;
+  },
+
+  removeCategory(categoryId) {
+    const category = this.findCategory(categoryId);
+    if (!category) return;
+    const itemIds = new Set(category.items.map((i) => i.id));
+    this.categories = this.categories.filter((c) => c.id !== categoryId);
+    delete this.weights[categoryId];
+    Object.keys(this.records).forEach((key) => {
+      const itemId = key.split("|")[1];
+      if (itemIds.has(itemId)) delete this.records[key];
+    });
   },
 
   findCategory(categoryId) {
