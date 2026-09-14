@@ -1236,26 +1236,9 @@ textarea {
 
 /* Category group header (row 1): name + item-count setting */
 .category-header-cell {
-  position: relative;
   text-align: center;
   min-width: 90px;
   background: var(--paper);
-}
-
-.category-remove-btn {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  border: none;
-  background: none;
-  color: var(--ink-soft);
-  cursor: pointer;
-  font-size: 0.85rem;
-  line-height: 1;
-}
-
-.category-remove-btn:hover {
-  color: var(--marker);
 }
 
 .category-name-input {
@@ -1269,23 +1252,6 @@ textarea {
   border-radius: 3px;
   margin-bottom: 4px;
   background: var(--card);
-}
-
-.category-item-count-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 0.68rem;
-  color: var(--ink-soft);
-}
-
-.category-item-count-input {
-  width: 44px;
-  font-size: 0.72rem;
-  padding: 1px 2px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
 }
 
 /* Item sub-header (row 2): name + max points */
@@ -1360,4 +1326,42 @@ textarea {
   border-radius: 3px;
   text-align: center;
   flex-shrink: 0;
+}
+
+/* Weight total indicator — green at exactly 100, red over 100 */
+.weight-total-box {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-small);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.weight-total-ok {
+  background: #c8e6c9;
+  border-color: #4caf50;
+  color: #1b5e20;
+}
+
+.weight-total-over {
+  background: #ffcdd2;
+  border-color: #e57373;
+  color: #b71c1c;
+}
+
+[data-theme="cyberpunk"] .weight-total-ok {
+  background: var(--card);
+  border-color: #21e6c1;
+  color: #21e6c1;
+  box-shadow: 0 0 8px rgba(33, 230, 193, 0.4);
+}
+
+[data-theme="cyberpunk"] .weight-total-over {
+  background: var(--card);
+  border-color: #ff2e6e;
+  color: #ff2e6e;
+  box-shadow: 0 0 8px rgba(255, 46, 110, 0.5);
 }

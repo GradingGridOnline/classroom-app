@@ -65,7 +65,6 @@ const el = {
 
   scoringStatus: document.getElementById("scoring-status"),
   scoringTable: document.getElementById("scoring-table"),
-  addCategoryBtn: document.getElementById("add-category-btn"),
   toggleScoringSettingsBtn: document.getElementById("toggle-scoring-settings-btn"),
   scoringSettingsBody: document.getElementById("scoring-settings-body"),
 
@@ -1614,34 +1613,7 @@ function buildScoringHeaderRows() {
       await saveScoringThen(renderScoring);
     });
 
-    const countRow = document.createElement("div");
-    countRow.className = "category-item-count-row";
-    const countLabel = document.createElement("label");
-    countLabel.textContent = "Items:";
-    const countInput = document.createElement("input");
-    countInput.type = "number";
-    countInput.min = "0";
-    countInput.max = String(MAX_ITEMS_PER_CATEGORY);
-    countInput.className = "category-item-count-input";
-    countInput.value = category.items.length;
-    countInput.addEventListener("change", async () => {
-      ScoringModule.setItemCount(category.id, countInput.value);
-      await saveScoringThen(renderScoring);
-    });
-    countRow.append(countLabel, countInput);
-
-    const removeCategoryBtn = document.createElement("button");
-    removeCategoryBtn.type = "button";
-    removeCategoryBtn.className = "category-remove-btn";
-    removeCategoryBtn.textContent = "×";
-    removeCategoryBtn.title = "Remove this category";
-    removeCategoryBtn.addEventListener("click", async () => {
-      if (!confirm(`Remove "${category.name}"? This deletes all recorded scores in it.`)) return;
-      ScoringModule.removeCategory(category.id);
-      await saveScoringThen(renderScoring);
-    });
-
-    th.append(removeCategoryBtn, nameInput, countRow);
+    th.appendChild(nameInput);
     row1.appendChild(th);
 
     category.items.forEach((item) => {
@@ -1676,16 +1648,6 @@ function buildScoringHeaderRows() {
   return { row1, row2 };
 }
 
-el.addCategoryBtn.addEventListener("click", async () => {
-  try {
-    ScoringModule.addCategory();
-  } catch (err) {
-    alert(err.message);
-    return;
-  }
-  await saveScoringThen(renderScoring);
-});
-
 el.toggleScoringSettingsBtn.addEventListener("click", () => {
   scoringSettingsEditing = !scoringSettingsEditing;
   el.toggleScoringSettingsBtn.textContent = scoringSettingsEditing ? "Done Editing" : "Edit Settings";
@@ -1695,15 +1657,14 @@ el.toggleScoringSettingsBtn.addEventListener("click", () => {
 function renderScoringSettings() {
   el.scoringSettingsBody.innerHTML = "";
 
-  if (ScoringModule.categories.length === 0) {
-    const hint = document.createElement("p");
-    hint.className = "hint";
-    hint.textContent = "Add a category above to set its weight here.";
-    el.scoringSettingsBody.appendChild(hint);
-    return;
-  }
-
   if (!scoringSettingsEditing) {
+    if (ScoringModule.categories.length === 0) {
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = "Click Edit Settings to add a scoring category.";
+      el.scoringSettingsBody.appendChild(hint);
+      return;
+    }
     const lines = ScoringModule.categories
       .map((c) => `${c.name}: ${ScoringModule.weights[c.id] || 0}`)
       .concat(`Attendance: ${ScoringModule.weights.attendance || 0}`);
@@ -1711,9 +1672,75 @@ function renderScoringSettings() {
     p.className = "hint";
     p.textContent = "Category weights — " + lines.join(", ");
     el.scoringSettingsBody.appendChild(p);
+    el.scoringSettingsBody.appendChild(buildWeightTotalBox());
     return;
   }
 
+  // ----- Edit mode: manage categories (name shown read-only here — it's editable in the table header itself) -----
+  const manageWrap = document.createElement("div");
+  manageWrap.className = "attendance-settings-block";
+  const manageHeading = document.createElement("h4");
+  manageHeading.textContent = "Categories";
+  manageWrap.appendChild(manageHeading);
+
+  const list = document.createElement("ul");
+  list.className = "infraction-edit-list";
+  ScoringModule.categories.forEach((category) => {
+    const li = document.createElement("li");
+
+    const nameLabel = document.createElement("span");
+    nameLabel.className = "fixed-type-label";
+    nameLabel.textContent = category.name;
+    li.appendChild(nameLabel);
+
+    const countLabel = document.createElement("label");
+    countLabel.textContent = "Items:";
+    const countInput = document.createElement("input");
+    countInput.type = "number";
+    countInput.min = "0";
+    countInput.max = String(MAX_ITEMS_PER_CATEGORY);
+    countInput.className = "point-value-input";
+    countInput.value = category.items.length;
+    countInput.addEventListener("change", async () => {
+      ScoringModule.setItemCount(category.id, countInput.value);
+      await saveScoringThen(renderScoring);
+    });
+    li.append(countLabel, countInput);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-ghost btn-small";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", async () => {
+      if (!confirm(`Remove "${category.name}"? This deletes all recorded scores in it.`)) return;
+      ScoringModule.removeCategory(category.id);
+      await saveScoringThen(renderScoring);
+    });
+    li.appendChild(removeBtn);
+
+    list.appendChild(li);
+  });
+  manageWrap.appendChild(list);
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn btn-primary btn-small";
+  addBtn.textContent = "+ Add Category";
+  addBtn.addEventListener("click", async () => {
+    try {
+      ScoringModule.addCategory();
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    await saveScoringThen(renderScoring);
+  });
+  manageWrap.appendChild(addBtn);
+  el.scoringSettingsBody.appendChild(manageWrap);
+
+  if (ScoringModule.categories.length === 0) return;
+
+  // ----- Edit mode: category weights -----
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
   const heading = document.createElement("h4");
@@ -1736,7 +1763,22 @@ function renderScoringSettings() {
     })
   );
 
+  wrap.appendChild(buildWeightTotalBox());
   el.scoringSettingsBody.appendChild(wrap);
+}
+
+/** Green at exactly 100, red over 100, neutral otherwise. */
+function buildWeightTotalBox() {
+  const total =
+    ScoringModule.categories.reduce((sum, c) => sum + (ScoringModule.weights[c.id] || 0), 0) +
+    (ScoringModule.weights.attendance || 0);
+
+  const box = document.createElement("div");
+  box.className = "weight-total-box";
+  if (total === 100) box.classList.add("weight-total-ok");
+  else if (total > 100) box.classList.add("weight-total-over");
+  box.textContent = `Total weight: ${total}${total === 100 ? " ✓" : total > 100 ? " (over 100)" : ""}`;
+  return box;
 }
 
 function buildWeightRow(label, value, onChange) {

@@ -413,3 +413,14 @@ This is the first step, as discussed — a few honest limitations:
   toolbar. Each category header also has a small **×** to remove it
   (asks to confirm first, since it deletes that category's recorded
   scores).
+
+## Scoring: category management moved to Settings, weight total indicator
+
+- The table header's category cell now shows **just the name** — no
+  more × or item-count clutter up there.
+- **+ Add Category**, each category's item-count setting, and its
+  Remove button all live in Scoring Settings (Edit Settings) now,
+  above the weights.
+- A **weight total** box sits under the category weights (both in the
+  plain view and while editing) — turns **green** at exactly 100,
+  **red** if it goes over 100, neutral otherwise.
