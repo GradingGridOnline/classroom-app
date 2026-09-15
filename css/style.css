@@ -1394,3 +1394,68 @@ textarea {
   color: var(--ink-soft);
   font-weight: 400;
 }
+
+/* ===== Report Card ===== */
+
+.reportcard-mode-row {
+  margin-bottom: 20px;
+}
+
+#consultation-view .panel-toolbar {
+  margin-bottom: 20px;
+}
+
+#consultation-student-select {
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  min-width: 240px;
+}
+
+.consultation-header {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+}
+
+.consultation-header h3 {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  margin: 0 0 4px;
+  color: var(--green-dark);
+}
+
+.consultation-total {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--green);
+  margin: 8px 0 0;
+}
+
+.consultation-category-block {
+  margin-bottom: 18px;
+}
+
+.consultation-category-block h4 {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  color: var(--green-dark);
+  margin: 0 0 6px;
+}
+
+.consultation-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 16px;
+}
+
+.consultation-item-list li {
+  font-size: 0.88rem;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line);
+}

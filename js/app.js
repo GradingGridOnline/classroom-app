@@ -22,10 +22,18 @@ const el = {
   tabSeatingBtn: document.getElementById("tab-seating-btn"),
   tabAttendanceBtn: document.getElementById("tab-attendance-btn"),
   tabScoringBtn: document.getElementById("tab-scoring-btn"),
+  tabReportCardBtn: document.getElementById("tab-reportcard-btn"),
   rosterPanel: document.getElementById("roster-panel"),
   seatingPanel: document.getElementById("seating-panel"),
   attendancePanel: document.getElementById("attendance-panel"),
   scoringPanel: document.getElementById("scoring-panel"),
+  reportCardPanel: document.getElementById("reportcard-panel"),
+  modeConsultationBtn: document.getElementById("mode-consultation-btn"),
+  modePrintcardBtn: document.getElementById("mode-printcard-btn"),
+  consultationView: document.getElementById("consultation-view"),
+  printcardView: document.getElementById("printcard-view"),
+  consultationStudentSelect: document.getElementById("consultation-student-select"),
+  consultationDetail: document.getElementById("consultation-detail"),
 
   rosterCount: document.getElementById("roster-count"),
   rosterFileInput: document.getElementById("roster-file-input"),
@@ -298,10 +306,12 @@ function showTab(tab) {
   el.seatingPanel.hidden = tab !== "seating";
   el.attendancePanel.hidden = tab !== "attendance";
   el.scoringPanel.hidden = tab !== "scoring";
+  el.reportCardPanel.hidden = tab !== "reportcard";
   el.tabRosterBtn.classList.toggle("tab-btn-active", tab === "roster");
   el.tabSeatingBtn.classList.toggle("tab-btn-active", tab === "seating");
   el.tabAttendanceBtn.classList.toggle("tab-btn-active", tab === "attendance");
   el.tabScoringBtn.classList.toggle("tab-btn-active", tab === "scoring");
+  el.tabReportCardBtn.classList.toggle("tab-btn-active", tab === "reportcard");
 
   if (tab === "seating") {
     selectedStudentId = null;
@@ -310,6 +320,8 @@ function showTab(tab) {
     renderAttendance(); // roster may have changed since the tab was last shown
   } else if (tab === "scoring") {
     renderScoring(); // roster/attendance may have changed since the tab was last shown
+  } else if (tab === "reportcard") {
+    renderConsultationStudentOptions(); // roster may have changed since the tab was last shown
   }
 }
 
@@ -317,6 +329,7 @@ el.tabRosterBtn.addEventListener("click", () => showTab("roster"));
 el.tabSeatingBtn.addEventListener("click", () => showTab("seating"));
 el.tabAttendanceBtn.addEventListener("click", () => showTab("attendance"));
 el.tabScoringBtn.addEventListener("click", () => showTab("scoring"));
+el.tabReportCardBtn.addEventListener("click", () => showTab("reportcard"));
 
 function renderRoster() {
   el.rosterCount.textContent = `${RosterModule.students.length} / ${MAX_STUDENTS}`;
@@ -1921,6 +1934,113 @@ async function saveScoringThen(after) {
     el.scoringStatus.textContent = `Couldn't save: ${err.message}`;
   }
   if (after) after();
+}
+
+// ===== Report Card =====
+
+el.modeConsultationBtn.addEventListener("click", () => showReportCardMode("consultation"));
+el.modePrintcardBtn.addEventListener("click", () => showReportCardMode("printcard"));
+
+function showReportCardMode(mode) {
+  el.consultationView.hidden = mode !== "consultation";
+  el.printcardView.hidden = mode !== "printcard";
+  el.modeConsultationBtn.classList.toggle("tab-btn-active", mode === "consultation");
+  el.modePrintcardBtn.classList.toggle("tab-btn-active", mode === "printcard");
+}
+
+/** Rebuilds the student dropdown, preserving the current selection if that student still exists. */
+function renderConsultationStudentOptions() {
+  const previousValue = el.consultationStudentSelect.value;
+  el.consultationStudentSelect.innerHTML = "";
+
+  const blankOpt = document.createElement("option");
+  blankOpt.value = "";
+  blankOpt.textContent = "Select a student…";
+  el.consultationStudentSelect.appendChild(blankOpt);
+
+  RosterModule.students.forEach((student) => {
+    const opt = document.createElement("option");
+    opt.value = student.id;
+    opt.textContent = `#${student.classNumber || "—"} ${student.name || "(unnamed)"}`;
+    el.consultationStudentSelect.appendChild(opt);
+  });
+
+  const stillExists = RosterModule.students.some((s) => s.id === previousValue);
+  el.consultationStudentSelect.value = stillExists ? previousValue : "";
+  renderConsultationDetail();
+}
+
+el.consultationStudentSelect.addEventListener("change", renderConsultationDetail);
+
+function renderConsultationDetail() {
+  const studentId = el.consultationStudentSelect.value;
+  el.consultationDetail.innerHTML = "";
+
+  if (!studentId) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Choose a student above to see their scores.";
+    el.consultationDetail.appendChild(hint);
+    return;
+  }
+
+  const student = RosterModule.students.find((s) => s.id === studentId);
+  const detail = ReportCardModule.studentDetail(studentId);
+
+  const header = document.createElement("div");
+  header.className = "consultation-header";
+  const nameLine = document.createElement("h3");
+  nameLine.textContent = `#${student.classNumber || "—"} ${student.name || "(unnamed)"}`;
+  header.appendChild(nameLine);
+  if (student.pronunciation || student.schoolId) {
+    const subLine = document.createElement("p");
+    subLine.className = "hint";
+    subLine.textContent = [student.pronunciation, student.schoolId].filter(Boolean).join(" · ");
+    header.appendChild(subLine);
+  }
+  const totalLine = document.createElement("p");
+  totalLine.className = "consultation-total";
+  totalLine.textContent = `Total Score: ${detail.total === null ? "—" : `${detail.total}%`}`;
+  header.appendChild(totalLine);
+  el.consultationDetail.appendChild(header);
+
+  // ----- Categories -----
+  detail.categories.forEach((category) => {
+    if (category.items.length === 0) return; // nothing to show for an empty category
+    const block = document.createElement("div");
+    block.className = "consultation-category-block";
+
+    const catHeading = document.createElement("h4");
+    catHeading.textContent = `${category.name} — ${
+      category.subtotal.percent === null ? "—" : `${category.subtotal.percent}%`
+    } (weight ${category.weight})`;
+    block.appendChild(catHeading);
+
+    const itemList = document.createElement("ul");
+    itemList.className = "consultation-item-list";
+    category.items.forEach((item) => {
+      const li = document.createElement("li");
+      const scoreText = item.record === "" ? "—" : item.record === "E" ? "Exempt" : `${item.record}/${item.maxPoints}`;
+      li.textContent = `${item.name}: ${scoreText}`;
+      itemList.appendChild(li);
+    });
+    block.appendChild(itemList);
+    el.consultationDetail.appendChild(block);
+  });
+
+  // ----- Attendance -----
+  const attBlock = document.createElement("div");
+  attBlock.className = "consultation-category-block";
+  const attHeading = document.createElement("h4");
+  attHeading.textContent = `Attendance — ${
+    detail.attendance.percent === null ? "—" : `${detail.attendance.percent}%`
+  } (weight ${detail.attendanceWeight})`;
+  attBlock.appendChild(attHeading);
+  const attLine = document.createElement("p");
+  attLine.className = "hint";
+  attLine.textContent = `Attended: ${detail.attendance.attended} — Absences: ${detail.attendance.absences}`;
+  attBlock.appendChild(attLine);
+  el.consultationDetail.appendChild(attBlock);
 }
 
 main();

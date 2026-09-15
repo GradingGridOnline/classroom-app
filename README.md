@@ -431,3 +431,21 @@ The table headers are now pure read-only labels — category name and
 each item's name/max points. All of that editing (category name, item
 names, item point values, item counts, add/remove) now lives together
 in Scoring Settings under Edit Settings, nested under each category.
+
+## Report Card (new tab) — Step 1: Student Consultation
+
+A fifth tab, **Report Card**, with two modes at the top:
+
+- **Student Consultation** (built now): pick a student from the
+  dropdown, see everything on screen — every category with its
+  items' scores, each category's subtotal and weight, Attendance's
+  percent/attended/absences, and the overall Total Score. Read-only,
+  nothing to save here — it's just a live view of data already
+  recorded in Roster, Attendance, and Scoring.
+- **Report Card** (placeholder): this is next — choosing which
+  scoring items to include, then printing one student's sheet or
+  every student's in bulk.
+
+New file: `js/reportcard.js` — currently just reads from the other
+three modules to assemble one student's full picture; no data of its
+own yet. That'll change once the print/item-selection mode is built.
