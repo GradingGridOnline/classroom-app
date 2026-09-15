@@ -449,3 +449,27 @@ A fifth tab, **Report Card**, with two modes at the top:
 New file: `js/reportcard.js` — currently just reads from the other
 three modules to assemble one student's full picture; no data of its
 own yet. That'll change once the print/item-selection mode is built.
+
+## Report Card — Step 2: the actual Report Card mode (item selection + printing)
+
+- **Items to include**: a checklist of every scoring item, grouped by
+  category, plus **Select All** / **Select None** shortcuts. This
+  selection is shared by both printing options below it, and saves
+  immediately as `reportcard-<courseId>.json`. The first time you
+  open this (nothing saved yet), everything starts checked.
+- **Print This Student**: pick someone from the dropdown, click it —
+  opens your browser's print dialog with a clean one-page sheet
+  (course name, student info, each category's selected items with
+  scores, category subtotals, Attendance, and the overall Total
+  Score).
+- **Print All Students**: same sheet, generated once per student on
+  the roster, each starting on its own page.
+- Unselected items, and categories with nothing selected in them,
+  simply don't appear on the printed sheet — no empty headers.
+
+This uses your browser's native print (`Cmd+P` dialog), not a
+generated PDF file — from there you can choose "Save as PDF" as the
+printer if you want a file instead of paper. Worth a test print (or
+"Print Preview" without actually printing) before relying on it for
+real report cards, since printer/browser print layouts can vary
+slightly.

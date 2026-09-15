@@ -34,6 +34,14 @@ const el = {
   printcardView: document.getElementById("printcard-view"),
   consultationStudentSelect: document.getElementById("consultation-student-select"),
   consultationDetail: document.getElementById("consultation-detail"),
+  selectAllItemsBtn: document.getElementById("select-all-items-btn"),
+  selectNoItemsBtn: document.getElementById("select-no-items-btn"),
+  itemSelectionList: document.getElementById("item-selection-list"),
+  printcardStudentSelect: document.getElementById("printcard-student-select"),
+  printOneBtn: document.getElementById("print-one-btn"),
+  printAllBtn: document.getElementById("print-all-btn"),
+  printcardStatus: document.getElementById("printcard-status"),
+  printArea: document.getElementById("print-area"),
 
   rosterCount: document.getElementById("roster-count"),
   rosterFileInput: document.getElementById("roster-file-input"),
@@ -296,6 +304,15 @@ async function openCourseDetail(course) {
     el.scoringStatus.textContent = "";
   } catch (err) {
     el.scoringStatus.textContent = `Couldn't load scoring: ${err.message}`;
+  }
+
+  try {
+    await ReportCardModule.load(course.id);
+    renderItemSelectionList();
+    renderPrintcardStudentOptions();
+    el.printcardStatus.textContent = "";
+  } catch (err) {
+    el.printcardStatus.textContent = `Couldn't load report card settings: ${err.message}`;
   }
 }
 
@@ -1946,6 +1963,10 @@ function showReportCardMode(mode) {
   el.printcardView.hidden = mode !== "printcard";
   el.modeConsultationBtn.classList.toggle("tab-btn-active", mode === "consultation");
   el.modePrintcardBtn.classList.toggle("tab-btn-active", mode === "printcard");
+  if (mode === "printcard") {
+    renderItemSelectionList(); // scoring items may have changed since this was last shown
+    renderPrintcardStudentOptions(); // roster may have changed since this was last shown
+  }
 }
 
 /** Rebuilds the student dropdown, preserving the current selection if that student still exists. */
@@ -2041,6 +2062,174 @@ function renderConsultationDetail() {
   attLine.textContent = `Attended: ${detail.attendance.attended} — Absences: ${detail.attendance.absences}`;
   attBlock.appendChild(attLine);
   el.consultationDetail.appendChild(attBlock);
+}
+
+// ----- Item selection -----
+
+function renderItemSelectionList() {
+  el.itemSelectionList.innerHTML = "";
+
+  if (ScoringModule.categories.every((c) => c.items.length === 0)) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "No scoring items exist yet — add some on the Scoring tab first.";
+    el.itemSelectionList.appendChild(hint);
+    return;
+  }
+
+  ScoringModule.categories.forEach((category) => {
+    if (category.items.length === 0) return;
+    const block = document.createElement("div");
+    block.className = "consultation-category-block";
+
+    const heading = document.createElement("h4");
+    heading.textContent = category.name;
+    block.appendChild(heading);
+
+    const list = document.createElement("div");
+    list.className = "item-checkbox-list";
+    category.items.forEach((item) => {
+      const label = document.createElement("label");
+      label.className = "item-checkbox-label";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = ReportCardModule.isItemSelected(item.id);
+      checkbox.addEventListener("change", async () => {
+        ReportCardModule.toggleItemSelected(item.id);
+        await savePrintcardThen();
+      });
+
+      label.append(checkbox, document.createTextNode(` ${item.name}`));
+      list.appendChild(label);
+    });
+    block.appendChild(list);
+    el.itemSelectionList.appendChild(block);
+  });
+}
+
+el.selectAllItemsBtn.addEventListener("click", async () => {
+  ReportCardModule.selectAll();
+  await savePrintcardThen(renderItemSelectionList);
+});
+
+el.selectNoItemsBtn.addEventListener("click", async () => {
+  ReportCardModule.selectNone();
+  await savePrintcardThen(renderItemSelectionList);
+});
+
+async function savePrintcardThen(after) {
+  el.printcardStatus.textContent = "Saving…";
+  try {
+    await ReportCardModule.save();
+    el.printcardStatus.textContent = "";
+  } catch (err) {
+    el.printcardStatus.textContent = `Couldn't save: ${err.message}`;
+  }
+  if (after) after();
+}
+
+// ----- Student picker for single-student printing -----
+
+function renderPrintcardStudentOptions() {
+  const previousValue = el.printcardStudentSelect.value;
+  el.printcardStudentSelect.innerHTML = "";
+
+  RosterModule.students.forEach((student) => {
+    const opt = document.createElement("option");
+    opt.value = student.id;
+    opt.textContent = `#${student.classNumber || "—"} ${student.name || "(unnamed)"}`;
+    el.printcardStudentSelect.appendChild(opt);
+  });
+
+  const stillExists = RosterModule.students.some((s) => s.id === previousValue);
+  if (stillExists) el.printcardStudentSelect.value = previousValue;
+}
+
+// ----- Printing -----
+
+el.printOneBtn.addEventListener("click", () => {
+  const studentId = el.printcardStudentSelect.value;
+  if (!studentId) {
+    el.printcardStatus.textContent = "Choose a student first.";
+    return;
+  }
+  el.printArea.innerHTML = "";
+  el.printArea.appendChild(buildReportCardSheet(studentId));
+  window.print();
+});
+
+el.printAllBtn.addEventListener("click", () => {
+  if (RosterModule.students.length === 0) {
+    el.printcardStatus.textContent = "There are no students on the roster yet.";
+    return;
+  }
+  el.printArea.innerHTML = "";
+  RosterModule.students.forEach((student, index) => {
+    const sheet = buildReportCardSheet(student.id);
+    if (index < RosterModule.students.length - 1) sheet.classList.add("report-sheet-page-break");
+    el.printArea.appendChild(sheet);
+  });
+  window.print();
+});
+
+/** Builds one printable report card page for a student, limited to the selected items. */
+function buildReportCardSheet(studentId) {
+  const student = RosterModule.students.find((s) => s.id === studentId);
+  const detail = ReportCardModule.studentDetail(studentId);
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+
+  const sheet = document.createElement("div");
+  sheet.className = "report-sheet";
+
+  const courseHeading = document.createElement("p");
+  courseHeading.className = "report-sheet-course";
+  courseHeading.textContent = course ? course.name : "";
+  sheet.appendChild(courseHeading);
+
+  const nameHeading = document.createElement("h2");
+  nameHeading.textContent = `#${student.classNumber || "—"} ${student.name || "(unnamed)"}`;
+  sheet.appendChild(nameHeading);
+
+  const subLine = document.createElement("p");
+  subLine.className = "report-sheet-sub";
+  subLine.textContent = [student.pronunciation, student.schoolId].filter(Boolean).join(" · ");
+  sheet.appendChild(subLine);
+
+  detail.categories.forEach((category) => {
+    const selectedItems = category.items.filter((item) => ReportCardModule.isItemSelected(item.id));
+    if (selectedItems.length === 0) return;
+
+    const catHeading = document.createElement("h3");
+    catHeading.textContent = `${category.name} — ${
+      category.subtotal.percent === null ? "—" : `${category.subtotal.percent}%`
+    }`;
+    sheet.appendChild(catHeading);
+
+    const list = document.createElement("ul");
+    list.className = "report-sheet-item-list";
+    selectedItems.forEach((item) => {
+      const li = document.createElement("li");
+      const scoreText = item.record === "" ? "—" : item.record === "E" ? "Exempt" : `${item.record}/${item.maxPoints}`;
+      li.textContent = `${item.name}: ${scoreText}`;
+      list.appendChild(li);
+    });
+    sheet.appendChild(list);
+  });
+
+  const attHeading = document.createElement("h3");
+  attHeading.textContent = `Attendance — ${detail.attendance.percent === null ? "—" : `${detail.attendance.percent}%`}`;
+  sheet.appendChild(attHeading);
+  const attLine = document.createElement("p");
+  attLine.textContent = `Attended: ${detail.attendance.attended} — Absences: ${detail.attendance.absences}`;
+  sheet.appendChild(attLine);
+
+  const totalLine = document.createElement("p");
+  totalLine.className = "report-sheet-total";
+  totalLine.textContent = `Total Score: ${detail.total === null ? "—" : `${detail.total}%`}`;
+  sheet.appendChild(totalLine);
+
+  return sheet;
 }
 
 main();

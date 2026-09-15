@@ -220,9 +220,28 @@
             <div id="consultation-detail"></div>
           </div>
 
-          <!-- ----- Report Card (print) — placeholder for now ----- -->
+          <!-- ----- Report Card (print) ----- -->
           <div id="printcard-view" hidden>
-            <p class="hint">Coming soon — select scoring items and print one student's or every student's report card.</p>
+            <div class="attendance-settings-block">
+              <h4>Items to include</h4>
+              <p class="hint">Choose which scoring items appear on printed report cards. Applies to both single and bulk printing below.</p>
+              <div class="panel-toolbar">
+                <button id="select-all-items-btn" class="btn btn-ghost btn-small">Select All</button>
+                <button id="select-no-items-btn" class="btn btn-ghost btn-small">Select None</button>
+              </div>
+              <div id="item-selection-list"></div>
+            </div>
+
+            <div class="attendance-settings-block">
+              <h4>Print</h4>
+              <div class="panel-toolbar">
+                <label for="printcard-student-select">Student:</label>
+                <select id="printcard-student-select"></select>
+                <button id="print-one-btn" class="btn btn-primary btn-small">Print This Student</button>
+                <button id="print-all-btn" class="btn btn-ghost btn-small">Print All Students</button>
+              </div>
+              <span id="printcard-status" class="result"></span>
+            </div>
           </div>
         </div>
       </section>
@@ -238,6 +257,9 @@
   <script src="js/storage/storage-provider.js"></script>
   <script src="js/storage/googledrive-provider.js"></script>
   <script src="js/theme.js"></script>
+  <!-- Populated just before window.print() is called; hidden on screen, shown only when printing (see the @media print rule in style.css). -->
+  <div id="print-area"></div>
+
   <script src="js/courses.js"></script>
   <script src="js/roster.js"></script>
   <script src="js/roster-import.js"></script>

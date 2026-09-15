@@ -1459,3 +1459,95 @@ textarea {
   padding: 3px 0;
   border-bottom: 1px dashed var(--line);
 }
+
+/* Report Card: item selection checkboxes */
+.item-checkbox-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.item-checkbox-label {
+  font-size: 0.88rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* ===== Printing ===== */
+/* #print-area is hidden on screen and only shown while printing. */
+
+#print-area {
+  display: none;
+}
+
+.report-sheet {
+  font-family: Georgia, "Times New Roman", serif;
+  color: #000;
+}
+
+.report-sheet-course {
+  font-size: 0.85rem;
+  color: #444;
+  margin: 0 0 2px;
+}
+
+.report-sheet h2 {
+  font-size: 1.5rem;
+  margin: 0 0 4px;
+}
+
+.report-sheet-sub {
+  font-size: 0.85rem;
+  color: #444;
+  margin: 0 0 16px;
+}
+
+.report-sheet h3 {
+  font-size: 1rem;
+  margin: 14px 0 4px;
+  border-bottom: 1px solid #999;
+  padding-bottom: 2px;
+}
+
+.report-sheet-item-list {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  columns: 2;
+  column-gap: 24px;
+}
+
+.report-sheet-item-list li {
+  font-size: 0.9rem;
+  padding: 2px 0;
+  break-inside: avoid;
+}
+
+.report-sheet-total {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 16px;
+}
+
+.report-sheet-page-break {
+  page-break-after: always;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-area,
+  #print-area * {
+    visibility: visible;
+  }
+  #print-area {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
