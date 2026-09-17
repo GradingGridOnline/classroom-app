@@ -48,6 +48,9 @@ const el = {
   uploadRosterBtn: document.getElementById("upload-roster-btn"),
   addStudentBtn: document.getElementById("add-student-btn"),
   saveRosterBtn: document.getElementById("save-roster-btn"),
+  collectEmailBtn: document.getElementById("collect-email-btn"),
+  syncEmailBtn: document.getElementById("sync-email-btn"),
+  emailCollectStatus: document.getElementById("email-collect-status"),
   rosterTbody: document.getElementById("roster-tbody"),
   rosterStatus: document.getElementById("roster-status"),
 
@@ -57,6 +60,7 @@ const el = {
   mapClassNumber: document.getElementById("map-classnumber"),
   mapSchoolId: document.getElementById("map-schoolid"),
   mapPronunciation: document.getElementById("map-pronunciation"),
+  mapEmail: document.getElementById("map-email"),
   confirmImportBtn: document.getElementById("confirm-import-btn"),
   cancelImportBtn: document.getElementById("cancel-import-btn"),
 
@@ -314,6 +318,13 @@ async function openCourseDetail(course) {
   } catch (err) {
     el.printcardStatus.textContent = `Couldn't load report card settings: ${err.message}`;
   }
+
+  try {
+    await EmailCollectModule.load(course.id);
+    renderEmailCollectButtons();
+  } catch (err) {
+    el.emailCollectStatus.textContent = `Couldn't load email collection state: ${err.message}`;
+  }
 }
 
 el.backToCoursesBtn.addEventListener("click", showCourses);
@@ -356,8 +367,9 @@ function renderRoster() {
     const tr = document.createElement("tr");
     tr.appendChild(makeClassNumberCell(student));
     tr.appendChild(makeEditableCell(student, "name"));
-    tr.appendChild(makeEditableCell(student, "schoolId"));
     tr.appendChild(makeEditableCell(student, "pronunciation"));
+    tr.appendChild(makeEditableCell(student, "schoolId"));
+    tr.appendChild(makeEditableCell(student, "email"));
 
     const actionTd = document.createElement("td");
     const removeBtn = document.createElement("button");
@@ -474,12 +486,14 @@ function openMappingPanel(headers, rowCount) {
   fillSelect(el.mapClassNumber, true);
   fillSelect(el.mapSchoolId, true);
   fillSelect(el.mapPronunciation, true);
+  fillSelect(el.mapEmail, true);
 
   const guess = RosterImport.guessMapping();
   el.mapName.value = String(guess.name);
   el.mapClassNumber.value = String(guess.classNumber);
   el.mapSchoolId.value = String(guess.schoolId);
   el.mapPronunciation.value = String(guess.pronunciation);
+  el.mapEmail.value = String(guess.email);
 
   el.mappingPanel.hidden = false;
 }
@@ -494,6 +508,7 @@ el.confirmImportBtn.addEventListener("click", () => {
     classNumber: Number(el.mapClassNumber.value),
     schoolId: Number(el.mapSchoolId.value),
     pronunciation: Number(el.mapPronunciation.value),
+    email: Number(el.mapEmail.value),
   };
 
   if (RosterModule.students.length > 0) {
@@ -2231,5 +2246,46 @@ function buildReportCardSheet(studentId) {
 
   return sheet;
 }
+
+// ===== Email collection (Google Form + QR code) =====
+
+function renderEmailCollectButtons() {
+  const active = EmailCollectModule.hasActiveForm();
+  el.collectEmailBtn.hidden = active;
+  el.syncEmailBtn.hidden = !active;
+}
+
+el.collectEmailBtn.addEventListener("click", async () => {
+  el.emailCollectStatus.textContent = "Creating form…";
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  try {
+    await EmailCollectModule.createForm(RosterModule.students, course ? course.name : "");
+    renderEmailCollectButtons();
+    el.emailCollectStatus.textContent = "Form created — opening QR code…";
+    window.open("emailqr.html", "ggo-email-qr", "width=480,height=560");
+  } catch (err) {
+    el.emailCollectStatus.textContent = `Couldn't create the form: ${err.message}`;
+  }
+});
+
+el.syncEmailBtn.addEventListener("click", async () => {
+  el.emailCollectStatus.textContent = "Syncing…";
+  try {
+    const result = await EmailCollectModule.syncResponses(RosterModule.students);
+    result.matches.forEach((m) => {
+      RosterModule.updateStudent(m.studentId, { email: m.email });
+    });
+    if (result.matches.length > 0) {
+      await RosterModule.save();
+      renderRoster();
+    }
+    renderEmailCollectButtons();
+    el.emailCollectStatus.textContent =
+      `Matched ${result.matches.length} of ${result.totalResponses} response(s).` +
+      (result.unmatchedCount > 0 ? ` ${result.unmatchedCount} didn't match any School ID.` : "");
+  } catch (err) {
+    el.emailCollectStatus.textContent = `Couldn't sync: ${err.message}`;
+  }
+});
 
 main();

@@ -82,9 +82,12 @@
               <input id="roster-file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
               <button id="upload-roster-btn" class="btn btn-ghost">Upload CSV / Excel</button>
               <button id="add-student-btn" class="btn btn-ghost">+ Add Student</button>
+              <button id="collect-email-btn" class="btn btn-ghost">Collect Email Addresses</button>
+              <button id="sync-email-btn" class="btn btn-ghost" hidden>Sync Emails</button>
               <button id="save-roster-btn" class="btn btn-primary">Save Roster</button>
             </div>
           </div>
+          <p id="email-collect-status" class="result"></p>
 
           <!-- Column-mapping step, shown right after a file is chosen -->
           <div id="mapping-panel" class="mapping-panel" hidden>
@@ -106,6 +109,10 @@
               <label>Pronunciation column</label>
               <select id="map-pronunciation"></select>
             </div>
+            <div class="mapping-row">
+              <label>Email column</label>
+              <select id="map-email"></select>
+            </div>
             <div class="mapping-buttons">
               <button id="confirm-import-btn" class="btn btn-primary">Import (replaces current roster)</button>
               <button id="cancel-import-btn" class="btn btn-ghost">Cancel</button>
@@ -117,8 +124,9 @@
               <tr>
                 <th>Class #</th>
                 <th>Name</th>
-                <th>School ID</th>
                 <th>Pronunciation</th>
+                <th>School ID</th>
+                <th>Email Address</th>
                 <th></th>
               </tr>
             </thead>
@@ -267,6 +275,7 @@
   <script src="js/attendance.js"></script>
   <script src="js/scoring.js"></script>
   <script src="js/reportcard.js"></script>
+  <script src="js/emailcollect.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

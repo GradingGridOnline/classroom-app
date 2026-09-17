@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scan to Submit Your Email — GradingGridOnline</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script>
+    try {
+      var savedTheme = localStorage.getItem("ggo-theme");
+      if (savedTheme && savedTheme !== "default") {
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      }
+    } catch (e) {}
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .emailqr-wrap {
+      max-width: 420px;
+    }
+    .emailqr-wrap h1 {
+      font-family: var(--font-heading);
+      font-size: 1.3rem;
+      color: var(--green-dark);
+      margin: 0 0 8px;
+    }
+    .emailqr-wrap p {
+      color: var(--ink-soft);
+      font-size: 0.95rem;
+      margin: 0 0 20px;
+    }
+    #qr-container {
+      display: inline-block;
+      padding: 16px;
+      background: #fff;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+    }
+    #emailqr-status {
+      color: var(--ink-soft);
+      font-size: 0.9rem;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="emailqr-wrap">
+    <h1>Scan to submit your email address</h1>
+    <p>Scan this code with your phone, select your Student ID, and enter your email address.</p>
+    <div id="qr-container"></div>
+    <p id="emailqr-status"></p>
+  </div>
+
+  <script src="js/emailqr.js"></script>
+</body>
+</html>

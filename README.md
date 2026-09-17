@@ -473,3 +473,81 @@ printer if you want a file instead of paper. Worth a test print (or
 "Print Preview" without actually printing) before relying on it for
 real report cards, since printer/browser print layouts can vary
 slightly.
+
+## Roster: reordered columns, new Email Address column
+
+Roster table order is now Class #, Name, Pronunciation, School ID,
+Email Address. Email is a plain editable text field, same as the
+others — and the CSV/Excel import mapping step now has an optional
+Email column too, in case your university's file already includes it.
+
+## Email collection via QR code (Google Form)
+
+This is a significant new feature with real setup requirements —
+please follow these steps in order before testing it.
+
+### 1. Enable the Google Forms API
+
+1. Go to https://console.cloud.google.com, make sure your
+   "Classroom Manager" project is selected.
+2. Search for **"Google Forms API"**, open it, click **Enable** — same
+   as you did for the Drive API originally.
+
+### 2. Add the new permission scopes
+
+1. Go to **APIs & Services → Data Access** (the same page where you
+   added `drive.appdata` and `userinfo.email` before).
+2. Click **Add or Remove Scopes**, and add these three:
+   - `https://www.googleapis.com/auth/drive.file`
+   - `https://www.googleapis.com/auth/forms.body`
+   - `https://www.googleapis.com/auth/forms.responses.readonly`
+3. Click **Update**, then **Save** at the bottom of the page.
+
+`drive.file` only grants the app access to files it creates itself —
+it still can't see the rest of your Drive. The two Forms scopes let
+it create, publish, and read responses from a Form it makes.
+
+### 3. Re-sign in
+
+Since the permissions changed, the next time you sign in (or the next
+time a silent refresh happens), Google will show you a new consent
+screen listing the added permissions. This is expected — approve it.
+If you're not prompted and things don't work, try Sign Out → Sign In
+again to force it.
+
+### 4. How it works
+
+On the **Roster** tab:
+- **Collect Email Addresses** creates a new Google Form (a "Student
+  ID" dropdown built from your roster's School IDs, plus an "Email
+  Address" question), publishes it, and opens a pop-out window with a
+  QR code linking to it. Project that QR code for students to scan.
+- Once students have submitted, click **Sync Emails**. It reads every
+  response, matches each one to a student by School ID, fills in the
+  Email Address column, and — since Google's API has no way to just
+  clear a form's answers — **deletes the entire form** so the next
+  "Collect Email Addresses" click starts completely fresh.
+- A response that doesn't match any School ID in your roster (typo,
+  or someone not on your list) is skipped and counted in the status
+  message rather than silently dropped or guessed at.
+
+New files: `emailqr.html` and `js/emailqr.js` (the QR pop-out window,
+following the same pattern as the seating chart's pop-out) and
+`js/emailcollect.js` (the Forms API integration itself).
+
+### Honest caveats
+
+- **This uses parts of the Google Forms API that are quite new**, and
+  I built this from documentation rather than being able to test it
+  live — there's a real chance the exact request/response shapes need
+  a debugging pass together once you try it for real. If something
+  fails, the error message should include the actual response from
+  Google's API, which will help us pinpoint what's off.
+- If the automatic form-deletion step ever fails partway (e.g. a
+  network hiccup right after syncing), the form just stays in your
+  Drive instead of disappearing — not harmful, but you'd want to
+  delete it by hand from drive.google.com if that happens, since the
+  app will have already moved on to "no active form" either way.
+- Re-importing a CSV roster still wipes the whole roster, including
+  any emails already collected — that risk from before still applies
+  here.
