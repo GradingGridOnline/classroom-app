@@ -9,7 +9,7 @@ const APP_CONFIG = {
   storageProvider: "googledrive",
 
   google: {
-    clientId: "PASTE-YOUR-GOOGLE-CLIENT-ID-HERE.apps.googleusercontent.com",
+    clientId: "215852917712-bi50bgf8oikhvbmlsshktkbit72iep1n.apps.googleusercontent.com",
 
     // drive.appdata scopes the app to its own hidden folder in Drive —
     // it can never see or touch the rest of the user's Drive.
