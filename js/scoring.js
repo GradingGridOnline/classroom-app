@@ -28,6 +28,7 @@ const ScoringModule = {
   categories: [],
   records: {},
   weights: {},
+  scoreDisplayMode: "percent", // "percent" or "points"
   currentCourseId: null,
 
   fileName(courseId) {
@@ -41,10 +42,12 @@ const ScoringModule = {
       this.categories = this._normalizeCategories(data.categories);
       this.records = data.records || {};
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
+      this.scoreDisplayMode = data.scoreDisplayMode === "points" ? "points" : "percent";
     } else {
       this.categories = [];
       this.records = {};
       this.weights = { attendance: 0 };
+      this.scoreDisplayMode = "percent";
     }
   },
 
@@ -54,6 +57,7 @@ const ScoringModule = {
       categories: this.categories,
       records: this.records,
       weights: this.weights,
+      scoreDisplayMode: this.scoreDisplayMode,
     });
   },
 
@@ -182,6 +186,10 @@ const ScoringModule = {
     this.weights[key] = Math.max(0, Number(value) || 0);
   },
 
+  setScoreDisplayMode(mode) {
+    this.scoreDisplayMode = mode === "points" ? "points" : "percent";
+  },
+
   // ----- Scores -----
 
   /** { earned, possible, percent } for one student in one category. Exempt items are excluded from both earned and possible. */
@@ -201,8 +209,27 @@ const ScoringModule = {
     return { earned, possible, percent: possible > 0 ? Math.round((earned / possible) * 100) : null };
   },
 
-  /** Weighted total across the 10 categories plus Attendance (via AttendanceModule), normalized by the sum of weights actually entered. */
+  /** Raw sum of all earned points across all categories (excludes exempt and blank items). */
+  totalRawPoints(studentId) {
+    let total = 0;
+    this.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const rec = this.getRecord(studentId, item.id);
+        if (rec !== "" && rec !== "E") {
+          total += Number(rec);
+        }
+      });
+    });
+    return total;
+  },
+
+  /** Weighted total across the 10 categories plus Attendance (via AttendanceModule), normalized by the sum of weights actually entered. Returns percent or raw points based on scoreDisplayMode. */
   totalScore(studentId) {
+    if (this.scoreDisplayMode === "points") {
+      return this.totalRawPoints(studentId);
+    }
+
+    // percent mode
     let weightedSum = 0;
     let weightTotal = 0;
 
