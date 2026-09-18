@@ -135,7 +135,9 @@ const EmailCollectModule = {
     await this._apiFetch(`${FORMS_API_BASE}/${formId}:setPublishSettings`, {
       method: "POST",
       body: JSON.stringify({
-        publishSettings: { isPublished: true, isAcceptingResponses: true },
+        publishSettings: {
+          publishState: { isPublished: true, isAcceptingResponses: true },
+        },
       }),
     });
 
