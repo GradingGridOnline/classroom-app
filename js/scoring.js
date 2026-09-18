@@ -190,6 +190,13 @@ const ScoringModule = {
     this.scoreDisplayMode = mode === "points" ? "points" : "percent";
   },
 
+  /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
+  attendanceScore(studentId) {
+    if (!window.AttendanceModule) return { earned: 0, possible: 0, percent: null, points: null };
+    const stats = window.AttendanceModule.stats(studentId);
+    return { earned: null, possible: null, percent: stats.percent, points: stats.points };
+  },
+
   // ----- Scores -----
 
   /** { earned, possible, percent } for one student in one category. Exempt items are excluded from both earned and possible. */
