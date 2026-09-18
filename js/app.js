@@ -1639,11 +1639,6 @@ function buildScoringHeaderRows() {
   studentTh.textContent = "Student";
   row1.appendChild(studentTh);
 
-  const totalTh = document.createElement("th");
-  totalTh.rowSpan = 2;
-  totalTh.textContent = "Total Score";
-  row1.appendChild(totalTh);
-
   ScoringModule.categories.forEach((category) => {
     const th = document.createElement("th");
     th.className = "category-header-cell";
@@ -1665,6 +1660,16 @@ function buildScoringHeaderRows() {
       row2.appendChild(itemTh);
     });
   });
+
+  const attendanceTh = document.createElement("th");
+  attendanceTh.rowSpan = 2;
+  attendanceTh.textContent = "Attendance";
+  row1.appendChild(attendanceTh);
+
+  const totalTh = document.createElement("th");
+  totalTh.rowSpan = 2;
+  totalTh.textContent = "Total Score";
+  row1.appendChild(totalTh);
 
   return { row1, row2 };
 }
@@ -1897,13 +1902,6 @@ function buildScoringStudentRow(student) {
   infoTd.appendChild(nameRow);
   tr.appendChild(infoTd);
 
-  // ----- Total score -----
-  const totalTd = document.createElement("td");
-  totalTd.className = "attendance-stat-cell attendance-score-cell";
-  const total = ScoringModule.totalScore(student.id);
-  totalTd.textContent = total === null ? "—" : `${total}%`;
-  tr.appendChild(totalTd);
-
   // ----- One cell per item, grouped by category (no separate cell needed — colspan lives in the header) -----
   ScoringModule.categories.forEach((category) => {
     category.items.forEach((item) => {
@@ -1945,7 +1943,33 @@ function buildScoringStudentRow(student) {
     });
   });
 
+  // ----- Attendance (read-only, computed from the Attendance tab) -----
+  const attendanceTd = document.createElement("td");
+  attendanceTd.className = "attendance-stat-cell scoring-attendance-cell";
+  attendanceTd.textContent = formatScoringValue(ScoringModule.attendanceScore(student.id));
+  tr.appendChild(attendanceTd);
+
+  // ----- Total score -----
+  const totalTd = document.createElement("td");
+  totalTd.className = "attendance-stat-cell attendance-score-cell";
+  totalTd.textContent = formatScoringTotal(ScoringModule.totalScore(student.id));
+  tr.appendChild(totalTd);
+
   return tr;
+}
+
+/** Formats an { earned, possible, percent, points } result (e.g. from attendanceScore) according to the current display mode. */
+function formatScoringValue(result) {
+  if (ScoringModule.scoreDisplayMode === "points") {
+    return result.points === null || result.points === undefined ? "—" : `${result.points} pts`;
+  }
+  return result.percent === null || result.percent === undefined ? "—" : `${result.percent}%`;
+}
+
+/** Formats the raw totalScore() number (already percent or points depending on mode) for display. */
+function formatScoringTotal(total) {
+  if (total === null || total === undefined) return "—";
+  return ScoringModule.scoreDisplayMode === "points" ? `${total} pts` : `${total}%`;
 }
 
 function refreshScoringTotalCell(studentId) {
@@ -1953,8 +1977,7 @@ function refreshScoringTotalCell(studentId) {
   if (!row) return;
   const cell = row.querySelector(".attendance-score-cell");
   if (!cell) return;
-  const total = ScoringModule.totalScore(studentId);
-  cell.textContent = total === null ? "—" : `${total}%`;
+  cell.textContent = formatScoringTotal(ScoringModule.totalScore(studentId));
 }
 
 async function saveScoringThen(after) {
