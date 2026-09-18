@@ -162,6 +162,11 @@ class GoogleDriveProvider extends StorageProvider {
     return this.accessToken;
   }
 
+  /** Public wrapper — other modules (e.g. the email-collection feature) reuse the same authenticated token for Forms/Drive calls beyond plain file save/load. */
+  async getAccessToken() {
+    return this._getAccessToken();
+  }
+
   async _loadUserEmail() {
     const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { Authorization: `Bearer ${this.accessToken}` },
