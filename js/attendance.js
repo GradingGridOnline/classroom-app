@@ -256,24 +256,29 @@ const AttendanceModule = {
     let attended = 0;
     let absences = 0;
     let totalPoints = 0;
-    let counted = 0;
+    let counted = 0; // sessions counted toward the percent/points denominator — excludes exempt
 
     this.sessions.forEach((s) => {
       const rec = this.getRecord(studentId, s.id);
       if (!rec.code) return; // not yet recorded — excluded from the average
-      counted++;
       if (rec.code === "A") absences++;
       else attended++;
 
+      // "E" (Exempt) is excluded entirely from the points calculation —
+      // same convention as Scoring's "E" — so it neither helps nor hurts
+      // the percentage, rather than being scored as its own point value.
+      if (rec.code.toUpperCase() === "E") return;
+
+      counted++;
       let pts = this.settings.points[rec.code] ?? 0;
       if (rec.infraction) pts += this.settings.infractionPoints[rec.infraction] ?? 0;
       totalPoints += pts;
     });
 
     // Percent is earned points out of the points actually possible across
-    // the recorded sessions — not just a per-session count — so a
-    // participation point value other than 1 (e.g. "P" worth 10 points)
-    // doesn't distort the percentage.
+    // the recorded (non-exempt) sessions — not just a per-session count —
+    // so a participation point value other than 1 (e.g. "P" worth 10
+    // points) doesn't distort the percentage.
     const maxPerSession = Math.max(0, ...Object.values(this.settings.points));
     const possiblePoints = counted * maxPerSession;
 
