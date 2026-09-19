@@ -1639,6 +1639,16 @@ function buildScoringHeaderRows() {
   studentTh.textContent = "Student";
   row1.appendChild(studentTh);
 
+  const totalTh = document.createElement("th");
+  totalTh.rowSpan = 2;
+  totalTh.textContent = "Total Score";
+  row1.appendChild(totalTh);
+
+  const attendanceTh = document.createElement("th");
+  attendanceTh.rowSpan = 2;
+  attendanceTh.textContent = "Attendance";
+  row1.appendChild(attendanceTh);
+
   ScoringModule.categories.forEach((category) => {
     const th = document.createElement("th");
     th.className = "category-header-cell";
@@ -1661,16 +1671,6 @@ function buildScoringHeaderRows() {
     });
   });
 
-  const attendanceTh = document.createElement("th");
-  attendanceTh.rowSpan = 2;
-  attendanceTh.textContent = "Attendance";
-  row1.appendChild(attendanceTh);
-
-  const totalTh = document.createElement("th");
-  totalTh.rowSpan = 2;
-  totalTh.textContent = "Total Score";
-  row1.appendChild(totalTh);
-
   return { row1, row2 };
 }
 
@@ -1680,8 +1680,42 @@ el.toggleScoringSettingsBtn.addEventListener("click", () => {
   renderScoringSettings();
 });
 
+/** Two toggle buttons — Total Score display and Attendance display — shown at the top of Scoring Settings regardless of edit mode. */
+function buildScoringDisplayToggles() {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block scoring-display-toggles";
+
+  const totalBtn = document.createElement("button");
+  totalBtn.type = "button";
+  totalBtn.className = "score-toggle-btn";
+  totalBtn.textContent =
+    ScoringModule.scoreDisplayMode === "points" ? "Total Score (pts) ⇄" : "Total Score (%) ⇄";
+  totalBtn.title = "Click to switch the Total Score column between percent and points";
+  totalBtn.addEventListener("click", async () => {
+    ScoringModule.setScoreDisplayMode(ScoringModule.scoreDisplayMode === "points" ? "percent" : "points");
+    await saveScoringThen(renderScoring);
+  });
+
+  const attendanceBtn = document.createElement("button");
+  attendanceBtn.type = "button";
+  attendanceBtn.className = "score-toggle-btn";
+  attendanceBtn.textContent =
+    ScoringModule.attendanceDisplayMode === "points" ? "Attendance (pts) ⇄" : "Attendance (%) ⇄";
+  attendanceBtn.title = "Click to switch the Attendance column between percent and points";
+  attendanceBtn.addEventListener("click", async () => {
+    ScoringModule.setAttendanceDisplayMode(
+      ScoringModule.attendanceDisplayMode === "points" ? "percent" : "points"
+    );
+    await saveScoringThen(renderScoring);
+  });
+
+  wrap.append(totalBtn, attendanceBtn);
+  return wrap;
+}
+
 function renderScoringSettings() {
   el.scoringSettingsBody.innerHTML = "";
+  el.scoringSettingsBody.appendChild(buildScoringDisplayToggles());
 
   if (!scoringSettingsEditing) {
     if (ScoringModule.categories.length === 0) {
@@ -1902,6 +1936,18 @@ function buildScoringStudentRow(student) {
   infoTd.appendChild(nameRow);
   tr.appendChild(infoTd);
 
+  // ----- Total score -----
+  const totalTd = document.createElement("td");
+  totalTd.className = "attendance-stat-cell attendance-score-cell";
+  totalTd.textContent = formatScoringTotal(ScoringModule.totalScore(student.id));
+  tr.appendChild(totalTd);
+
+  // ----- Attendance (read-only, computed from the Attendance tab) -----
+  const attendanceTd = document.createElement("td");
+  attendanceTd.className = "attendance-stat-cell scoring-attendance-cell";
+  attendanceTd.textContent = formatScoringValue(ScoringModule.attendanceScore(student.id));
+  tr.appendChild(attendanceTd);
+
   // ----- One cell per item, grouped by category (no separate cell needed — colspan lives in the header) -----
   ScoringModule.categories.forEach((category) => {
     category.items.forEach((item) => {
@@ -1943,24 +1989,12 @@ function buildScoringStudentRow(student) {
     });
   });
 
-  // ----- Attendance (read-only, computed from the Attendance tab) -----
-  const attendanceTd = document.createElement("td");
-  attendanceTd.className = "attendance-stat-cell scoring-attendance-cell";
-  attendanceTd.textContent = formatScoringValue(ScoringModule.attendanceScore(student.id));
-  tr.appendChild(attendanceTd);
-
-  // ----- Total score -----
-  const totalTd = document.createElement("td");
-  totalTd.className = "attendance-stat-cell attendance-score-cell";
-  totalTd.textContent = formatScoringTotal(ScoringModule.totalScore(student.id));
-  tr.appendChild(totalTd);
-
   return tr;
 }
 
-/** Formats an { earned, possible, percent, points } result (e.g. from attendanceScore) according to the current display mode. */
+/** Formats an { earned, possible, percent, points } result (e.g. from attendanceScore) according to the Attendance column's display mode. */
 function formatScoringValue(result) {
-  if (ScoringModule.scoreDisplayMode === "points") {
+  if (ScoringModule.attendanceDisplayMode === "points") {
     return result.points === null || result.points === undefined ? "—" : `${result.points} pts`;
   }
   return result.percent === null || result.percent === undefined ? "—" : `${result.percent}%`;

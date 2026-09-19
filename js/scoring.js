@@ -28,7 +28,8 @@ const ScoringModule = {
   categories: [],
   records: {},
   weights: {},
-  scoreDisplayMode: "percent", // "percent" or "points"
+  scoreDisplayMode: "percent", // "percent" or "points" — for the Total Score column
+  attendanceDisplayMode: "percent", // "percent" or "points" — for the Attendance column
   currentCourseId: null,
 
   fileName(courseId) {
@@ -43,11 +44,13 @@ const ScoringModule = {
       this.records = data.records || {};
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
       this.scoreDisplayMode = data.scoreDisplayMode === "points" ? "points" : "percent";
+      this.attendanceDisplayMode = data.attendanceDisplayMode === "points" ? "points" : "percent";
     } else {
       this.categories = [];
       this.records = {};
       this.weights = { attendance: 0 };
       this.scoreDisplayMode = "percent";
+      this.attendanceDisplayMode = "percent";
     }
   },
 
@@ -58,6 +61,7 @@ const ScoringModule = {
       records: this.records,
       weights: this.weights,
       scoreDisplayMode: this.scoreDisplayMode,
+      attendanceDisplayMode: this.attendanceDisplayMode,
     });
   },
 
@@ -188,6 +192,10 @@ const ScoringModule = {
 
   setScoreDisplayMode(mode) {
     this.scoreDisplayMode = mode === "points" ? "points" : "percent";
+  },
+
+  setAttendanceDisplayMode(mode) {
+    this.attendanceDisplayMode = mode === "points" ? "points" : "percent";
   },
 
   /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
