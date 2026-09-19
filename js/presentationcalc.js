@@ -344,3 +344,4 @@ const PresentationCalcModule = {
 
 window.PresentationCalcModule = PresentationCalcModule;
 window.MAX_RUBRIC_POINTS = MAX_RUBRIC_POINTS;
+
