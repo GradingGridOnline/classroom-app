@@ -16,12 +16,16 @@ const MAX_RUBRIC_BANK = 30;
 const MAX_ACTIVE_RUBRICS = 10;
 const MAX_RUBRIC_POINTS = 20; // ceiling for the selectable point-value dropdown
 
+const FORMS_API_BASE = "https://forms.googleapis.com/v1/forms";
+const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3/files";
+
 const PresentationCalcModule = {
   roster: [], // [{ studentId, classNumber, name, pronunciation, schoolId, group }]
   sourceBankName: null, // which memory bank the current roster was imported from, for display
   rubricBank: [], // [{ id, text }] — manually-entered rubric descriptions
   teacherRubrics: [], // [{ id, rubricId, points }] — Active Teacher Rubrics grid
   audienceRubrics: [], // [{ id, rubricId, points }] — Active Audience Rubrics grid
+  scoreForms: [], // [{ id, kind, formId, url, createdAt, questionMap }] — archived score-collection Google Forms; never auto-deleted
   currentCourseId: null,
 
   fileName(courseId) {
@@ -36,6 +40,7 @@ const PresentationCalcModule = {
     this.rubricBank = data && Array.isArray(data.rubricBank) ? data.rubricBank : [];
     this.teacherRubrics = data && Array.isArray(data.teacherRubrics) ? data.teacherRubrics : [];
     this.audienceRubrics = data && Array.isArray(data.audienceRubrics) ? data.audienceRubrics : [];
+    this.scoreForms = data && Array.isArray(data.scoreForms) ? data.scoreForms : [];
   },
 
   async save() {
@@ -46,6 +51,7 @@ const PresentationCalcModule = {
       rubricBank: this.rubricBank,
       teacherRubrics: this.teacherRubrics,
       audienceRubrics: this.audienceRubrics,
+      scoreForms: this.scoreForms,
     });
   },
 
@@ -156,6 +162,183 @@ const PresentationCalcModule = {
   setActiveRubricPoints(kind, id, points) {
     const entry = this._activeList(kind).find((e) => e.id === id);
     if (entry) entry.points = Math.max(0, Math.min(MAX_RUBRIC_POINTS, Math.round(Number(points) || 0)));
+  },
+
+  /** Distinct Group Numbers present in the roster (ungrouped/0 excluded), ascending. */
+  groupList() {
+    const groups = new Set();
+    this.roster.forEach((entry) => {
+      if (entry.group) groups.add(entry.group);
+    });
+    return Array.from(groups).sort((a, b) => a - b);
+  },
+
+  // ----- Get Pres. Scores: archived Google Forms for collecting rubric scores -----
+
+  async _apiFetch(url, options = {}) {
+    const token = await storage.getAccessToken();
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Google API error (${response.status}): ${text.slice(0, 300)}`);
+    }
+    if (response.status === 204) return null; // no content (e.g. DELETE)
+    return response.json();
+  },
+
+  /**
+   * Creates, configures, and publishes a new Google Form for collecting
+   * rubric scores — one "Group N" section header per group in the
+   * roster, followed by one radio-button question per active rubric
+   * (kind: "teacher" or "audience"), each scored 0 to that rubric's
+   * assigned point value. Unlike email collection's form, this form is
+   * never auto-deleted — it's archived in scoreForms so its data can be
+   * recalled or the form destroyed later, at the user's choice.
+   */
+  async createScoreForm(kind, courseName) {
+    const activeList = this._activeList(kind);
+    const selected = activeList.filter((e) => e.rubricId && this.findRubric(e.rubricId));
+    if (selected.length === 0) {
+      throw new Error(
+        `No active ${kind === "audience" ? "Audience" : "Teacher"} Rubrics are set up yet — select at least one rubric and point value on the Rubrics page first.`
+      );
+    }
+    const groups = this.groupList();
+    if (groups.length === 0) {
+      throw new Error("No groups found — import a seating arrangement with Group Numbers set on the Student Groups page first.");
+    }
+
+    const label = kind === "audience" ? "Audience Scores" : "Teacher Scores";
+    const created = await this._apiFetch(FORMS_API_BASE, {
+      method: "POST",
+      body: JSON.stringify({ info: { title: `${courseName || "Class"} — ${label}` } }),
+    });
+    const formId = created.formId;
+
+    // Build one Group-header item plus one question per active rubric,
+    // for every group — tracking, in parallel, which array index maps
+    // to which (group, rubric) pair so the batchUpdate replies (which
+    // return question IDs in request order) can be matched back up.
+    const requests = [];
+    const meta = []; // null for a header item; {group, rubricId, rubricText} for a question
+    let index = 0;
+
+    groups.forEach((group) => {
+      requests.push({
+        createItem: {
+          item: { title: `Group ${group}`, textItem: {} },
+          location: { index: index++ },
+        },
+      });
+      meta.push(null);
+
+      selected.forEach((entry) => {
+        const rubric = this.findRubric(entry.rubricId);
+        const rubricText = (rubric && rubric.text) || "(untitled rubric)";
+        const maxPoints = Math.max(0, entry.points || 0);
+        const options = [];
+        for (let n = 0; n <= maxPoints; n++) options.push({ value: String(n) });
+
+        requests.push({
+          createItem: {
+            item: {
+              title: rubricText,
+              questionItem: {
+                question: { required: true, choiceQuestion: { type: "RADIO", options } },
+              },
+            },
+            location: { index: index++ },
+          },
+        });
+        meta.push({ group, rubricId: entry.rubricId, rubricText });
+      });
+    });
+
+    const batchResult = await this._apiFetch(`${FORMS_API_BASE}/${formId}:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({ requests }),
+    });
+
+    const questionMap = {};
+    batchResult.replies.forEach((reply, i) => {
+      const info = meta[i];
+      if (!info) return; // a Group header item — no question to map
+      const questionId = reply.createItem.questionId[0];
+      questionMap[questionId] = info;
+    });
+
+    await this._apiFetch(`${FORMS_API_BASE}/${formId}:setPublishSettings`, {
+      method: "POST",
+      body: JSON.stringify({
+        publishSettings: { publishState: { isPublished: true, isAcceptingResponses: true } },
+      }),
+    });
+
+    const formDetail = await this._apiFetch(`${FORMS_API_BASE}/${formId}`);
+
+    const record = {
+      id: `scoreform-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      kind,
+      formId,
+      url: formDetail.responderUri,
+      createdAt: new Date().toISOString(),
+      questionMap,
+    };
+    this.scoreForms.push(record);
+    await this.save();
+    return record;
+  },
+
+  /**
+   * Reads every response currently on an archived form and maps each
+   * answer back to its (group, rubric) via the form's stored
+   * questionMap. The form itself is left untouched — nothing is
+   * deleted here, so this can be called repeatedly as more responses
+   * come in.
+   */
+  async recallScoreFormResponses(recordId) {
+    const record = this.scoreForms.find((f) => f.id === recordId);
+    if (!record) throw new Error("That form is no longer in the archive.");
+
+    const data = await this._apiFetch(`${FORMS_API_BASE}/${record.formId}/responses`);
+    const responses = data.responses || [];
+
+    const entries = []; // { group, rubricText, value }
+    responses.forEach((response) => {
+      Object.entries(response.answers || {}).forEach(([questionId, answer]) => {
+        const info = record.questionMap[questionId];
+        if (!info) return;
+        const value =
+          answer.textAnswers && answer.textAnswers.answers[0] ? answer.textAnswers.answers[0].value : "";
+        entries.push({ group: info.group, rubricText: info.rubricText, value });
+      });
+    });
+
+    return { record, entries, responseCount: responses.length };
+  },
+
+  /** Permanently deletes an archived form from Drive and removes it from the archive. */
+  async deleteScoreForm(recordId) {
+    const record = this.scoreForms.find((f) => f.id === recordId);
+    if (!record) return;
+
+    try {
+      await this._apiFetch(`${DRIVE_API_BASE}/${record.formId}`, { method: "DELETE" });
+    } catch (err) {
+      this.scoreForms = this.scoreForms.filter((f) => f.id !== recordId);
+      await this.save();
+      throw new Error(`Removed from the archive, but deleting the form itself failed: ${err.message}`);
+    }
+
+    this.scoreForms = this.scoreForms.filter((f) => f.id !== recordId);
+    await this.save();
   },
 };
 

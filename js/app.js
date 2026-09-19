@@ -98,8 +98,21 @@ const el = {
 
   pcPageStudentGroupsBtn: document.getElementById("pc-page-studentgroups-btn"),
   pcPageRubricsBtn: document.getElementById("pc-page-rubrics-btn"),
+  pcPageGetScoresBtn: document.getElementById("pc-page-getscores-btn"),
   studentGroupsView: document.getElementById("studentgroups-view"),
   rubricsView: document.getElementById("rubrics-view"),
+  getScoresView: document.getElementById("getscores-view"),
+
+  getScoresStatus: document.getElementById("getscores-status"),
+  getTeacherScoresBtn: document.getElementById("get-teacher-scores-btn"),
+  getAudienceScoresBtn: document.getElementById("get-audience-scores-btn"),
+  getScoresQrBlock: document.getElementById("getscores-qr-block"),
+  getScoresQrLabel: document.getElementById("getscores-qr-label"),
+  getScoresQrContainer: document.getElementById("getscores-qr-container"),
+  scoreFormsTbody: document.getElementById("score-forms-tbody"),
+  scoreRecallBlock: document.getElementById("score-recall-block"),
+  scoreRecallHeading: document.getElementById("score-recall-heading"),
+  scoreRecallContent: document.getElementById("score-recall-content"),
 
   teacherRubricsTbody: document.getElementById("teacher-rubrics-tbody"),
   teacherRubricsPointsTbody: document.getElementById("teacher-rubrics-points-tbody"),
@@ -354,6 +367,7 @@ async function openCourseDetail(course) {
     renderPresentationCalcBankOptions();
     renderPresentationCalc();
     renderRubrics();
+    renderScoreForms();
     el.presentationCalcStatus.textContent = "";
   } catch (err) {
     el.presentationCalcStatus.textContent = `Couldn't load presentation calculator: ${err.message}`;
@@ -389,6 +403,7 @@ function showTab(tab) {
     renderPresentationCalcBankOptions(); // banks may have changed since the tab was last shown
     renderPresentationCalc();
     renderRubrics();
+    renderScoreForms();
   }
 }
 
@@ -2478,12 +2493,15 @@ el.syncEmailBtn.addEventListener("click", async () => {
 
 el.pcPageStudentGroupsBtn.addEventListener("click", () => showPresentationCalcPage("studentgroups"));
 el.pcPageRubricsBtn.addEventListener("click", () => showPresentationCalcPage("rubrics"));
+el.pcPageGetScoresBtn.addEventListener("click", () => showPresentationCalcPage("getscores"));
 
 function showPresentationCalcPage(page) {
   el.studentGroupsView.hidden = page !== "studentgroups";
   el.rubricsView.hidden = page !== "rubrics";
+  el.getScoresView.hidden = page !== "getscores";
   el.pcPageStudentGroupsBtn.classList.toggle("tab-btn-active", page === "studentgroups");
   el.pcPageRubricsBtn.classList.toggle("tab-btn-active", page === "rubrics");
+  el.pcPageGetScoresBtn.classList.toggle("tab-btn-active", page === "getscores");
 }
 
 function renderPresentationCalcBankOptions() {
@@ -2747,5 +2765,166 @@ el.addAudienceRubricBtn.addEventListener("click", async () => {
     el.presentationCalcStatus.textContent = err.message;
   }
 });
+
+// ===== Get Pres. Scores =====
+
+function showScoreQr(url, label) {
+  el.getScoresQrLabel.textContent = label;
+  el.getScoresQrContainer.innerHTML = "";
+  // eslint-disable-next-line no-undef
+  new QRCode(el.getScoresQrContainer, { text: url, width: 220, height: 220 });
+  el.getScoresQrBlock.hidden = false;
+}
+
+function hideScoreQr() {
+  el.getScoresQrBlock.hidden = true;
+  el.getScoresQrContainer.innerHTML = "";
+}
+
+function hideScoreRecall() {
+  el.scoreRecallBlock.hidden = true;
+  el.scoreRecallContent.innerHTML = "";
+}
+
+async function handleGetScores(kind) {
+  hideScoreQr();
+  hideScoreRecall();
+  el.getScoresStatus.textContent = "Creating form…";
+  try {
+    const course = CoursesModule.find(RosterModule.currentCourseId);
+    const record = await PresentationCalcModule.createScoreForm(kind, course ? course.name : "");
+    renderScoreForms();
+    showScoreQr(record.url, `${kind === "audience" ? "Audience" : "Teacher"} Scores — scan to open the form`);
+    el.getScoresStatus.textContent = "";
+  } catch (err) {
+    el.getScoresStatus.textContent = `Couldn't create form: ${err.message}`;
+  }
+}
+
+el.getTeacherScoresBtn.addEventListener("click", () => handleGetScores("teacher"));
+el.getAudienceScoresBtn.addEventListener("click", () => handleGetScores("audience"));
+
+function renderScoreForms() {
+  el.scoreFormsTbody.innerHTML = "";
+
+  if (PresentationCalcModule.scoreForms.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.className = "hint";
+    td.textContent = "No forms created yet.";
+    tr.appendChild(td);
+    el.scoreFormsTbody.appendChild(tr);
+    return;
+  }
+
+  // Newest first.
+  const records = [...PresentationCalcModule.scoreForms].reverse();
+
+  records.forEach((record) => {
+    const tr = document.createElement("tr");
+
+    const typeTd = document.createElement("td");
+    typeTd.textContent = record.kind === "audience" ? "Audience" : "Teacher";
+    tr.appendChild(typeTd);
+
+    const createdTd = document.createElement("td");
+    const created = new Date(record.createdAt);
+    createdTd.textContent = Number.isNaN(created.getTime()) ? record.createdAt : created.toLocaleString();
+    tr.appendChild(createdTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "panel-toolbar-buttons";
+
+    const qrBtn = document.createElement("button");
+    qrBtn.type = "button";
+    qrBtn.className = "btn btn-ghost btn-small";
+    qrBtn.textContent = "Show QR";
+    qrBtn.addEventListener("click", () => {
+      hideScoreRecall();
+      showScoreQr(record.url, `${record.kind === "audience" ? "Audience" : "Teacher"} Scores — scan to open the form`);
+    });
+    actionsTd.appendChild(qrBtn);
+
+    const recallBtn = document.createElement("button");
+    recallBtn.type = "button";
+    recallBtn.className = "btn btn-ghost btn-small";
+    recallBtn.textContent = "Recall Data";
+    recallBtn.addEventListener("click", () => recallScoreForm(record.id));
+    actionsTd.appendChild(recallBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-ghost btn-small";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => deleteScoreForm(record.id));
+    actionsTd.appendChild(deleteBtn);
+
+    tr.appendChild(actionsTd);
+    el.scoreFormsTbody.appendChild(tr);
+  });
+}
+
+async function recallScoreForm(recordId) {
+  hideScoreQr();
+  el.getScoresStatus.textContent = "Recalling…";
+  try {
+    const { record, entries, responseCount } = await PresentationCalcModule.recallScoreFormResponses(recordId);
+
+    el.scoreRecallHeading.textContent =
+      `${record.kind === "audience" ? "Audience" : "Teacher"} Scores — ${responseCount} response(s)`;
+    el.scoreRecallContent.innerHTML = "";
+
+    if (entries.length === 0) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "No responses yet.";
+      el.scoreRecallContent.appendChild(p);
+    } else {
+      // Group entries by Group Number, then list each rubric's collected values underneath.
+      const byGroup = new Map();
+      entries.forEach((e) => {
+        if (!byGroup.has(e.group)) byGroup.set(e.group, []);
+        byGroup.get(e.group).push(e);
+      });
+
+      Array.from(byGroup.keys())
+        .sort((a, b) => a - b)
+        .forEach((group) => {
+          const groupHeading = document.createElement("p");
+          groupHeading.innerHTML = `<strong>Group ${group}</strong>`;
+          el.scoreRecallContent.appendChild(groupHeading);
+
+          const list = document.createElement("ul");
+          list.className = "consultation-item-list";
+          byGroup.get(group).forEach((e) => {
+            const li = document.createElement("li");
+            li.textContent = `${e.rubricText}: ${e.value}`;
+            list.appendChild(li);
+          });
+          el.scoreRecallContent.appendChild(list);
+        });
+    }
+
+    el.scoreRecallBlock.hidden = false;
+    el.getScoresStatus.textContent = "";
+  } catch (err) {
+    el.getScoresStatus.textContent = `Couldn't recall data: ${err.message}`;
+  }
+}
+
+async function deleteScoreForm(recordId) {
+  if (!confirm("Permanently delete this form and its data? This can't be undone.")) return;
+  el.getScoresStatus.textContent = "Deleting…";
+  try {
+    await PresentationCalcModule.deleteScoreForm(recordId);
+    renderScoreForms();
+    hideScoreQr();
+    hideScoreRecall();
+    el.getScoresStatus.textContent = "";
+  } catch (err) {
+    el.getScoresStatus.textContent = err.message;
+  }
+}
 
 main();

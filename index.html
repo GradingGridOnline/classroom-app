@@ -259,6 +259,7 @@
           <div class="tab-row reportcard-mode-row">
             <button id="pc-page-studentgroups-btn" class="tab-btn tab-btn-active">Student Groups</button>
             <button id="pc-page-rubrics-btn" class="tab-btn">Rubrics</button>
+            <button id="pc-page-getscores-btn" class="tab-btn">Get Pres. Scores</button>
           </div>
 
           <!-- ----- Student Groups page ----- -->
@@ -329,6 +330,40 @@
               <button id="add-rubric-bank-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
             </div>
           </div>
+
+          <!-- ----- Get Pres. Scores page ----- -->
+          <div id="getscores-view" hidden>
+            <div class="panel-toolbar">
+              <span id="getscores-status" class="result"></span>
+              <div class="panel-toolbar-buttons">
+                <button id="get-teacher-scores-btn" class="btn btn-ghost">Get Teacher Scores</button>
+                <button id="get-audience-scores-btn" class="btn btn-ghost">Get Audience Scores</button>
+              </div>
+            </div>
+
+            <div id="getscores-qr-block" class="getscores-qr-block" hidden>
+              <p id="getscores-qr-label" class="hint"></p>
+              <div id="getscores-qr-container"></div>
+            </div>
+
+            <h5>Archived Forms</h5>
+            <p class="hint">Forms here are never auto-deleted — recall their data any time, or delete them yourself when you're done.</p>
+            <table class="roster-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="score-forms-tbody"></tbody>
+            </table>
+
+            <div id="score-recall-block" class="score-recall-block" hidden>
+              <h5 id="score-recall-heading"></h5>
+              <div id="score-recall-content"></div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -338,6 +373,8 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- SheetJS (reads .csv / .xlsx / .xls files) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- QRCode.js (renders the score-collection form links as scannable QR codes) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <script src="js/config.js"></script>
   <script src="js/storage/storage-provider.js"></script>
