@@ -75,6 +75,8 @@ const ReportCardModule = {
       total: ScoringModule.totalScore(studentId),
       attendance: AttendanceModule.stats(studentId),
       attendanceWeight: ScoringModule.weights.attendance || 0,
+      attendanceSessions: AttendanceModule.sessionBreakdown(studentId),
+      attendanceNote: AttendanceModule.getNote(studentId),
     };
   },
 };

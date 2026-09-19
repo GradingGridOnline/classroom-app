@@ -2145,6 +2145,30 @@ function renderConsultationDetail() {
   attLine.className = "hint";
   attLine.textContent = `Attended: ${detail.attendance.attended} — Absences: ${detail.attendance.absences}`;
   attBlock.appendChild(attLine);
+
+  if (detail.attendanceNote) {
+    const noteLine = document.createElement("p");
+    noteLine.className = "hint consultation-attendance-note";
+    noteLine.textContent = `Note: ${detail.attendanceNote}`;
+    attBlock.appendChild(noteLine);
+  }
+
+  const recordedSessions = detail.attendanceSessions.filter((s) => s.code);
+  if (recordedSessions.length > 0) {
+    const sessionList = document.createElement("ul");
+    sessionList.className = "consultation-item-list consultation-attendance-list";
+    recordedSessions.forEach((s) => {
+      const li = document.createElement("li");
+      const dateLabel = s.date ? ` (${s.date})` : "";
+      let text = `Class ${s.number}${dateLabel}: ${s.code}`;
+      if (s.infraction) text += ` — ${s.infraction}`;
+      if (s.memo) text += ` — "${s.memo}"`;
+      li.textContent = text;
+      sessionList.appendChild(li);
+    });
+    attBlock.appendChild(sessionList);
+  }
+
   el.consultationDetail.appendChild(attBlock);
 }
 

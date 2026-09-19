@@ -252,6 +252,21 @@ const AttendanceModule = {
 
   // ----- Summary stats, computed from recorded sessions only -----
 
+  /** Per-session detail for one student — code, infraction, and memo for every session, in session order. Used by Student Consultation to show the full attendance picture, not just the summary stats. */
+  sessionBreakdown(studentId) {
+    return this.sessions.map((s) => {
+      const rec = this.getRecord(studentId, s.id);
+      return {
+        sessionId: s.id,
+        number: s.number,
+        date: s.date,
+        code: rec.code || "",
+        infraction: rec.infraction || "",
+        memo: rec.memo || "",
+      };
+    });
+  },
+
   stats(studentId) {
     let attended = 0;
     let absences = 0;
