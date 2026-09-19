@@ -238,13 +238,8 @@ const ScoringModule = {
     return total;
   },
 
-  /** Weighted total across the 10 categories plus Attendance (via AttendanceModule), normalized by the sum of weights actually entered. Returns percent or raw points based on scoreDisplayMode. */
-  totalScore(studentId) {
-    if (this.scoreDisplayMode === "points") {
-      return this.totalRawPoints(studentId);
-    }
-
-    // percent mode
+  /** The weighted average percent (0-100) across categories plus Attendance, normalized by the sum of weights actually entered. Shared by both display modes below. */
+  weightedPercent(studentId) {
     let weightedSum = 0;
     let weightTotal = 0;
 
@@ -266,7 +261,14 @@ const ScoringModule = {
       }
     }
 
-    return weightTotal > 0 ? Math.round(weightedSum / weightTotal) : null;
+    return weightTotal > 0 ? weightedSum / weightTotal : null;
+  },
+
+  /** Weighted total across the 10 categories plus Attendance. Percent mode returns the weighted percent (0-100, rounded); points mode returns that same weighted percent scaled ×100. */
+  totalScore(studentId) {
+    const percent = this.weightedPercent(studentId);
+    if (percent === null) return null;
+    return this.scoreDisplayMode === "points" ? Math.round(percent * 100) : Math.round(percent);
   },
 };
 

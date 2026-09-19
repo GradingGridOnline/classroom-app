@@ -1671,6 +1671,11 @@ function buildScoringHeaderRows() {
     });
   });
 
+  const rawPointsTh = document.createElement("th");
+  rawPointsTh.rowSpan = 2;
+  rawPointsTh.textContent = "Raw Points";
+  row1.appendChild(rawPointsTh);
+
   return { row1, row2 };
 }
 
@@ -1989,6 +1994,12 @@ function buildScoringStudentRow(student) {
     });
   });
 
+  // ----- Raw Points (unweighted sum of all earned points across categories) -----
+  const rawPointsTd = document.createElement("td");
+  rawPointsTd.className = "attendance-stat-cell scoring-rawpoints-cell";
+  rawPointsTd.textContent = String(ScoringModule.totalRawPoints(student.id));
+  tr.appendChild(rawPointsTd);
+
   return tr;
 }
 
@@ -2010,8 +2021,9 @@ function refreshScoringTotalCell(studentId) {
   const row = el.scoringTable.querySelector(`tr[data-student-id="${studentId}"]`);
   if (!row) return;
   const cell = row.querySelector(".attendance-score-cell");
-  if (!cell) return;
-  cell.textContent = formatScoringTotal(ScoringModule.totalScore(studentId));
+  if (cell) cell.textContent = formatScoringTotal(ScoringModule.totalScore(studentId));
+  const rawCell = row.querySelector(".scoring-rawpoints-cell");
+  if (rawCell) rawCell.textContent = String(ScoringModule.totalRawPoints(studentId));
 }
 
 async function saveScoringThen(after) {
