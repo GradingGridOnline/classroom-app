@@ -270,8 +270,15 @@ const AttendanceModule = {
       totalPoints += pts;
     });
 
+    // Percent is earned points out of the points actually possible across
+    // the recorded sessions — not just a per-session count — so a
+    // participation point value other than 1 (e.g. "P" worth 10 points)
+    // doesn't distort the percentage.
+    const maxPerSession = Math.max(0, ...Object.values(this.settings.points));
+    const possiblePoints = counted * maxPerSession;
+
     return {
-      percent: counted > 0 ? Math.round((totalPoints / counted) * 100) : null,
+      percent: possiblePoints > 0 ? Math.round((totalPoints / possiblePoints) * 100) : null,
       points: counted > 0 ? Math.round(totalPoints * 10) / 10 : null,
       attended,
       absences,
