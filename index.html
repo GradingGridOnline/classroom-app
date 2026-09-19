@@ -256,27 +256,78 @@
 
         <!-- ----- Presentation Calculator panel ----- -->
         <div id="presentationcalc-panel" class="tab-panel" hidden>
-          <div class="panel-toolbar">
-            <span id="presentationcalc-status" class="result"></span>
-            <div class="panel-toolbar-buttons">
-              <label for="presentationcalc-bank-select">Memory bank:</label>
-              <select id="presentationcalc-bank-select"></select>
-              <button id="import-presentationcalc-btn" class="btn btn-ghost">Import from Bank</button>
+
+          <!-- ----- Student Groups subsection ----- -->
+          <div class="attendance-settings-block">
+            <h4>Student Groups</h4>
+            <div class="panel-toolbar">
+              <span id="presentationcalc-status" class="result"></span>
+              <div class="panel-toolbar-buttons">
+                <label for="presentationcalc-bank-select">Memory bank:</label>
+                <select id="presentationcalc-bank-select"></select>
+                <button id="import-presentationcalc-btn" class="btn btn-ghost">Import from Bank</button>
+              </div>
+            </div>
+            <p id="presentationcalc-source" class="hint"></p>
+            <table class="roster-table">
+              <thead>
+                <tr>
+                  <th>Class #</th>
+                  <th>Name</th>
+                  <th>Pronunciation</th>
+                  <th>School ID</th>
+                  <th>Group</th>
+                </tr>
+              </thead>
+              <tbody id="presentationcalc-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- ----- Rubrics subsection ----- -->
+          <div class="attendance-settings-block">
+            <h4>Rubrics</h4>
+
+            <div class="rubrics-top-row">
+              <div class="rubric-active-block">
+                <h5>Active Teacher Rubrics</h5>
+                <div class="rubric-active-grid-wrap">
+                  <table class="rubric-active-grid">
+                    <thead><tr><th>Rubric</th><th></th></tr></thead>
+                    <tbody id="teacher-rubrics-tbody"></tbody>
+                  </table>
+                  <table class="rubric-points-grid">
+                    <thead><tr><th>Points</th></tr></thead>
+                    <tbody id="teacher-rubrics-points-tbody"></tbody>
+                  </table>
+                </div>
+                <button id="add-teacher-rubric-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
+              </div>
+
+              <div class="rubric-active-block">
+                <h5>Active Audience Rubrics</h5>
+                <div class="rubric-active-grid-wrap">
+                  <table class="rubric-active-grid">
+                    <thead><tr><th>Rubric</th><th></th></tr></thead>
+                    <tbody id="audience-rubrics-tbody"></tbody>
+                  </table>
+                  <table class="rubric-points-grid">
+                    <thead><tr><th>Points</th></tr></thead>
+                    <tbody id="audience-rubrics-points-tbody"></tbody>
+                  </table>
+                </div>
+                <button id="add-audience-rubric-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
+              </div>
+            </div>
+
+            <div class="rubric-bank-block">
+              <h5>Rubric Bank</h5>
+              <table class="rubric-bank-grid">
+                <thead><tr><th>Rubric</th><th></th></tr></thead>
+                <tbody id="rubric-bank-tbody"></tbody>
+              </table>
+              <button id="add-rubric-bank-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
             </div>
           </div>
-          <p id="presentationcalc-source" class="hint"></p>
-          <table class="roster-table">
-            <thead>
-              <tr>
-                <th>Group</th>
-                <th>Class #</th>
-                <th>Name</th>
-                <th>Pronunciation</th>
-                <th>School ID</th>
-              </tr>
-            </thead>
-            <tbody id="presentationcalc-tbody"></tbody>
-          </table>
         </div>
       </section>
     </main>

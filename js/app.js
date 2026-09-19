@@ -96,6 +96,15 @@ const el = {
   presentationCalcSource: document.getElementById("presentationcalc-source"),
   presentationCalcTbody: document.getElementById("presentationcalc-tbody"),
 
+  teacherRubricsTbody: document.getElementById("teacher-rubrics-tbody"),
+  teacherRubricsPointsTbody: document.getElementById("teacher-rubrics-points-tbody"),
+  addTeacherRubricBtn: document.getElementById("add-teacher-rubric-btn"),
+  audienceRubricsTbody: document.getElementById("audience-rubrics-tbody"),
+  audienceRubricsPointsTbody: document.getElementById("audience-rubrics-points-tbody"),
+  addAudienceRubricBtn: document.getElementById("add-audience-rubric-btn"),
+  rubricBankTbody: document.getElementById("rubric-bank-tbody"),
+  addRubricBankBtn: document.getElementById("add-rubric-bank-btn"),
+
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
   themeList: document.getElementById("theme-list"),
@@ -339,6 +348,7 @@ async function openCourseDetail(course) {
     await PresentationCalcModule.load(course.id);
     renderPresentationCalcBankOptions();
     renderPresentationCalc();
+    renderRubrics();
     el.presentationCalcStatus.textContent = "";
   } catch (err) {
     el.presentationCalcStatus.textContent = `Couldn't load presentation calculator: ${err.message}`;
@@ -373,6 +383,7 @@ function showTab(tab) {
   } else if (tab === "presentationcalc") {
     renderPresentationCalcBankOptions(); // banks may have changed since the tab was last shown
     renderPresentationCalc();
+    renderRubrics();
   }
 }
 
@@ -2497,10 +2508,6 @@ function renderPresentationCalc() {
   PresentationCalcModule.roster.forEach((entry) => {
     const tr = document.createElement("tr");
 
-    const groupTd = document.createElement("td");
-    groupTd.textContent = entry.group ? String(entry.group) : "—";
-    tr.appendChild(groupTd);
-
     const classNumTd = document.createElement("td");
     classNumTd.textContent = entry.classNumber ? `#${entry.classNumber}` : "—";
     tr.appendChild(classNumTd);
@@ -2516,6 +2523,10 @@ function renderPresentationCalc() {
     const idTd = document.createElement("td");
     idTd.textContent = entry.schoolId || "";
     tr.appendChild(idTd);
+
+    const groupTd = document.createElement("td");
+    groupTd.textContent = entry.group ? String(entry.group) : "—";
+    tr.appendChild(groupTd);
 
     el.presentationCalcTbody.appendChild(tr);
   });
@@ -2536,6 +2547,189 @@ el.importPresentationCalcBtn.addEventListener("click", async () => {
     el.presentationCalcStatus.textContent = `Imported ${PresentationCalcModule.roster.length} seated student(s) from ${bank.name}.`;
   } catch (err) {
     el.presentationCalcStatus.textContent = `Couldn't import: ${err.message}`;
+  }
+});
+
+// ===== Rubrics (Rubric Bank + Active Teacher / Audience rubric grids) =====
+
+async function savePresentationCalcThen(after) {
+  el.presentationCalcStatus.textContent = "Saving…";
+  try {
+    await PresentationCalcModule.save();
+    el.presentationCalcStatus.textContent = "";
+  } catch (err) {
+    el.presentationCalcStatus.textContent = `Couldn't save: ${err.message}`;
+  }
+  if (after) after();
+}
+
+function renderRubrics() {
+  renderRubricBank();
+  renderActiveRubricGrid("teacher");
+  renderActiveRubricGrid("audience");
+}
+
+function renderRubricBank() {
+  el.rubricBankTbody.innerHTML = "";
+
+  if (PresentationCalcModule.rubricBank.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.className = "hint";
+    td.textContent = 'No rubrics yet — click "+ Add Rubric" below to write one.';
+    tr.appendChild(td);
+    el.rubricBankTbody.appendChild(tr);
+    return;
+  }
+
+  PresentationCalcModule.rubricBank.forEach((rubric) => {
+    const tr = document.createElement("tr");
+
+    const textTd = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = rubric.text;
+    input.placeholder = "Describe the rubric…";
+    input.addEventListener("change", async () => {
+      PresentationCalcModule.setRubricBankText(rubric.id, input.value);
+      await savePresentationCalcThen(() => {
+        renderActiveRubricGrid("teacher"); // the rubric's text may be shown in an active-grid <option>
+        renderActiveRubricGrid("audience");
+      });
+    });
+    textTd.appendChild(input);
+    tr.appendChild(textTd);
+
+    const removeTd = document.createElement("td");
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-ghost btn-small";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Remove this rubric";
+    removeBtn.addEventListener("click", async () => {
+      PresentationCalcModule.removeRubricBankRow(rubric.id);
+      await savePresentationCalcThen(renderRubrics);
+    });
+    removeTd.appendChild(removeBtn);
+    tr.appendChild(removeTd);
+
+    el.rubricBankTbody.appendChild(tr);
+  });
+}
+
+el.addRubricBankBtn.addEventListener("click", async () => {
+  try {
+    PresentationCalcModule.addRubricBankRow();
+    await savePresentationCalcThen(renderRubricBank);
+  } catch (err) {
+    el.presentationCalcStatus.textContent = err.message;
+  }
+});
+
+/** kind: "teacher" or "audience". Renders that grid's two side-by-side tables (rubric picker + point value), row-for-row in sync. */
+function renderActiveRubricGrid(kind) {
+  const list = kind === "audience" ? PresentationCalcModule.audienceRubrics : PresentationCalcModule.teacherRubrics;
+  const rubricTbody = kind === "audience" ? el.audienceRubricsTbody : el.teacherRubricsTbody;
+  const pointsTbody = kind === "audience" ? el.audienceRubricsPointsTbody : el.teacherRubricsPointsTbody;
+
+  rubricTbody.innerHTML = "";
+  pointsTbody.innerHTML = "";
+
+  if (list.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.className = "hint";
+    td.textContent = '+ Add Rubric below to activate one from the Rubric Bank.';
+    tr.appendChild(td);
+    rubricTbody.appendChild(tr);
+
+    const pointsTr = document.createElement("tr");
+    const pointsTd = document.createElement("td");
+    pointsTd.innerHTML = "&nbsp;";
+    pointsTr.appendChild(pointsTd);
+    pointsTbody.appendChild(pointsTr);
+    return;
+  }
+
+  list.forEach((entry) => {
+    // ----- Rubric picker row -----
+    const tr = document.createElement("tr");
+    const selectTd = document.createElement("td");
+    const select = document.createElement("select");
+
+    const blankOpt = document.createElement("option");
+    blankOpt.value = "";
+    blankOpt.textContent = "— Choose a rubric —";
+    select.appendChild(blankOpt);
+
+    PresentationCalcModule.rubricBank.forEach((rubric) => {
+      const opt = document.createElement("option");
+      opt.value = rubric.id;
+      opt.textContent = rubric.text || "(untitled rubric)";
+      if (entry.rubricId === rubric.id) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener("change", async () => {
+      PresentationCalcModule.setActiveRubricSelection(kind, entry.id, select.value);
+      await savePresentationCalcThen();
+    });
+    selectTd.appendChild(select);
+    tr.appendChild(selectTd);
+
+    const removeTd = document.createElement("td");
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-ghost btn-small";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Remove this active rubric";
+    removeBtn.addEventListener("click", async () => {
+      PresentationCalcModule.removeActiveRubric(kind, entry.id);
+      await savePresentationCalcThen(() => renderActiveRubricGrid(kind));
+    });
+    removeTd.appendChild(removeBtn);
+    tr.appendChild(removeTd);
+
+    rubricTbody.appendChild(tr);
+
+    // ----- Matching point-value row, in the grid to the right -----
+    const pointsTr = document.createElement("tr");
+    const pointsTd = document.createElement("td");
+    const pointsSelect = document.createElement("select");
+    for (let n = 0; n <= MAX_RUBRIC_POINTS; n++) {
+      const opt = document.createElement("option");
+      opt.value = String(n);
+      opt.textContent = String(n);
+      if (entry.points === n) opt.selected = true;
+      pointsSelect.appendChild(opt);
+    }
+    pointsSelect.addEventListener("change", async () => {
+      PresentationCalcModule.setActiveRubricPoints(kind, entry.id, pointsSelect.value);
+      await savePresentationCalcThen();
+    });
+    pointsTd.appendChild(pointsSelect);
+    pointsTr.appendChild(pointsTd);
+    pointsTbody.appendChild(pointsTr);
+  });
+}
+
+el.addTeacherRubricBtn.addEventListener("click", async () => {
+  try {
+    PresentationCalcModule.addActiveRubric("teacher");
+    await savePresentationCalcThen(() => renderActiveRubricGrid("teacher"));
+  } catch (err) {
+    el.presentationCalcStatus.textContent = err.message;
+  }
+});
+
+el.addAudienceRubricBtn.addEventListener("click", async () => {
+  try {
+    PresentationCalcModule.addActiveRubric("audience");
+    await savePresentationCalcThen(() => renderActiveRubricGrid("audience"));
+  } catch (err) {
+    el.presentationCalcStatus.textContent = err.message;
   }
 });
 

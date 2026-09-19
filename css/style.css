@@ -1116,6 +1116,77 @@ textarea {
   font-weight: 600;
 }
 
+/* ----- Rubrics (Presentation Calculator) ----- */
+
+.rubrics-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.rubric-active-block h5,
+.rubric-bank-block h5 {
+  font-size: 0.8rem;
+  margin: 0 0 6px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.rubric-active-grid-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rubric-active-grid {
+  flex: 3;
+  border-collapse: collapse;
+}
+
+.rubric-points-grid {
+  flex: 1;
+  border-collapse: collapse;
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+}
+
+.rubric-active-grid th,
+.rubric-points-grid th,
+.rubric-bank-grid th {
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  padding: 2px 4px;
+}
+
+.rubric-active-grid td,
+.rubric-points-grid td,
+.rubric-bank-grid td {
+  padding: 3px 4px;
+  vertical-align: middle;
+}
+
+.rubric-active-grid select,
+.rubric-bank-grid input[type="text"] {
+  width: 100%;
+}
+
+.rubric-points-grid select {
+  width: 60px;
+}
+
+.rubric-bank-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+
+.rubric-bank-block {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
 .infraction-edit-list {
   list-style: none;
   margin: 0 0 10px;
