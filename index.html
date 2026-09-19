@@ -256,10 +256,13 @@
 
         <!-- ----- Presentation Calculator panel ----- -->
         <div id="presentationcalc-panel" class="tab-panel" hidden>
+          <div class="tab-row reportcard-mode-row">
+            <button id="pc-page-studentgroups-btn" class="tab-btn tab-btn-active">Student Groups</button>
+            <button id="pc-page-rubrics-btn" class="tab-btn">Rubrics</button>
+          </div>
 
-          <!-- ----- Student Groups subsection ----- -->
-          <div class="attendance-settings-block">
-            <h4>Student Groups</h4>
+          <!-- ----- Student Groups page ----- -->
+          <div id="studentgroups-view">
             <div class="panel-toolbar">
               <span id="presentationcalc-status" class="result"></span>
               <div class="panel-toolbar-buttons">
@@ -283,10 +286,8 @@
             </table>
           </div>
 
-          <!-- ----- Rubrics subsection ----- -->
-          <div class="attendance-settings-block">
-            <h4>Rubrics</h4>
-
+          <!-- ----- Rubrics page ----- -->
+          <div id="rubrics-view" hidden>
             <div class="rubrics-top-row">
               <div class="rubric-active-block">
                 <h5>Active Teacher Rubrics</h5>

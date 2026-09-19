@@ -96,6 +96,11 @@ const el = {
   presentationCalcSource: document.getElementById("presentationcalc-source"),
   presentationCalcTbody: document.getElementById("presentationcalc-tbody"),
 
+  pcPageStudentGroupsBtn: document.getElementById("pc-page-studentgroups-btn"),
+  pcPageRubricsBtn: document.getElementById("pc-page-rubrics-btn"),
+  studentGroupsView: document.getElementById("studentgroups-view"),
+  rubricsView: document.getElementById("rubrics-view"),
+
   teacherRubricsTbody: document.getElementById("teacher-rubrics-tbody"),
   teacherRubricsPointsTbody: document.getElementById("teacher-rubrics-points-tbody"),
   addTeacherRubricBtn: document.getElementById("add-teacher-rubric-btn"),
@@ -2470,6 +2475,16 @@ el.syncEmailBtn.addEventListener("click", async () => {
 });
 
 // ===== Presentation Calculator =====
+
+el.pcPageStudentGroupsBtn.addEventListener("click", () => showPresentationCalcPage("studentgroups"));
+el.pcPageRubricsBtn.addEventListener("click", () => showPresentationCalcPage("rubrics"));
+
+function showPresentationCalcPage(page) {
+  el.studentGroupsView.hidden = page !== "studentgroups";
+  el.rubricsView.hidden = page !== "rubrics";
+  el.pcPageStudentGroupsBtn.classList.toggle("tab-btn-active", page === "studentgroups");
+  el.pcPageRubricsBtn.classList.toggle("tab-btn-active", page === "rubrics");
+}
 
 function renderPresentationCalcBankOptions() {
   const previousValue = el.presentationCalcBankSelect.value;
