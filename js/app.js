@@ -23,11 +23,13 @@ const el = {
   tabAttendanceBtn: document.getElementById("tab-attendance-btn"),
   tabScoringBtn: document.getElementById("tab-scoring-btn"),
   tabReportCardBtn: document.getElementById("tab-reportcard-btn"),
+  tabPresentationCalcBtn: document.getElementById("tab-presentationcalc-btn"),
   rosterPanel: document.getElementById("roster-panel"),
   seatingPanel: document.getElementById("seating-panel"),
   attendancePanel: document.getElementById("attendance-panel"),
   scoringPanel: document.getElementById("scoring-panel"),
   reportCardPanel: document.getElementById("reportcard-panel"),
+  presentationCalcPanel: document.getElementById("presentationcalc-panel"),
   modeConsultationBtn: document.getElementById("mode-consultation-btn"),
   modePrintcardBtn: document.getElementById("mode-printcard-btn"),
   consultationView: document.getElementById("consultation-view"),
@@ -87,6 +89,12 @@ const el = {
   scoringTable: document.getElementById("scoring-table"),
   toggleScoringSettingsBtn: document.getElementById("toggle-scoring-settings-btn"),
   scoringSettingsBody: document.getElementById("scoring-settings-body"),
+
+  presentationCalcStatus: document.getElementById("presentationcalc-status"),
+  presentationCalcBankSelect: document.getElementById("presentationcalc-bank-select"),
+  importPresentationCalcBtn: document.getElementById("import-presentationcalc-btn"),
+  presentationCalcSource: document.getElementById("presentationcalc-source"),
+  presentationCalcTbody: document.getElementById("presentationcalc-tbody"),
 
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
@@ -326,6 +334,15 @@ async function openCourseDetail(course) {
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't load email collection state: ${err.message}`;
   }
+
+  try {
+    await PresentationCalcModule.load(course.id);
+    renderPresentationCalcBankOptions();
+    renderPresentationCalc();
+    el.presentationCalcStatus.textContent = "";
+  } catch (err) {
+    el.presentationCalcStatus.textContent = `Couldn't load presentation calculator: ${err.message}`;
+  }
 }
 
 el.backToCoursesBtn.addEventListener("click", showCourses);
@@ -336,11 +353,13 @@ function showTab(tab) {
   el.attendancePanel.hidden = tab !== "attendance";
   el.scoringPanel.hidden = tab !== "scoring";
   el.reportCardPanel.hidden = tab !== "reportcard";
+  el.presentationCalcPanel.hidden = tab !== "presentationcalc";
   el.tabRosterBtn.classList.toggle("tab-btn-active", tab === "roster");
   el.tabSeatingBtn.classList.toggle("tab-btn-active", tab === "seating");
   el.tabAttendanceBtn.classList.toggle("tab-btn-active", tab === "attendance");
   el.tabScoringBtn.classList.toggle("tab-btn-active", tab === "scoring");
   el.tabReportCardBtn.classList.toggle("tab-btn-active", tab === "reportcard");
+  el.tabPresentationCalcBtn.classList.toggle("tab-btn-active", tab === "presentationcalc");
 
   if (tab === "seating") {
     selectedStudentId = null;
@@ -351,6 +370,9 @@ function showTab(tab) {
     renderScoring(); // roster/attendance may have changed since the tab was last shown
   } else if (tab === "reportcard") {
     renderConsultationStudentOptions(); // roster may have changed since the tab was last shown
+  } else if (tab === "presentationcalc") {
+    renderPresentationCalcBankOptions(); // banks may have changed since the tab was last shown
+    renderPresentationCalc();
   }
 }
 
@@ -359,6 +381,7 @@ el.tabSeatingBtn.addEventListener("click", () => showTab("seating"));
 el.tabAttendanceBtn.addEventListener("click", () => showTab("attendance"));
 el.tabScoringBtn.addEventListener("click", () => showTab("scoring"));
 el.tabReportCardBtn.addEventListener("click", () => showTab("reportcard"));
+el.tabPresentationCalcBtn.addEventListener("click", () => showTab("presentationcalc"));
 
 function renderRoster() {
   el.rosterCount.textContent = `${RosterModule.students.length} / ${MAX_STUDENTS}`;
@@ -2432,6 +2455,87 @@ el.syncEmailBtn.addEventListener("click", async () => {
       (result.unmatchedCount > 0 ? ` ${result.unmatchedCount} didn't match any School ID.` : "");
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't sync: ${err.message}`;
+  }
+});
+
+// ===== Presentation Calculator =====
+
+function renderPresentationCalcBankOptions() {
+  const previousValue = el.presentationCalcBankSelect.value;
+  el.presentationCalcBankSelect.innerHTML = "";
+  SeatingModule.banks.forEach((bank, index) => {
+    const opt = document.createElement("option");
+    opt.value = String(index);
+    opt.textContent = bank.snapshot ? bank.name : `${bank.name} (empty)`;
+    opt.disabled = !bank.snapshot;
+    el.presentationCalcBankSelect.appendChild(opt);
+  });
+  const stillValid = Array.from(el.presentationCalcBankSelect.options).some(
+    (o) => o.value === previousValue && !o.disabled
+  );
+  if (stillValid) el.presentationCalcBankSelect.value = previousValue;
+}
+
+function renderPresentationCalc() {
+  el.presentationCalcSource.textContent = PresentationCalcModule.sourceBankName
+    ? `Imported from: ${PresentationCalcModule.sourceBankName}`
+    : "";
+
+  el.presentationCalcTbody.innerHTML = "";
+
+  if (PresentationCalcModule.isEmpty()) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.className = "hint";
+    td.textContent = 'No roster imported yet — choose a memory bank above and click "Import from Bank".';
+    tr.appendChild(td);
+    el.presentationCalcTbody.appendChild(tr);
+    return;
+  }
+
+  PresentationCalcModule.roster.forEach((entry) => {
+    const tr = document.createElement("tr");
+
+    const groupTd = document.createElement("td");
+    groupTd.textContent = entry.group ? String(entry.group) : "—";
+    tr.appendChild(groupTd);
+
+    const classNumTd = document.createElement("td");
+    classNumTd.textContent = entry.classNumber ? `#${entry.classNumber}` : "—";
+    tr.appendChild(classNumTd);
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = entry.name || "(unnamed)";
+    tr.appendChild(nameTd);
+
+    const pronTd = document.createElement("td");
+    pronTd.textContent = entry.pronunciation || "";
+    tr.appendChild(pronTd);
+
+    const idTd = document.createElement("td");
+    idTd.textContent = entry.schoolId || "";
+    tr.appendChild(idTd);
+
+    el.presentationCalcTbody.appendChild(tr);
+  });
+}
+
+el.importPresentationCalcBtn.addEventListener("click", async () => {
+  const bankIndex = Number(el.presentationCalcBankSelect.value);
+  const bank = SeatingModule.banks[bankIndex];
+  if (!bank) {
+    el.presentationCalcStatus.textContent = "Choose a memory bank first.";
+    return;
+  }
+  el.presentationCalcStatus.textContent = "Importing…";
+  try {
+    PresentationCalcModule.importFromBank(bank, RosterModule);
+    await PresentationCalcModule.save();
+    renderPresentationCalc();
+    el.presentationCalcStatus.textContent = `Imported ${PresentationCalcModule.roster.length} seated student(s) from ${bank.name}.`;
+  } catch (err) {
+    el.presentationCalcStatus.textContent = `Couldn't import: ${err.message}`;
   }
 });
 

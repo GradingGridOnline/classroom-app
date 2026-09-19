@@ -72,6 +72,7 @@
           <button id="tab-attendance-btn" class="tab-btn">Attendance</button>
           <button id="tab-scoring-btn" class="tab-btn">Scoring</button>
           <button id="tab-reportcard-btn" class="tab-btn">Report Card</button>
+          <button id="tab-presentationcalc-btn" class="tab-btn">Presentation Calc</button>
         </div>
 
         <!-- ----- Roster panel ----- -->
@@ -252,6 +253,31 @@
             </div>
           </div>
         </div>
+
+        <!-- ----- Presentation Calculator panel ----- -->
+        <div id="presentationcalc-panel" class="tab-panel" hidden>
+          <div class="panel-toolbar">
+            <span id="presentationcalc-status" class="result"></span>
+            <div class="panel-toolbar-buttons">
+              <label for="presentationcalc-bank-select">Memory bank:</label>
+              <select id="presentationcalc-bank-select"></select>
+              <button id="import-presentationcalc-btn" class="btn btn-ghost">Import from Bank</button>
+            </div>
+          </div>
+          <p id="presentationcalc-source" class="hint"></p>
+          <table class="roster-table">
+            <thead>
+              <tr>
+                <th>Group</th>
+                <th>Class #</th>
+                <th>Name</th>
+                <th>Pronunciation</th>
+                <th>School ID</th>
+              </tr>
+            </thead>
+            <tbody id="presentationcalc-tbody"></tbody>
+          </table>
+        </div>
       </section>
     </main>
   </div>
@@ -276,6 +302,7 @@
   <script src="js/scoring.js"></script>
   <script src="js/reportcard.js"></script>
   <script src="js/emailcollect.js"></script>
+  <script src="js/presentationcalc.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
