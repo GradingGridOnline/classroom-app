@@ -96,6 +96,7 @@ const el = {
 let selectedStudentId = null; // currently-selected student in the "Unseated" list
 let attendanceSettingsEditing = false;
 let scoringSettingsEditing = false;
+let consultationDisplayMode = "percent"; // "percent" or "points" — Total Score in Student Consultation
 
 async function main() {
   ThemeModule.initLocal();
@@ -2077,6 +2078,13 @@ function renderConsultationStudentOptions() {
 
 el.consultationStudentSelect.addEventListener("change", renderConsultationDetail);
 
+/** Total Score for Student Consultation, respecting its own local toggle (independent of the Scoring tab's toggle). Points mode = weighted percent × 100, same convention as the Scoring tab. */
+function formatConsultationTotal(studentId) {
+  const percent = ScoringModule.weightedPercent(studentId);
+  if (percent === null) return "—";
+  return consultationDisplayMode === "points" ? `${Math.round(percent * 100)} pts` : `${Math.round(percent)}%`;
+}
+
 function renderConsultationDetail() {
   const studentId = el.consultationStudentSelect.value;
   el.consultationDetail.innerHTML = "";
@@ -2105,7 +2113,20 @@ function renderConsultationDetail() {
   }
   const totalLine = document.createElement("p");
   totalLine.className = "consultation-total";
-  totalLine.textContent = `Total Score: ${detail.total === null ? "—" : `${detail.total}%`}`;
+
+  const totalToggleBtn = document.createElement("button");
+  totalToggleBtn.type = "button";
+  totalToggleBtn.className = "score-toggle-btn";
+  totalToggleBtn.textContent = consultationDisplayMode === "points" ? "Points ⇄" : "Percent ⇄";
+  totalToggleBtn.title = "Click to switch Total Score between percent and weighted points";
+  totalToggleBtn.addEventListener("click", () => {
+    consultationDisplayMode = consultationDisplayMode === "points" ? "percent" : "points";
+    renderConsultationDetail();
+  });
+
+  const totalValue = document.createElement("span");
+  totalValue.textContent = `Total Score: ${formatConsultationTotal(studentId)} `;
+  totalLine.append(totalValue, totalToggleBtn);
   header.appendChild(totalLine);
   el.consultationDetail.appendChild(header);
 
@@ -2281,7 +2302,10 @@ el.printAllBtn.addEventListener("click", () => {
   window.print();
 });
 
-/** Builds one printable report card page for a student, limited to the selected items. */
+/** Builds one printable report card page for a student, limited to the selected items.
+ * Laid out as a compact header plus a multi-column grid of small tables (one per
+ * category, plus Attendance), so a student with many categories/items still fits
+ * on one printed page. */
 function buildReportCardSheet(studentId) {
   const student = RosterModule.students.find((s) => s.id === studentId);
   const detail = ReportCardModule.studentDetail(studentId);
@@ -2304,40 +2328,70 @@ function buildReportCardSheet(studentId) {
   subLine.textContent = [student.pronunciation, student.schoolId].filter(Boolean).join(" · ");
   sheet.appendChild(subLine);
 
+  const columns = document.createElement("div");
+  columns.className = "report-sheet-columns";
+
   detail.categories.forEach((category) => {
     const selectedItems = category.items.filter((item) => ReportCardModule.isItemSelected(item.id));
     if (selectedItems.length === 0) return;
-
-    const catHeading = document.createElement("h3");
-    catHeading.textContent = `${category.name} — ${
-      category.subtotal.percent === null ? "—" : `${category.subtotal.percent}%`
-    }`;
-    sheet.appendChild(catHeading);
-
-    const list = document.createElement("ul");
-    list.className = "report-sheet-item-list";
-    selectedItems.forEach((item) => {
-      const li = document.createElement("li");
-      const scoreText = item.record === "" ? "—" : item.record === "E" ? "Exempt" : `${item.record}/${item.maxPoints}`;
-      li.textContent = `${item.name}: ${scoreText}`;
-      list.appendChild(li);
-    });
-    sheet.appendChild(list);
+    columns.appendChild(
+      buildReportSheetTable(
+        `${category.name} — ${category.subtotal.percent === null ? "—" : `${category.subtotal.percent}%`}`,
+        selectedItems.map((item) => [
+          item.name,
+          item.record === "" ? "—" : item.record === "E" ? "Exempt" : `${item.record}/${item.maxPoints}`,
+        ])
+      )
+    );
   });
 
-  const attHeading = document.createElement("h3");
-  attHeading.textContent = `Attendance — ${detail.attendance.percent === null ? "—" : `${detail.attendance.percent}%`}`;
-  sheet.appendChild(attHeading);
-  const attLine = document.createElement("p");
-  attLine.textContent = `Attended: ${detail.attendance.attended} — Absences: ${detail.attendance.absences}`;
-  sheet.appendChild(attLine);
+  columns.appendChild(
+    buildReportSheetTable(
+      `Attendance — ${detail.attendance.percent === null ? "—" : `${detail.attendance.percent}%`}`,
+      [
+        ["Attended", String(detail.attendance.attended)],
+        ["Absences", String(detail.attendance.absences)],
+      ]
+    )
+  );
 
-  const totalLine = document.createElement("p");
-  totalLine.className = "report-sheet-total";
-  totalLine.textContent = `Total Score: ${detail.total === null ? "—" : `${detail.total}%`}`;
-  sheet.appendChild(totalLine);
+  sheet.appendChild(columns);
+
+  const totalBlock = document.createElement("div");
+  totalBlock.className = "report-sheet-total-block";
+  totalBlock.textContent = `Total Score: ${detail.total === null ? "—" : `${detail.total}%`}`;
+  sheet.appendChild(totalBlock);
 
   return sheet;
+}
+
+/** A small two-column table (label / value rows) with a heading — the compact building block for each category/attendance box in the print grid. */
+function buildReportSheetTable(heading, rows) {
+  const wrap = document.createElement("div");
+  wrap.className = "report-sheet-table-block";
+
+  const table = document.createElement("table");
+  table.className = "report-sheet-table";
+
+  const caption = document.createElement("caption");
+  caption.textContent = heading;
+  table.appendChild(caption);
+
+  const tbody = document.createElement("tbody");
+  rows.forEach(([label, value]) => {
+    const tr = document.createElement("tr");
+    const labelTd = document.createElement("td");
+    labelTd.textContent = label;
+    const valueTd = document.createElement("td");
+    valueTd.className = "report-sheet-score-col";
+    valueTd.textContent = value;
+    tr.append(labelTd, valueTd);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  wrap.appendChild(table);
+  return wrap;
 }
 
 // ===== Email collection (Google Form + QR code) =====

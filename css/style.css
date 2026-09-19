@@ -1485,6 +1485,7 @@ textarea {
 .report-sheet {
   font-family: Georgia, "Times New Roman", serif;
   color: #000;
+  font-size: 0.82rem;
 }
 
 .report-sheet-course {
@@ -1494,41 +1495,65 @@ textarea {
 }
 
 .report-sheet h2 {
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   margin: 0 0 4px;
 }
 
 .report-sheet-sub {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #444;
-  margin: 0 0 16px;
+  margin: 0 0 10px;
 }
 
-.report-sheet h3 {
-  font-size: 1rem;
-  margin: 14px 0 4px;
-  border-bottom: 1px solid #999;
-  padding-bottom: 2px;
+/* Multi-column grid of small tables (one per category, plus Attendance) —
+   lets a student with many categories/items still fit on one printed page. */
+.report-sheet-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 4px 18px;
+  align-items: start;
 }
 
-.report-sheet-item-list {
-  list-style: none;
-  margin: 0 0 4px;
-  padding: 0;
-  columns: 2;
-  column-gap: 24px;
-}
-
-.report-sheet-item-list li {
-  font-size: 0.9rem;
-  padding: 2px 0;
+.report-sheet-table-block {
   break-inside: avoid;
+  page-break-inside: avoid;
 }
 
-.report-sheet-total {
-  font-size: 1.15rem;
+.report-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-bottom: 8px;
+}
+
+.report-sheet-table caption {
+  caption-side: top;
+  text-align: left;
   font-weight: 700;
-  margin-top: 16px;
+  font-size: 0.82rem;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid #999;
+}
+
+.report-sheet-table td {
+  padding: 1px 4px;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+.report-sheet-table td.report-sheet-score-col {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-sheet-total-block {
+  grid-column: 1 / -1;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 2px solid #000;
 }
 
 .report-sheet-page-break {
@@ -1550,4 +1575,8 @@ textarea {
     left: 0;
     width: 100%;
   }
+  .report-sheet {
+    page-break-inside: avoid;
+  }
 }
+
