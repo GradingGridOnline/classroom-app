@@ -16,8 +16,11 @@ const MAX_RUBRIC_BANK = 30;
 const MAX_ACTIVE_RUBRICS = 10;
 const MAX_RUBRIC_POINTS = 20; // ceiling for the selectable point-value dropdown
 
-const FORMS_API_BASE = "https://forms.googleapis.com/v1/forms";
-const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3/files";
+// Named distinctly from emailcollect.js's FORMS_API_BASE/DRIVE_API_BASE —
+// non-module <script> tags share one global scope, so reusing those exact
+// names here would be a fatal "duplicate variable" SyntaxError.
+const PC_FORMS_API_BASE = "https://forms.googleapis.com/v1/forms";
+const PC_DRIVE_API_BASE = "https://www.googleapis.com/drive/v3/files";
 
 const PresentationCalcModule = {
   roster: [], // [{ studentId, classNumber, name, pronunciation, schoolId, group }]
@@ -216,7 +219,7 @@ const PresentationCalcModule = {
     }
 
     const label = kind === "audience" ? "Audience Scores" : "Teacher Scores";
-    const created = await this._apiFetch(FORMS_API_BASE, {
+    const created = await this._apiFetch(PC_FORMS_API_BASE, {
       method: "POST",
       body: JSON.stringify({ info: { title: `${courseName || "Class"} — ${label}` } }),
     });
@@ -261,7 +264,7 @@ const PresentationCalcModule = {
       });
     });
 
-    const batchResult = await this._apiFetch(`${FORMS_API_BASE}/${formId}:batchUpdate`, {
+    const batchResult = await this._apiFetch(`${PC_FORMS_API_BASE}/${formId}:batchUpdate`, {
       method: "POST",
       body: JSON.stringify({ requests }),
     });
@@ -274,14 +277,14 @@ const PresentationCalcModule = {
       questionMap[questionId] = info;
     });
 
-    await this._apiFetch(`${FORMS_API_BASE}/${formId}:setPublishSettings`, {
+    await this._apiFetch(`${PC_FORMS_API_BASE}/${formId}:setPublishSettings`, {
       method: "POST",
       body: JSON.stringify({
         publishSettings: { publishState: { isPublished: true, isAcceptingResponses: true } },
       }),
     });
 
-    const formDetail = await this._apiFetch(`${FORMS_API_BASE}/${formId}`);
+    const formDetail = await this._apiFetch(`${PC_FORMS_API_BASE}/${formId}`);
 
     const record = {
       id: `scoreform-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -307,7 +310,7 @@ const PresentationCalcModule = {
     const record = this.scoreForms.find((f) => f.id === recordId);
     if (!record) throw new Error("That form is no longer in the archive.");
 
-    const data = await this._apiFetch(`${FORMS_API_BASE}/${record.formId}/responses`);
+    const data = await this._apiFetch(`${PC_FORMS_API_BASE}/${record.formId}/responses`);
     const responses = data.responses || [];
 
     const entries = []; // { group, rubricText, value }
@@ -330,7 +333,7 @@ const PresentationCalcModule = {
     if (!record) return;
 
     try {
-      await this._apiFetch(`${DRIVE_API_BASE}/${record.formId}`, { method: "DELETE" });
+      await this._apiFetch(`${PC_DRIVE_API_BASE}/${record.formId}`, { method: "DELETE" });
     } catch (err) {
       this.scoreForms = this.scoreForms.filter((f) => f.id !== recordId);
       await this.save();
@@ -344,4 +347,3 @@ const PresentationCalcModule = {
 
 window.PresentationCalcModule = PresentationCalcModule;
 window.MAX_RUBRIC_POINTS = MAX_RUBRIC_POINTS;
-
