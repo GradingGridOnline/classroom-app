@@ -204,6 +204,22 @@ const PresentationCalcModule = {
    * assigned point value. Unlike email collection's form, this form is
    * never auto-deleted — it's archived in scoreForms so its data can be
    * recalled or the form destroyed later, at the user's choice.
+   *
+   * The audience form also gets a required "School ID" short-answer
+   * question first, so each response can be tied back to who submitted
+   * it, entered manually rather than picked from a roster dropdown.
+   *
+   * After publishing, the form is explicitly granted "anyone with the
+   * link" responder access (Drive permissions.create) — required since
+   * Google Forms created via API are no longer automatically reachable
+   * without it, and without this grant a school's Google org can fall
+   * back to requiring sign-in, which is exactly what can strand a
+   * student mid-form if they get logged out. With this grant, no
+   * sign-in is required at all, so there's nothing to get logged out
+   * of. Note: Google doesn't expose "resume a partially-filled
+   * response after reopening the link" via the Forms API — that's a
+   * Forms UI-only setting ("Edit after submit"), so this covers access,
+   * not mid-submission resume.
    */
   async createScoreForm(kind, courseName) {
     const activeList = this._activeList(kind);
@@ -225,13 +241,30 @@ const PresentationCalcModule = {
     });
     const formId = created.formId;
 
-    // Build one Group-header item plus one question per active rubric,
-    // for every group — tracking, in parallel, which array index maps
-    // to which (group, rubric) pair so the batchUpdate replies (which
-    // return question IDs in request order) can be matched back up.
+    // Build a School ID question (audience only), then one Group-header
+    // item plus one question per active rubric for every group —
+    // tracking, in parallel, which array index maps to which piece of
+    // meaning so the batchUpdate replies (which return question IDs in
+    // request order) can be matched back up.
     const requests = [];
-    const meta = []; // null for a header item; {group, rubricId, rubricText} for a question
+    const meta = []; // null for a header item; {type:"schoolId"} or {group, rubricId, rubricText} for a question
     let index = 0;
+
+    if (kind === "audience") {
+      requests.push({
+        createItem: {
+          item: {
+            title: "School ID",
+            description: "Enter your School ID — used to identify your scores.",
+            questionItem: {
+              question: { required: true, textQuestion: { paragraph: false } },
+            },
+          },
+          location: { index: index++ },
+        },
+      });
+      meta.push({ type: "schoolId" });
+    }
 
     groups.forEach((group) => {
       requests.push({
@@ -270,11 +303,13 @@ const PresentationCalcModule = {
     });
 
     const questionMap = {};
+    let schoolIdQuestionId = null;
     batchResult.replies.forEach((reply, i) => {
       const info = meta[i];
       if (!info) return; // a Group header item — no question to map
       const questionId = reply.createItem.questionId[0];
       questionMap[questionId] = info;
+      if (info.type === "schoolId") schoolIdQuestionId = questionId;
     });
 
     await this._apiFetch(`${PC_FORMS_API_BASE}/${formId}:setPublishSettings`, {
@@ -284,27 +319,52 @@ const PresentationCalcModule = {
       }),
     });
 
+    // Explicitly grant public "anyone with the link" responder access —
+    // see the method comment above for why this is necessary.
+    try {
+      await this._apiFetch(`${PC_DRIVE_API_BASE}/${formId}/permissions`, {
+        method: "POST",
+        body: JSON.stringify({ type: "anyone", view: "published", role: "reader" }),
+      });
+    } catch (err) {
+      // Non-fatal — the form still works for anyone the org's default
+      // sharing already covers; surface this so the user knows sign-in
+      // might still be required for some respondents.
+      console.warn("Couldn't grant public responder access:", err.message);
+    }
+
     const formDetail = await this._apiFetch(`${PC_FORMS_API_BASE}/${formId}`);
 
     const record = {
       id: `scoreform-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${label} — ${new Date().toLocaleDateString()}`,
       kind,
       formId,
       url: formDetail.responderUri,
       createdAt: new Date().toISOString(),
       questionMap,
+      schoolIdQuestionId,
     };
     this.scoreForms.push(record);
     await this.save();
     return record;
   },
 
+  /** Renames an archived form's display name (in this app only — doesn't change the Google Form's own title). */
+  renameScoreForm(recordId, name) {
+    const record = this.scoreForms.find((f) => f.id === recordId);
+    if (!record) return;
+    const trimmed = (name || "").trim();
+    record.name = trimmed || record.name;
+  },
+
   /**
    * Reads every response currently on an archived form and maps each
    * answer back to its (group, rubric) via the form's stored
-   * questionMap. The form itself is left untouched — nothing is
-   * deleted here, so this can be called repeatedly as more responses
-   * come in.
+   * questionMap. Audience forms also attach the respondent's School ID
+   * (from that response's School ID question) to each entry. The form
+   * itself is left untouched — nothing is deleted here, so this can be
+   * called repeatedly as more responses come in.
    */
   async recallScoreFormResponses(recordId) {
     const record = this.scoreForms.find((f) => f.id === recordId);
@@ -313,14 +373,22 @@ const PresentationCalcModule = {
     const data = await this._apiFetch(`${PC_FORMS_API_BASE}/${record.formId}/responses`);
     const responses = data.responses || [];
 
-    const entries = []; // { group, rubricText, value }
+    const entries = []; // { schoolId, group, rubricText, value }
     responses.forEach((response) => {
-      Object.entries(response.answers || {}).forEach(([questionId, answer]) => {
+      const answers = response.answers || {};
+
+      let schoolId = "";
+      if (record.schoolIdQuestionId && answers[record.schoolIdQuestionId]) {
+        const a = answers[record.schoolIdQuestionId];
+        schoolId = a.textAnswers && a.textAnswers.answers[0] ? a.textAnswers.answers[0].value.trim() : "";
+      }
+
+      Object.entries(answers).forEach(([questionId, answer]) => {
         const info = record.questionMap[questionId];
-        if (!info) return;
+        if (!info || info.type === "schoolId") return; // already handled above
         const value =
           answer.textAnswers && answer.textAnswers.answers[0] ? answer.textAnswers.answers[0].value : "";
-        entries.push({ group: info.group, rubricText: info.rubricText, value });
+        entries.push({ schoolId, group: info.group, rubricText: info.rubricText, value });
       });
     });
 

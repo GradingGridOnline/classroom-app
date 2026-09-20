@@ -2794,7 +2794,7 @@ async function handleGetScores(kind) {
     const course = CoursesModule.find(RosterModule.currentCourseId);
     const record = await PresentationCalcModule.createScoreForm(kind, course ? course.name : "");
     renderScoreForms();
-    showScoreQr(record.url, `${kind === "audience" ? "Audience" : "Teacher"} Scores — scan to open the form`);
+    showScoreQr(record.url, `${record.name} — scan to open the form`);
     el.getScoresStatus.textContent = "";
   } catch (err) {
     el.getScoresStatus.textContent = `Couldn't create form: ${err.message}`;
@@ -2810,7 +2810,7 @@ function renderScoreForms() {
   if (PresentationCalcModule.scoreForms.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 3;
+    td.colSpan = 4;
     td.className = "hint";
     td.textContent = "No forms created yet.";
     tr.appendChild(td);
@@ -2823,6 +2823,17 @@ function renderScoreForms() {
 
   records.forEach((record) => {
     const tr = document.createElement("tr");
+
+    const nameTd = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = record.name || "";
+    nameInput.addEventListener("change", async () => {
+      PresentationCalcModule.renameScoreForm(record.id, nameInput.value);
+      await savePresentationCalcThen();
+    });
+    nameTd.appendChild(nameInput);
+    tr.appendChild(nameTd);
 
     const typeTd = document.createElement("td");
     typeTd.textContent = record.kind === "audience" ? "Audience" : "Teacher";
@@ -2842,7 +2853,7 @@ function renderScoreForms() {
     qrBtn.textContent = "Show QR";
     qrBtn.addEventListener("click", () => {
       hideScoreRecall();
-      showScoreQr(record.url, `${record.kind === "audience" ? "Audience" : "Teacher"} Scores — scan to open the form`);
+      showScoreQr(record.url, `${record.name || (record.kind === "audience" ? "Audience Scores" : "Teacher Scores")} — scan to open the form`);
     });
     actionsTd.appendChild(qrBtn);
 
@@ -2871,8 +2882,7 @@ async function recallScoreForm(recordId) {
   try {
     const { record, entries, responseCount } = await PresentationCalcModule.recallScoreFormResponses(recordId);
 
-    el.scoreRecallHeading.textContent =
-      `${record.kind === "audience" ? "Audience" : "Teacher"} Scores — ${responseCount} response(s)`;
+    el.scoreRecallHeading.textContent = `${record.name} — ${responseCount} response(s)`;
     el.scoreRecallContent.innerHTML = "";
 
     if (entries.length === 0) {
@@ -2899,7 +2909,9 @@ async function recallScoreForm(recordId) {
           list.className = "consultation-item-list";
           byGroup.get(group).forEach((e) => {
             const li = document.createElement("li");
-            li.textContent = `${e.rubricText}: ${e.value}`;
+            li.textContent = e.schoolId
+              ? `${e.rubricText}: ${e.value} (School ID: ${e.schoolId})`
+              : `${e.rubricText}: ${e.value}`;
             list.appendChild(li);
           });
           el.scoreRecallContent.appendChild(list);
