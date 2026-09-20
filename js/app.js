@@ -2792,7 +2792,7 @@ async function handleGetScores(kind) {
   el.getScoresStatus.textContent = "Creating form…";
   try {
     const course = CoursesModule.find(RosterModule.currentCourseId);
-    const record = await PresentationCalcModule.createScoreForm(kind, course ? course.name : "");
+    const record = await PresentationCalcModule.createScoreForm(kind, course ? course.name : "", RosterModule.students);
     renderScoreForms();
     showScoreQr(record.url, `${record.name} — scan to open the form`);
     el.getScoresStatus.textContent = "";
@@ -2876,6 +2876,11 @@ function renderScoreForms() {
   });
 }
 
+/** Since the "Which student are you?" dropdown answer is already a self-identifying "Name — SchoolID" label, it's shown as-is. */
+function describeRespondent(e) {
+  return e.schoolId ? ` (${e.schoolId})` : "";
+}
+
 async function recallScoreForm(recordId) {
   hideScoreQr();
   el.getScoresStatus.textContent = "Recalling…";
@@ -2909,9 +2914,7 @@ async function recallScoreForm(recordId) {
           list.className = "consultation-item-list";
           byGroup.get(group).forEach((e) => {
             const li = document.createElement("li");
-            li.textContent = e.schoolId
-              ? `${e.rubricText}: ${e.value} (School ID: ${e.schoolId})`
-              : `${e.rubricText}: ${e.value}`;
+            li.textContent = `${e.rubricText}: ${e.value}` + describeRespondent(e);
             list.appendChild(li);
           });
           el.scoreRecallContent.appendChild(list);

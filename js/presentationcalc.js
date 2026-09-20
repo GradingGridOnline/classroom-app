@@ -214,14 +214,10 @@ const PresentationCalcModule = {
    * Google Forms created via API are no longer automatically reachable
    * without it, and without this grant a school's Google org can fall
    * back to requiring sign-in, which is exactly what can strand a
-   * student mid-form if they get logged out. With this grant, no
-   * sign-in is required at all, so there's nothing to get logged out
-   * of. Note: Google doesn't expose "resume a partially-filled
-   * response after reopening the link" via the Forms API — that's a
-   * Forms UI-only setting ("Edit after submit"), so this covers access,
-   * not mid-submission resume.
+   * student mid-form if they get logged out. No sign-in is required at
+   * all — so there's nothing to get logged out of.
    */
-  async createScoreForm(kind, courseName) {
+  async createScoreForm(kind, courseName, roster) {
     const activeList = this._activeList(kind);
     const selected = activeList.filter((e) => e.rubricId && this.findRubric(e.rubricId));
     if (selected.length === 0) {
@@ -241,23 +237,39 @@ const PresentationCalcModule = {
     });
     const formId = created.formId;
 
-    // Build a School ID question (audience only), then one Group-header
-    // item plus one question per active rubric for every group —
-    // tracking, in parallel, which array index maps to which piece of
-    // meaning so the batchUpdate replies (which return question IDs in
-    // request order) can be matched back up.
+    // Build a "Who are you?" question (audience only), then one
+    // Group-header item plus one question per active rubric for every
+    // group — tracking, in parallel, which array index maps to which
+    // piece of meaning so the batchUpdate replies (which return
+    // question IDs in request order) can be matched back up.
     const requests = [];
     const meta = []; // null for a header item; {type:"schoolId"} or {group, rubricId, rubricText} for a question
     let index = 0;
 
+    // A dropdown listing each student's name alongside their School ID
+    // — not a bare list of numbers — so it's obvious at a glance
+    // whether the highlighted option is really theirs. This targets
+    // accidental misclicks (picking a neighboring entry by mistake),
+    // not deliberate impersonation, which isn't a concern here since
+    // School IDs aren't secret among classmates.
     if (kind === "audience") {
+      const options = (roster || [])
+        .filter((s) => s.schoolId)
+        .slice()
+        .sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0))
+        .map((s) => ({ value: `${s.name || "(unnamed)"} — ${s.schoolId}` }));
+
+      if (options.length === 0) {
+        throw new Error("No students on the roster have a School ID yet — add those first.");
+      }
+
       requests.push({
         createItem: {
           item: {
-            title: "School ID",
-            description: "Enter your School ID — used to identify your scores.",
+            title: "Which student are you?",
+            description: "Find your own name — double-check before submitting.",
             questionItem: {
-              question: { required: true, textQuestion: { paragraph: false } },
+              question: { required: true, choiceQuestion: { type: "DROP_DOWN", options } },
             },
           },
           location: { index: index++ },
@@ -361,10 +373,10 @@ const PresentationCalcModule = {
   /**
    * Reads every response currently on an archived form and maps each
    * answer back to its (group, rubric) via the form's stored
-   * questionMap. Audience forms also attach the respondent's School ID
-   * (from that response's School ID question) to each entry. The form
-   * itself is left untouched — nothing is deleted here, so this can be
-   * called repeatedly as more responses come in.
+   * questionMap. Audience forms also attach the respondent's chosen
+   * "Which student are you?" answer (name — School ID) to each entry.
+   * The form itself is left untouched — nothing is deleted here, so
+   * this can be called repeatedly as more responses come in.
    */
   async recallScoreFormResponses(recordId) {
     const record = this.scoreForms.find((f) => f.id === recordId);
