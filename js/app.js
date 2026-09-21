@@ -2876,7 +2876,7 @@ function renderScoreForms() {
   });
 }
 
-/** Since the "Which student are you?" dropdown answer is already a self-identifying "Name — SchoolID" label, it's shown as-is. */
+/** The School ID question is a free-text field, so its answer is shown as entered. */
 function describeRespondent(e) {
   return e.schoolId ? ` (${e.schoolId})` : "";
 }

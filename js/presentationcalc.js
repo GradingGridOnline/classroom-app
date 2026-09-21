@@ -246,30 +246,16 @@ const PresentationCalcModule = {
     const meta = []; // null for a header item; {type:"schoolId"} or {group, rubricId, rubricText} for a question
     let index = 0;
 
-    // A dropdown listing each student's name alongside their School ID
-    // — not a bare list of numbers — so it's obvious at a glance
-    // whether the highlighted option is really theirs. This targets
-    // accidental misclicks (picking a neighboring entry by mistake),
-    // not deliberate impersonation, which isn't a concern here since
-    // School IDs aren't secret among classmates.
+    // A required free-text field — the respondent types their own
+    // School ID directly, rather than picking from a list.
     if (kind === "audience") {
-      const options = (roster || [])
-        .filter((s) => s.schoolId)
-        .slice()
-        .sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0))
-        .map((s) => ({ value: `${s.name || "(unnamed)"} — ${s.schoolId}` }));
-
-      if (options.length === 0) {
-        throw new Error("No students on the roster have a School ID yet — add those first.");
-      }
-
       requests.push({
         createItem: {
           item: {
-            title: "Which student are you?",
-            description: "Find your own name — double-check before submitting.",
+            title: "School ID",
+            description: "Enter your School ID.",
             questionItem: {
-              question: { required: true, choiceQuestion: { type: "DROP_DOWN", options } },
+              question: { required: true, textQuestion: { paragraph: false } },
             },
           },
           location: { index: index++ },
