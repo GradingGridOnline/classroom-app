@@ -1655,18 +1655,16 @@ textarea {
   body {
     height: 100%;
   }
-  body * {
-    visibility: hidden;
-  }
-  #print-area,
-  #print-area * {
-    visibility: visible;
+  /* display:none (not visibility:hidden) actually removes the rest of
+     the app from layout — visibility:hidden keeps it fully laid out
+     (just invisible), so its full height still counts toward the
+     document's total printable height, causing extra blank pages to
+     get generated past whatever #print-area itself needs. */
+  body > *:not(#print-area) {
+    display: none !important;
   }
   #print-area {
     display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
   }
