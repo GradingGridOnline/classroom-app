@@ -799,10 +799,13 @@ function renderSeating() {
 /**
  * Builds a printable sheet of the current seating arrangement, from the
  * teacher's own viewpoint (same row/column order as the on-screen
- * editor — unmirrored, unlike the pop-out). Landscape A4, with four
- * fill-in boxes across the bottom: Lesson Contents, Homework, Date of
- * Lesson (left blank for handwriting), and Course Information (course
- * name + assigned period/time, pulled from Global Settings).
+ * editor — unmirrored, unlike the pop-out). Landscape A4. Desks scale to
+ * fill the available grid space, each showing pronunciation (top),
+ * name, and School ID (bottom), all top-left justified. Three thin
+ * fill-in boxes — Lesson Contents, Homework, Date of Lesson — are
+ * pinned to the bottom of the page for handwriting; course name and
+ * period/time (from Global Settings) appear in the page heading instead
+ * of a fourth box.
  */
 function buildSeatingPrintSheet() {
   const course = CoursesModule.find(RosterModule.currentCourseId);
@@ -810,14 +813,26 @@ function buildSeatingPrintSheet() {
   const sheet = document.createElement("div");
   sheet.className = "seating-print-sheet";
 
+  const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
   const heading = document.createElement("h2");
-  heading.textContent = course ? `${course.name} — Seating Chart` : "Seating Chart";
+  heading.textContent = [course ? course.name : "Seating Chart", periodLabel].filter(Boolean).join(" — ");
   sheet.appendChild(heading);
 
   const grid = document.createElement("div");
   grid.className = "seating-print-grid";
   grid.style.gridTemplateColumns = `repeat(${SeatingModule.cols}, 1fr)`;
   grid.style.gridTemplateRows = `repeat(${SeatingModule.rows}, 1fr)`;
+  // Scales desk text to the grid's actual dimensions (rows/cols), the
+  // same technique the pop-out uses for its live window — here based on
+  // fixed A4-landscape-minus-margins measurements, since a print page's
+  // size is known ahead of time. Approximate but self-consistent.
+  const PRINT_GRID_WIDTH_PX = 970; // ~257mm usable width at 96dpi
+  const PRINT_GRID_HEIGHT_PX = 480; // ~ remaining height after heading/front-label/boxes
+  const deskWidth = PRINT_GRID_WIDTH_PX / SeatingModule.cols;
+  const deskHeight = PRINT_GRID_HEIGHT_PX / SeatingModule.rows;
+  const deskSize = Math.min(deskWidth, deskHeight);
+  grid.style.setProperty("--print-name-size", `${Math.max(7, Math.round(deskSize * 0.15))}px`);
+  grid.style.setProperty("--print-subtext-size", `${Math.max(6, Math.round(deskSize * 0.11))}px`);
 
   for (let r = 0; r < SeatingModule.rows; r++) {
     for (let c = 0; c < SeatingModule.cols; c++) {
@@ -843,10 +858,31 @@ function buildSeatingPrintSheet() {
         desk.appendChild(badge);
       }
 
-      const nameEl = document.createElement("span");
-      nameEl.className = "print-desk-name";
-      nameEl.textContent = student ? student.name || "" : label || "";
-      desk.appendChild(nameEl);
+      if (student) {
+        if (student.pronunciation) {
+          const pronEl = document.createElement("span");
+          pronEl.className = "print-desk-pronunciation";
+          pronEl.textContent = student.pronunciation;
+          desk.appendChild(pronEl);
+        }
+
+        const nameEl = document.createElement("span");
+        nameEl.className = "print-desk-name";
+        nameEl.textContent = student.name || "";
+        desk.appendChild(nameEl);
+
+        if (student.schoolId) {
+          const idEl = document.createElement("span");
+          idEl.className = "print-desk-schoolid";
+          idEl.textContent = student.schoolId;
+          desk.appendChild(idEl);
+        }
+      } else if (label) {
+        const labelEl = document.createElement("span");
+        labelEl.className = "print-desk-name";
+        labelEl.textContent = label;
+        desk.appendChild(labelEl);
+      }
 
       grid.appendChild(desk);
     }
@@ -860,22 +896,16 @@ function buildSeatingPrintSheet() {
 
   const boxRow = document.createElement("div");
   boxRow.className = "seating-print-box-row";
-
-  const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
-  const courseInfoLines = [course ? course.name : "", periodLabel].filter(Boolean);
-
-  boxRow.appendChild(buildSeatingPrintBox("Lesson Contents", []));
-  boxRow.appendChild(buildSeatingPrintBox("Homework", []));
-  boxRow.appendChild(buildSeatingPrintBox("Date of Lesson", []));
-  boxRow.appendChild(buildSeatingPrintBox("Course Information", courseInfoLines));
-
+  boxRow.appendChild(buildSeatingPrintBox("Lesson Contents"));
+  boxRow.appendChild(buildSeatingPrintBox("Homework"));
+  boxRow.appendChild(buildSeatingPrintBox("Date of Lesson"));
   sheet.appendChild(boxRow);
 
   return sheet;
 }
 
-/** One labeled fill-in rectangle for the seating print sheet's bottom row. prefilledLines, if given, are shown inside; otherwise the box is left blank for handwriting. */
-function buildSeatingPrintBox(label, prefilledLines) {
+/** One labeled, blank fill-in rectangle (~10:1 width:height) for the seating print sheet's bottom row — left blank for handwriting. */
+function buildSeatingPrintBox(label) {
   const box = document.createElement("div");
   box.className = "seating-print-box";
 
@@ -883,17 +913,6 @@ function buildSeatingPrintBox(label, prefilledLines) {
   labelEl.className = "seating-print-box-label";
   labelEl.textContent = label;
   box.appendChild(labelEl);
-
-  if (prefilledLines && prefilledLines.length > 0) {
-    const content = document.createElement("div");
-    content.className = "seating-print-box-content";
-    prefilledLines.forEach((line) => {
-      const p = document.createElement("p");
-      p.textContent = line;
-      content.appendChild(p);
-    });
-    box.appendChild(content);
-  }
 
   return box;
 }
