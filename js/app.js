@@ -73,6 +73,7 @@ const el = {
   clearSeatingBtn: document.getElementById("clear-seating-btn"),
   popoutBtn: document.getElementById("popout-btn"),
   togglePopoutGroupsBtn: document.getElementById("toggle-popout-groups-btn"),
+  printSeatingBtn: document.getElementById("print-seating-btn"),
   saveSeatingBtn: document.getElementById("save-seating-btn"),
   unseatedList: document.getElementById("unseated-list"),
   unseatedCount: document.getElementById("unseated-count"),
@@ -126,6 +127,8 @@ const el = {
   settingsBtn: document.getElementById("settings-btn"),
   settingsPanel: document.getElementById("settings-panel"),
   themeList: document.getElementById("theme-list"),
+  periodsTbody: document.getElementById("periods-tbody"),
+  addPeriodBtn: document.getElementById("add-period-btn"),
 };
 
 let selectedStudentId = null; // currently-selected student in the "Unseated" list
@@ -186,6 +189,101 @@ function renderThemeList() {
   });
 }
 
+// ===== Settings / periods =====
+
+async function savePeriodsThen(after) {
+  try {
+    await PeriodsModule.save();
+  } catch (err) {
+    el.courseStatus.textContent = `Couldn't save periods: ${err.message}`;
+  }
+  if (after) after();
+}
+
+function renderPeriodsList() {
+  el.periodsTbody.innerHTML = "";
+
+  if (PeriodsModule.periods.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.className = "hint";
+    td.textContent = 'No periods yet — click "+ Add Period" below.';
+    tr.appendChild(td);
+    el.periodsTbody.appendChild(tr);
+    return;
+  }
+
+  PeriodsModule.periods.forEach((period) => {
+    const tr = document.createElement("tr");
+
+    const nameTd = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = period.name;
+    nameInput.addEventListener("change", async () => {
+      PeriodsModule.update(period.id, { name: nameInput.value });
+      await savePeriodsThen(renderCourseList); // course dropdowns show period labels too
+    });
+    nameTd.appendChild(nameInput);
+    tr.appendChild(nameTd);
+
+    const startTd = document.createElement("td");
+    const startInput = document.createElement("input");
+    startInput.type = "time";
+    startInput.value = period.startTime || "";
+    startInput.addEventListener("change", async () => {
+      PeriodsModule.update(period.id, { startTime: startInput.value });
+      await savePeriodsThen(renderCourseList);
+    });
+    startTd.appendChild(startInput);
+    tr.appendChild(startTd);
+
+    const endTd = document.createElement("td");
+    const endInput = document.createElement("input");
+    endInput.type = "time";
+    endInput.value = period.endTime || "";
+    endInput.addEventListener("change", async () => {
+      PeriodsModule.update(period.id, { endTime: endInput.value });
+      await savePeriodsThen(renderCourseList);
+    });
+    endTd.appendChild(endInput);
+    tr.appendChild(endTd);
+
+    const removeTd = document.createElement("td");
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn btn-ghost btn-small";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Remove this period";
+    removeBtn.addEventListener("click", async () => {
+      PeriodsModule.remove(period.id);
+      // Any course pointing at the removed period falls back to "No period".
+      CoursesModule.courses.forEach((c) => {
+        if (c.periodId === period.id) c.periodId = null;
+      });
+      await savePeriodsThen(() => {
+        renderPeriodsList();
+        renderCourseList();
+      });
+      await CoursesModule.save().catch(() => {});
+    });
+    removeTd.appendChild(removeBtn);
+    tr.appendChild(removeTd);
+
+    el.periodsTbody.appendChild(tr);
+  });
+}
+
+el.addPeriodBtn.addEventListener("click", async () => {
+  try {
+    PeriodsModule.add(`Period ${PeriodsModule.periods.length + 1}`, "", "");
+    await savePeriodsThen(renderPeriodsList);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
 function renderAuth() {
   const signedIn = storage.isSignedIn();
   el.signInBtn.hidden = signedIn;
@@ -224,8 +322,10 @@ async function showCourses() {
   el.courseSection.hidden = false;
   el.courseStatus.textContent = "Loading courses…";
   try {
+    await PeriodsModule.load();
     await CoursesModule.load();
     renderCourseList();
+    renderPeriodsList();
     el.courseStatus.textContent = "";
   } catch (err) {
     el.courseStatus.textContent = `Couldn't load courses: ${err.message}`;
@@ -244,6 +344,29 @@ function renderCourseList() {
     nameSpan.className = "course-name";
     nameSpan.textContent = course.name;
     nameSpan.addEventListener("click", () => openCourseDetail(course));
+
+    const periodSelect = document.createElement("select");
+    periodSelect.className = "course-period-select";
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "";
+    noneOpt.textContent = "No period";
+    periodSelect.appendChild(noneOpt);
+    PeriodsModule.periods.forEach((period) => {
+      const opt = document.createElement("option");
+      opt.value = period.id;
+      opt.textContent = PeriodsModule.label(period.id);
+      if (course.periodId === period.id) opt.selected = true;
+      periodSelect.appendChild(opt);
+    });
+    periodSelect.addEventListener("click", (e) => e.stopPropagation());
+    periodSelect.addEventListener("change", async () => {
+      CoursesModule.setPeriod(course.id, periodSelect.value);
+      try {
+        await CoursesModule.save();
+      } catch (err) {
+        el.courseStatus.textContent = `Couldn't save: ${err.message}`;
+      }
+    });
 
     const renameBtn = document.createElement("button");
     renameBtn.className = "btn btn-ghost btn-small";
@@ -276,7 +399,7 @@ function renderCourseList() {
       });
     });
 
-    li.append(nameSpan, renameBtn, deleteBtn);
+    li.append(nameSpan, periodSelect, renameBtn, deleteBtn);
     el.courseList.appendChild(li);
   });
 }
@@ -673,6 +796,108 @@ function renderSeating() {
  * Group number (text input) and label (button, opens a prompt) are
  * available on any active desk, regardless of occupancy.
  */
+/**
+ * Builds a printable sheet of the current seating arrangement, from the
+ * teacher's own viewpoint (same row/column order as the on-screen
+ * editor — unmirrored, unlike the pop-out). Landscape A4, with four
+ * fill-in boxes across the bottom: Lesson Contents, Homework, Date of
+ * Lesson (left blank for handwriting), and Course Information (course
+ * name + assigned period/time, pulled from Global Settings).
+ */
+function buildSeatingPrintSheet() {
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+
+  const sheet = document.createElement("div");
+  sheet.className = "seating-print-sheet";
+
+  const heading = document.createElement("h2");
+  heading.textContent = course ? `${course.name} — Seating Chart` : "Seating Chart";
+  sheet.appendChild(heading);
+
+  const grid = document.createElement("div");
+  grid.className = "seating-print-grid";
+  grid.style.gridTemplateColumns = `repeat(${SeatingModule.cols}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${SeatingModule.rows}, 1fr)`;
+
+  for (let r = 0; r < SeatingModule.rows; r++) {
+    for (let c = 0; c < SeatingModule.cols; c++) {
+      const active = SeatingModule.isActive(r, c);
+      const studentId = active ? SeatingModule.studentAt(r, c) : null;
+      const student = studentId ? RosterModule.students.find((s) => s.id === studentId) : null;
+      const group = active ? SeatingModule.getGroup(r, c) : 0;
+      const label = active ? SeatingModule.getLabel(r, c) : "";
+
+      const desk = document.createElement("div");
+      desk.className =
+        "print-desk" +
+        (!active ? " print-desk-inactive" : student ? " print-desk-occupied" : " print-desk-empty");
+      if (group) {
+        desk.classList.add("print-desk-grouped");
+        desk.style.setProperty("--group-hue", String(groupHueDeg(group)));
+      }
+
+      if (group) {
+        const badge = document.createElement("span");
+        badge.className = "print-desk-group-badge";
+        badge.textContent = String(group);
+        desk.appendChild(badge);
+      }
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "print-desk-name";
+      nameEl.textContent = student ? student.name || "" : label || "";
+      desk.appendChild(nameEl);
+
+      grid.appendChild(desk);
+    }
+  }
+  sheet.appendChild(grid);
+
+  const frontLabel = document.createElement("p");
+  frontLabel.className = "seating-print-front-label";
+  frontLabel.textContent = "Front of Classroom";
+  sheet.appendChild(frontLabel);
+
+  const boxRow = document.createElement("div");
+  boxRow.className = "seating-print-box-row";
+
+  const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
+  const courseInfoLines = [course ? course.name : "", periodLabel].filter(Boolean);
+
+  boxRow.appendChild(buildSeatingPrintBox("Lesson Contents", []));
+  boxRow.appendChild(buildSeatingPrintBox("Homework", []));
+  boxRow.appendChild(buildSeatingPrintBox("Date of Lesson", []));
+  boxRow.appendChild(buildSeatingPrintBox("Course Information", courseInfoLines));
+
+  sheet.appendChild(boxRow);
+
+  return sheet;
+}
+
+/** One labeled fill-in rectangle for the seating print sheet's bottom row. prefilledLines, if given, are shown inside; otherwise the box is left blank for handwriting. */
+function buildSeatingPrintBox(label, prefilledLines) {
+  const box = document.createElement("div");
+  box.className = "seating-print-box";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "seating-print-box-label";
+  labelEl.textContent = label;
+  box.appendChild(labelEl);
+
+  if (prefilledLines && prefilledLines.length > 0) {
+    const content = document.createElement("div");
+    content.className = "seating-print-box-content";
+    prefilledLines.forEach((line) => {
+      const p = document.createElement("p");
+      p.textContent = line;
+      content.appendChild(p);
+    });
+    box.appendChild(content);
+  }
+
+  return box;
+}
+
 function buildDeskElement(r, c) {
   const active = SeatingModule.isActive(r, c);
   const studentId = SeatingModule.studentAt(r, c);
@@ -928,6 +1153,12 @@ el.togglePopoutGroupsBtn.addEventListener("click", async () => {
   } catch (err) {
     el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
   }
+});
+
+el.printSeatingBtn.addEventListener("click", () => {
+  el.printArea.innerHTML = "";
+  el.printArea.appendChild(buildSeatingPrintSheet());
+  window.print();
 });
 
 el.saveSeatingBtn.addEventListener("click", async () => {
@@ -2881,6 +3112,13 @@ function describeRespondent(e) {
   return e.schoolId ? ` (${e.schoolId})` : "";
 }
 
+/** True if a typed School ID matches a real student on the current roster — used to flag bad entries on Recall. */
+function isKnownSchoolId(schoolId) {
+  const trimmed = (schoolId || "").trim();
+  if (!trimmed) return false;
+  return RosterModule.students.some((s) => String(s.schoolId || "").trim() === trimmed);
+}
+
 async function recallScoreForm(recordId) {
   hideScoreQr();
   el.getScoresStatus.textContent = "Recalling…";
@@ -2915,6 +3153,10 @@ async function recallScoreForm(recordId) {
           byGroup.get(group).forEach((e) => {
             const li = document.createElement("li");
             li.textContent = `${e.rubricText}: ${e.value}` + describeRespondent(e);
+            if (!isKnownSchoolId(e.schoolId)) {
+              li.classList.add("recall-unknown-id");
+              li.textContent += " ⚠ School ID not found on roster";
+            }
             list.appendChild(li);
           });
           el.scoreRecallContent.appendChild(list);

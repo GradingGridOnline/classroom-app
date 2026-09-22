@@ -1201,6 +1201,11 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.recall-unknown-id {
+  color: #c0392b;
+  font-weight: 600;
+}
+
 .infraction-edit-list {
   list-style: none;
   margin: 0 0 10px;
@@ -1663,5 +1668,146 @@ textarea {
   .report-sheet {
     page-break-inside: avoid;
   }
+}
+
+/* ----- Seating Chart print sheet ----- */
+
+@page seating-landscape-a4 {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
+.seating-print-sheet {
+  page: seating-landscape-a4;
+  font-family: Georgia, "Times New Roman", serif;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.seating-print-sheet h2 {
+  font-size: 1.1rem;
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.seating-print-grid {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+}
+
+.print-desk {
+  position: relative;
+  border: 1px solid #999;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2px;
+  font-size: 0.72rem;
+  overflow: hidden;
+}
+
+.print-desk-inactive {
+  border-color: transparent;
+}
+
+.print-desk-empty {
+  border-style: dashed;
+  color: #999;
+}
+
+.print-desk-grouped {
+  background: hsl(var(--group-hue, 0), 70%, 92%);
+  border-color: hsl(var(--group-hue, 0), 50%, 55%);
+}
+
+.print-desk-group-badge {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #555;
+}
+
+.print-desk-name {
+  font-weight: 600;
+}
+
+.seating-print-front-label {
+  text-align: center;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin: 6px 0 10px;
+}
+
+.seating-print-box-row {
+  display: flex;
+  gap: 8px;
+  height: 90px;
+  flex-shrink: 0;
+}
+
+.seating-print-box {
+  flex: 1;
+  border: 1px solid #333;
+  border-radius: 4px;
+  position: relative;
+  padding: 14px 6px 4px;
+}
+
+.seating-print-box-label {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #444;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.seating-print-box-content p {
+  margin: 0 0 2px;
+  font-size: 0.8rem;
+}
+
+/* ----- Settings: Periods manager ----- */
+
+.periods-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+
+.periods-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding: 2px 4px;
+}
+
+.periods-table td {
+  padding: 3px 4px;
+}
+
+.periods-table input[type="text"] {
+  width: 100%;
+}
+
+.periods-table input[type="time"] {
+  width: 100px;
+}
+
+/* ----- Course list: period assignment ----- */
+
+.course-period-select {
+  margin: 0 8px;
+  font-size: 0.8rem;
 }
 

@@ -11,7 +11,15 @@ const CoursesModule = {
   async load() {
     const data = await storage.loadFile("courses.json");
     this.courses = data && Array.isArray(data.courses) ? data.courses : [];
+    this._backfillPeriodId();
     return this.courses;
+  },
+
+  /** Ensures older saved courses (from before period assignment existed) get a sensible default. */
+  _backfillPeriodId() {
+    this.courses.forEach((c) => {
+      if (!("periodId" in c)) c.periodId = null;
+    });
   },
 
   async save() {
@@ -27,9 +35,16 @@ const CoursesModule = {
     const course = {
       id: `course-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: trimmed,
+      periodId: null,
     };
     this.courses.push(course);
     return course;
+  },
+
+  /** Assigns (or clears, with null) which global Period this course meets during. */
+  setPeriod(id, periodId) {
+    const course = this.find(id);
+    if (course) course.periodId = periodId || null;
   },
 
   rename(id, name) {
