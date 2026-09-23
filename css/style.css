@@ -1677,7 +1677,7 @@ textarea {
 
 @page seating-landscape-a4 {
   size: A4 landscape;
-  margin: 15mm;
+  margin: 10mm 0.5in;
 }
 
 .seating-print-sheet {
