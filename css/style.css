@@ -20,8 +20,8 @@
   --paper: #0a0e1a;
   --ink: #d7e6ff;
   --ink-soft: #6e84ac;
-  --green: #ff2e6e;
-  --green-dark: #ff5c8a;
+  --green: #0066ff;
+  --green-dark: #3d8bff;
   --marker: #ffc53d;
   --line: #24304a;
   --card: #10182b;
@@ -30,7 +30,7 @@
   --radius: 2px;
   --radius-small: 2px;
   --card-shadow: 0 0 0 1px rgba(33, 230, 193, 0.15), 0 0 30px rgba(33, 230, 193, 0.06);
-  --glow: 0 0 10px rgba(255, 46, 110, 0.55);
+  --glow: 0 0 10px rgba(0, 102, 255, 0.55);
   --focus-glow: 0 0 0 2px rgba(33, 230, 193, 0.35), 0 0 12px rgba(33, 230, 193, 0.4);
 }
 
@@ -160,7 +160,7 @@ body {
 }
 
 [data-theme="cyberpunk"] .btn-primary:hover {
-  box-shadow: 0 0 16px rgba(255, 46, 110, 0.85);
+  box-shadow: 0 0 16px rgba(0, 102, 255, 0.85);
 }
 
 [data-theme="cyberpunk"] .btn-ghost {
@@ -420,7 +420,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .course-name:hover {
-  text-shadow: 0 0 8px rgba(255, 46, 110, 0.6);
+  text-shadow: 0 0 8px rgba(0, 102, 255, 0.6);
 }
 
 /* ===== Settings menu & theme picker ===== */
@@ -496,7 +496,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .theme-item-active {
-  text-shadow: 0 0 6px rgba(255, 46, 110, 0.6);
+  text-shadow: 0 0 6px rgba(0, 102, 255, 0.6);
 }
 
 [data-theme="cyberpunk"] .header h1,
@@ -536,7 +536,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .tab-btn-active {
-  text-shadow: 0 0 6px rgba(255, 46, 110, 0.5);
+  text-shadow: 0 0 6px rgba(0, 102, 255, 0.5);
 }
 
 .panel-toolbar {
@@ -1421,9 +1421,9 @@ textarea {
 
 [data-theme="cyberpunk"] .weight-total-over {
   background: var(--card);
-  border-color: #ff2e6e;
-  color: #ff2e6e;
-  box-shadow: 0 0 8px rgba(255, 46, 110, 0.5);
+  border-color: #ff3b3b;
+  color: #ff3b3b;
+  box-shadow: 0 0 8px rgba(255, 59, 59, 0.5);
 }
 
 /* Scoring settings: category management with nested item editing */
