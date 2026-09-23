@@ -899,6 +899,7 @@ function buildSeatingPrintSheet() {
   boxRow.appendChild(buildSeatingPrintBox("Lesson Contents"));
   boxRow.appendChild(buildSeatingPrintBox("Homework"));
   boxRow.appendChild(buildSeatingPrintBox("Date of Lesson"));
+  boxRow.appendChild(buildSeatingPrintCourseBox(course, periodLabel));
   sheet.appendChild(boxRow);
 
   return sheet;
@@ -913,6 +914,31 @@ function buildSeatingPrintBox(label) {
   labelEl.className = "seating-print-box-label";
   labelEl.textContent = label;
   box.appendChild(labelEl);
+
+  return box;
+}
+
+/** Bottom-right box: course name + period, pre-filled (unlike the other three, which are left blank for handwriting). */
+function buildSeatingPrintCourseBox(course, periodLabel) {
+  const box = document.createElement("div");
+  box.className = "seating-print-box";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "seating-print-box-label";
+  labelEl.textContent = "Course";
+  box.appendChild(labelEl);
+
+  const content = document.createElement("div");
+  content.className = "seating-print-box-content";
+  const nameP = document.createElement("p");
+  nameP.textContent = course ? course.name : "";
+  content.appendChild(nameP);
+  if (periodLabel) {
+    const periodP = document.createElement("p");
+    periodP.textContent = periodLabel;
+    content.appendChild(periodP);
+  }
+  box.appendChild(content);
 
   return box;
 }
@@ -1177,8 +1203,29 @@ el.togglePopoutGroupsBtn.addEventListener("click", async () => {
 el.printSeatingBtn.addEventListener("click", () => {
   el.printArea.innerHTML = "";
   el.printArea.appendChild(buildSeatingPrintSheet());
-  window.print();
+  printSeatingChart();
 });
+
+/**
+ * Runs window.print() with the document title blanked out, so the
+ * browser's default print header (which shows the page title) doesn't
+ * print "GradingGridOnline" above the seating chart. Restored after
+ * printing via the afterprint event.
+ *
+ * Note: this can't remove the URL/date/page-number in the browser's
+ * header/footer — that's controlled by the "Headers and footers"
+ * checkbox in the print dialog itself, which no page can turn off.
+ */
+function printSeatingChart() {
+  const originalTitle = document.title;
+  document.title = "";
+  const restore = () => {
+    document.title = originalTitle;
+    window.removeEventListener("afterprint", restore);
+  };
+  window.addEventListener("afterprint", restore);
+  window.print();
+}
 
 el.saveSeatingBtn.addEventListener("click", async () => {
   el.seatingStatus.textContent = "Saving…";
