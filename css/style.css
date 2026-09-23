@@ -1861,3 +1861,73 @@ textarea {
   font-size: 0.8rem;
 }
 
+
+/* ===== Basic theme =====
+   Dark, low-glare palette built for readability: borders and dividers
+   use a saturated rust so they actually register against the dark
+   backgrounds (the default theme's pale hairline borders were the
+   core complaint — they're barely visible once the background isn't
+   light). Font is Graphik with a plain sans-serif fallback — Graphik
+   itself is a commercial font (Commercial Type), not available on any
+   free CDN, so it only renders if it's installed locally or an
+   @font-face with licensed files is added separately. */
+[data-theme="basic"] {
+  --paper: #404040;
+  --ink: #f2f2f2;
+  --ink-soft: #b9b9b9;
+  --green: #ea3323;
+  --green-dark: #b15728;
+  --marker: #92902c;
+  --line: #b15728;
+  --card: #4e1852;
+  --font-heading: "Graphik", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Graphik", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 6px;
+  --radius-small: 5px;
+  --card-shadow: none;
+  --glow: none;
+}
+
+/* "Background 2" — a secondary panel tone, distinct from the main
+   .card (background 1), used for the settings/theme dropdown and
+   table header rows. */
+[data-theme="basic"] .settings-panel,
+[data-theme="basic"] .roster-table th,
+[data-theme="basic"] .attendance-table thead th,
+[data-theme="basic"] .periods-table th {
+  background: #22475f;
+}
+
+/* "Menu" colors — tab navigation gets its own accent (mustard),
+   distinct from the red used for primary action buttons, plus a dark
+   green hover fill. */
+[data-theme="basic"] .tab-btn-active {
+  color: #92902c;
+  border-bottom-color: #92902c;
+}
+[data-theme="basic"] .tab-btn:hover {
+  background: #325220;
+  color: var(--ink);
+}
+[data-theme="basic"] .theme-item-active,
+[data-theme="basic"] .theme-check {
+  color: #92902c;
+}
+
+/* "User-enterable background" — every text/number/date field, select,
+   and textarea gets the cream fill, with dark text on it (the page's
+   own light text color wouldn't be legible against a light field).
+   !important is deliberate here: dozens of specific input classes
+   throughout the app set their own :hover/:focus background at higher
+   specificity than a single theme-wide rule could otherwise beat. */
+[data-theme="basic"] input,
+[data-theme="basic"] select,
+[data-theme="basic"] textarea {
+  background: #f5efd0 !important;
+  color: #2b2a28 !important;
+  border-color: #b15728 !important;
+}
+[data-theme="basic"] input::placeholder,
+[data-theme="basic"] textarea::placeholder {
+  color: #6b6560;
+}

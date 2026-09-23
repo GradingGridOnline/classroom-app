@@ -7,6 +7,7 @@
 const THEMES = [
   { id: "default", label: "Default" },
   { id: "cyberpunk", label: "Cyberpunk" },
+  { id: "basic", label: "Basic" },
 ];
 
 const ThemeModule = {
