@@ -36,6 +36,21 @@
 
 * { box-sizing: border-box; }
 
+/* Browsers don't make form controls inherit the page's text color by
+   default — inputs/selects/buttons fall back to plain black
+   regardless of theme unless told otherwise. This is what was making
+   student names (typed into <input> fields) and various button labels
+   stay black even under the dark cyberpunk theme. Elements with their
+   own explicit color (e.g. .btn-primary, .btn-ghost) still win, since
+   a class selector is more specific than this plain-tag rule. */
+input,
+select,
+textarea,
+button {
+  color: inherit;
+  font-family: inherit;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -1861,78 +1876,26 @@ textarea {
   font-size: 0.8rem;
 }
 
-
 /* ===== Basic theme =====
-   Dark, low-glare palette built for readability: borders use a
-   saturated rust so they actually register against dark backgrounds
-   (the default theme's pale hairline borders were the original
-   complaint — barely visible once the background isn't light).
-
-   Deliberately restrained in how the 9 supplied colors are assigned —
-   each one keeps mostly to a single job so nothing competes for
-   attention: red = anything interactive/important (buttons, the
-   active tab, links), mustard = headings and status text only, rust =
-   structural borders (plus the button's own hover shade), purple =
-   card/panel surfaces, blue = just the settings menu (the one place
-   it appears), dark green = a faint tab-hover wash, cream = every
-   input field, near-white = body text.
-
-   Font is Graphik with a plain sans-serif fallback — Graphik itself
-   is a commercial font (Commercial Type), not available on any free
-   CDN, so it only renders if it's installed locally or an @font-face
-   with licensed files is added separately. */
+   A light theme, like the default, but deliberately dialed back from
+   it in the two ways that prompted this: the background is a soft
+   cool gray rather than a near-white paper tone, so the page isn't
+   glaring, and borders/lines use a real color (slate blue) at good
+   contrast instead of the default's pale tan hairlines that all but
+   disappear. Primary accent is a warm rust rather than the default's
+   green, with a teal secondary accent for status text — genuinely
+   colorful rather than the muted, low-saturation default palette. */
 [data-theme="basic"] {
-  --paper: #404040;
-  --ink: #f2f2f2;
-  --ink-soft: #b9b9b9;
-  --green: #ea3323; /* buttons, active tab, links — the single "interactive" accent */
-  --green-dark: #92902c; /* drives every heading (h1-h4) throughout the app via var(--green-dark) */
-  --marker: #92902c; /* status text (.result) — same warm accent as headings, not a separate hue */
-  --line: #b15728; /* borders — its only job */
-  --card: #4e1852;
-  --font-heading: "Graphik", -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-body: "Graphik", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --paper: #e6ebef;
+  --ink: #1f2430;
+  --ink-soft: #5b6472;
+  --green: #c1440e;
+  --green-dark: #8f3009;
+  --marker: #1d7a6f;
+  --line: #6b7d8f;
+  --card: #ffffff;
   --radius: 6px;
   --radius-small: 5px;
-  --card-shadow: none;
+  --card-shadow: 0 1px 3px rgba(31, 36, 48, 0.1), 0 1px 2px rgba(31, 36, 48, 0.06);
   --glow: none;
-}
-
-/* "Background 2" — reserved for just the settings/theme dropdown, so
-   it reads as a distinct floating menu rather than another panel
-   color competing with the main .card purple. */
-[data-theme="basic"] .settings-panel {
-  background: #22475f;
-}
-
-/* Buttons darken to rust on press/hover — a natural shade of the red,
-   kept separate from --green-dark since that variable is doing
-   heading duty here. */
-[data-theme="basic"] .btn-primary:hover {
-  background: #b15728;
-}
-
-/* "Menu 2" — a faint wash on tab hover, not a solid fill, so it reads
-   as a gentle cue rather than another loud color block. */
-[data-theme="basic"] .tab-btn:hover {
-  background: rgba(50, 82, 32, 0.35);
-  color: var(--ink);
-}
-
-/* "User-enterable background" — every text/number/date field, select,
-   and textarea gets the cream fill, with dark text on it (the page's
-   own light text color wouldn't be legible against a light field).
-   !important is deliberate here: dozens of specific input classes
-   throughout the app set their own :hover/:focus background at higher
-   specificity than a single theme-wide rule could otherwise beat. */
-[data-theme="basic"] input,
-[data-theme="basic"] select,
-[data-theme="basic"] textarea {
-  background: #f5efd0 !important;
-  color: #2b2a28 !important;
-  border-color: #b15728 !important;
-}
-[data-theme="basic"] input::placeholder,
-[data-theme="basic"] textarea::placeholder {
-  color: #6b6560;
 }
