@@ -26,9 +26,16 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
-/** Hue (degrees, 0-360) for a group number — used by a CSS custom property rather than a fixed color list, so it scales cleanly to any MAX_GROUP. */
+/** Hue (degrees, 0-360) for a group number. Steps by the golden angle
+ * (~137.5°) rather than dividing the wheel evenly by MAX_GROUP —
+ * evenly-spaced steps put neighboring group numbers right next to
+ * each other on the color wheel (e.g. 18° apart at MAX_GROUP=20),
+ * which is what made them hard to tell apart. The golden angle scatters
+ * each successive hue far from the last regardless of MAX_GROUP, while
+ * still filling the wheel evenly overall. */
+const GROUP_HUE_STEP_DEG = 137.508;
 function groupHueDeg(group) {
-  return Math.round(((group - 1) * 360) / MAX_GROUP);
+  return Math.round((group * GROUP_HUE_STEP_DEG) % 360);
 }
 
 const SeatingModule = {
@@ -293,12 +300,12 @@ const SeatingModule = {
     await this.save();
   },
 
-  /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs. */
+  /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs. Desks carrying a label (e.g. "do not sit here") are skipped, same as locked and inactive desks. */
   autoFill(studentIds) {
     let i = 0;
     for (let r = 0; r < this.rows && i < studentIds.length; r++) {
       for (let c = 0; c < this.cols && i < studentIds.length; c++) {
-        if (this.isActive(r, c) && !this.studentAt(r, c)) {
+        if (this.isActive(r, c) && !this.studentAt(r, c) && !this.getLabel(r, c)) {
           this.seats[this.key(r, c)] = studentIds[i++];
         }
       }

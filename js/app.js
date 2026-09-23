@@ -846,8 +846,8 @@ function buildSeatingPrintSheet() {
   const deskWidth = PRINT_GRID_WIDTH_PX / SeatingModule.cols;
   const deskHeight = PRINT_GRID_HEIGHT_PX / SeatingModule.rows;
   const deskSize = Math.min(deskWidth, deskHeight);
-  grid.style.setProperty("--print-name-size", `${Math.max(7, Math.round(deskSize * 0.15))}px`);
-  grid.style.setProperty("--print-subtext-size", `${Math.max(6, Math.round(deskSize * 0.11))}px`);
+  grid.style.setProperty("--print-name-size", `${Math.max(10, Math.round(deskSize * 0.22))}px`);
+  grid.style.setProperty("--print-subtext-size", `${Math.max(8, Math.round(deskSize * 0.16))}px`);
   // Caps how big the grid is allowed to grow — flex-grow (see CSS)
   // fills remaining space up to this cap, and flex-shrink (default)
   // still lets it shrink below the cap if the real page has less room
