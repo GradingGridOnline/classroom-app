@@ -1863,22 +1863,32 @@ textarea {
 
 
 /* ===== Basic theme =====
-   Dark, low-glare palette built for readability: borders and dividers
-   use a saturated rust so they actually register against the dark
-   backgrounds (the default theme's pale hairline borders were the
-   core complaint — they're barely visible once the background isn't
-   light). Font is Graphik with a plain sans-serif fallback — Graphik
-   itself is a commercial font (Commercial Type), not available on any
-   free CDN, so it only renders if it's installed locally or an
-   @font-face with licensed files is added separately. */
+   Dark, low-glare palette built for readability: borders use a
+   saturated rust so they actually register against dark backgrounds
+   (the default theme's pale hairline borders were the original
+   complaint — barely visible once the background isn't light).
+
+   Deliberately restrained in how the 9 supplied colors are assigned —
+   each one keeps mostly to a single job so nothing competes for
+   attention: red = anything interactive/important (buttons, the
+   active tab, links), mustard = headings and status text only, rust =
+   structural borders (plus the button's own hover shade), purple =
+   card/panel surfaces, blue = just the settings menu (the one place
+   it appears), dark green = a faint tab-hover wash, cream = every
+   input field, near-white = body text.
+
+   Font is Graphik with a plain sans-serif fallback — Graphik itself
+   is a commercial font (Commercial Type), not available on any free
+   CDN, so it only renders if it's installed locally or an @font-face
+   with licensed files is added separately. */
 [data-theme="basic"] {
   --paper: #404040;
   --ink: #f2f2f2;
   --ink-soft: #b9b9b9;
-  --green: #ea3323;
-  --green-dark: #b15728;
-  --marker: #92902c;
-  --line: #b15728;
+  --green: #ea3323; /* buttons, active tab, links — the single "interactive" accent */
+  --green-dark: #92902c; /* drives every heading (h1-h4) throughout the app via var(--green-dark) */
+  --marker: #92902c; /* status text (.result) — same warm accent as headings, not a separate hue */
+  --line: #b15728; /* borders — its only job */
   --card: #4e1852;
   --font-heading: "Graphik", -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-body: "Graphik", -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -1888,30 +1898,25 @@ textarea {
   --glow: none;
 }
 
-/* "Background 2" — a secondary panel tone, distinct from the main
-   .card (background 1), used for the settings/theme dropdown and
-   table header rows. */
-[data-theme="basic"] .settings-panel,
-[data-theme="basic"] .roster-table th,
-[data-theme="basic"] .attendance-table thead th,
-[data-theme="basic"] .periods-table th {
+/* "Background 2" — reserved for just the settings/theme dropdown, so
+   it reads as a distinct floating menu rather than another panel
+   color competing with the main .card purple. */
+[data-theme="basic"] .settings-panel {
   background: #22475f;
 }
 
-/* "Menu" colors — tab navigation gets its own accent (mustard),
-   distinct from the red used for primary action buttons, plus a dark
-   green hover fill. */
-[data-theme="basic"] .tab-btn-active {
-  color: #92902c;
-  border-bottom-color: #92902c;
+/* Buttons darken to rust on press/hover — a natural shade of the red,
+   kept separate from --green-dark since that variable is doing
+   heading duty here. */
+[data-theme="basic"] .btn-primary:hover {
+  background: #b15728;
 }
+
+/* "Menu 2" — a faint wash on tab hover, not a solid fill, so it reads
+   as a gentle cue rather than another loud color block. */
 [data-theme="basic"] .tab-btn:hover {
-  background: #325220;
+  background: rgba(50, 82, 32, 0.35);
   color: var(--ink);
-}
-[data-theme="basic"] .theme-item-active,
-[data-theme="basic"] .theme-check {
-  color: #92902c;
 }
 
 /* "User-enterable background" — every text/number/date field, select,
