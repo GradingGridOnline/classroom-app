@@ -1675,13 +1675,17 @@ textarea {
 
 /* ----- Seating Chart print sheet ----- */
 
-@page seating-landscape-a4 {
+/* Unnamed/default @page, rather than a custom-named one selected via
+   the "page:" property on .seating-print-sheet — named-page selectors
+   have inconsistent support outside Chrome, and this print job only
+   ever produces this one sheet type, so a single default rule covers
+   it without needing per-element page selection. */
+@page {
   size: A4 landscape;
   margin: 0;
 }
 
 .seating-print-sheet {
-  page: seating-landscape-a4;
   font-family: Georgia, "Times New Roman", serif;
   color: #000;
   display: flex;
@@ -1710,14 +1714,14 @@ textarea {
 .seating-print-sheet h2 {
   font-size: 1.1rem;
   margin: 0 0 8px;
-  text-align: center;
+  text-align: left;
   flex-shrink: 0;
 }
 
 .seating-print-excluded {
   font-size: 0.78rem;
   color: #444;
-  text-align: center;
+  text-align: left;
   margin: 0 0 6px;
   flex-shrink: 0;
 }

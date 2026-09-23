@@ -1224,22 +1224,25 @@ el.togglePopoutGroupsBtn.addEventListener("click", async () => {
 el.printSeatingBtn.addEventListener("click", () => {
   el.printArea.innerHTML = "";
   el.printArea.appendChild(buildSeatingPrintSheet());
-  printSeatingChart();
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  printSeatingChart(course ? course.name : "Seating Chart");
 });
 
 /**
- * Runs window.print() with the document title blanked out, so the
- * browser's default print header (which shows the page title) doesn't
- * print "GradingGridOnline" above the seating chart. Restored after
- * printing via the afterprint event.
+ * Runs window.print() with the document title set to the course name.
+ * Two effects: it replaces "GradingGridOnline" in the browser's print
+ * header with the course name, and — more importantly — browsers use
+ * document.title as the suggested file name when the print
+ * destination is "Save as PDF". Restored after printing via the
+ * afterprint event.
  *
  * Note: this can't remove the URL/date/page-number in the browser's
  * header/footer — that's controlled by the "Headers and footers"
  * checkbox in the print dialog itself, which no page can turn off.
  */
-function printSeatingChart() {
+function printSeatingChart(titleForPrint) {
   const originalTitle = document.title;
-  document.title = "";
+  document.title = titleForPrint || originalTitle;
   const restore = () => {
     document.title = originalTitle;
     window.removeEventListener("afterprint", restore);
