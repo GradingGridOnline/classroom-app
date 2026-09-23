@@ -826,7 +826,7 @@ function buildSeatingPrintSheet() {
   // same technique the pop-out uses for its live window — here based on
   // fixed A4-landscape-minus-margins measurements, since a print page's
   // size is known ahead of time. Approximate but self-consistent.
-  const PRINT_GRID_WIDTH_PX = 1026; // 297mm - 1in (the sheet's actual CSS width, see style.css) at 96dpi
+  const PRINT_GRID_WIDTH_PX = 1026; // page width (297mm) minus 0.5in left/right padding, at 96dpi — see .seating-print-sheet in style.css
   const PRINT_GRID_HEIGHT_PX = 480; // ~ remaining height after heading/front-label/boxes
   const deskWidth = PRINT_GRID_WIDTH_PX / SeatingModule.cols;
   const deskHeight = PRINT_GRID_HEIGHT_PX / SeatingModule.rows;

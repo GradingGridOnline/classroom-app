@@ -1677,7 +1677,7 @@ textarea {
 
 @page seating-landscape-a4 {
   size: A4 landscape;
-  margin: 10mm 0.5in;
+  margin: 0;
 }
 
 .seating-print-sheet {
@@ -1686,16 +1686,18 @@ textarea {
   color: #000;
   display: flex;
   flex-direction: column;
-  /* Explicit width — A4 landscape (297mm) minus the left+right @page
-     margins (0.5in each = 1in total). A percentage/auto width here
-     would need the browser to correctly derive the print content box
-     from the @page margin rule, which isn't reliable across engines —
-     that's what was letting the right-most column overflow past the
-     margin. Height still uses 100%, since that dimension isn't the
-     one that was clipping. */
-  width: calc(297mm - 1in);
-  margin: 0 auto;
+  /* The @page rule above is deliberately margin:0 — relying on the
+     browser to derive the print content box from an @page margin
+     turned out not to be reliable (this is what was letting the grid
+     overflow past the right edge). Padding, by contrast, is ordinary
+     box-model behavior every browser honors the same way in print, so
+     the "margin" is created here instead: 10mm top/bottom, 0.5in
+     left/right. box-sizing: border-box (set globally, see top of this
+     file) means width/height below is the full page, with this
+     padding eating into it rather than adding to it. */
+  width: 100%;
   height: 100%;
+  padding: 10mm 0.5in;
 }
 
 .seating-print-sheet h2 {
