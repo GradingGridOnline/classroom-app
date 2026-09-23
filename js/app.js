@@ -848,11 +848,12 @@ function buildSeatingPrintSheet() {
   const deskSize = Math.min(deskWidth, deskHeight);
   grid.style.setProperty("--print-name-size", `${Math.max(7, Math.round(deskSize * 0.15))}px`);
   grid.style.setProperty("--print-subtext-size", `${Math.max(6, Math.round(deskSize * 0.11))}px`);
-  // Explicit height, rather than letting the grid stretch (flex:1) to
-  // fill whatever space remains — see the comment on the heading's
-  // margin-top:auto in style.css for why this matters for anchoring.
+  // Caps how big the grid is allowed to grow — flex-grow (see CSS)
+  // fills remaining space up to this cap, and flex-shrink (default)
+  // still lets it shrink below the cap if the real page has less room
+  // than assumed here, so this can never push content onto a 2nd page.
   const GRID_GAP_PX = 4;
-  grid.style.height = `${Math.round(SeatingModule.rows * deskSize + GRID_GAP_PX * (SeatingModule.rows - 1))}px`;
+  grid.style.maxHeight = `${Math.round(SeatingModule.rows * deskSize + GRID_GAP_PX * (SeatingModule.rows - 1))}px`;
 
   for (let r = 0; r < SeatingModule.rows; r++) {
     for (let c = 0; c < SeatingModule.cols; c++) {

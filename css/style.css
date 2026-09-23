@@ -1686,6 +1686,13 @@ textarea {
   color: #000;
   display: flex;
   flex-direction: column;
+  /* justify-content: flex-end anchors the heading/grid/front-label/
+     boxes as a group to the bottom of the page — any vertical space
+     left over (e.g. on a smaller grid) collects above them instead of
+     the group appearing centered. The grid below still has flex-grow
+     + a max-height cap, so on a large grid it's guaranteed to shrink
+     to fit rather than push this sheet onto a second page. */
+  justify-content: flex-end;
   /* The @page rule above is deliberately margin:0 — relying on the
      browser to derive the print content box from an @page margin
      turned out not to be reliable (this is what was letting the grid
@@ -1702,14 +1709,7 @@ textarea {
 
 .seating-print-sheet h2 {
   font-size: 1.1rem;
-  /* margin-top: auto pushes this heading — and everything after it in
-     the flex column — down, consuming whatever vertical space is left
-     over. That's what anchors the chart to the bottom of the page
-     instead of it (or the page as a whole) appearing vertically
-     centered. If the excluded-students list below is present, it
-     stays flush at the very top since it comes before this heading
-     and has no auto margin of its own. */
-  margin: auto 0 8px;
+  margin: 0 0 8px;
   text-align: center;
   flex-shrink: 0;
 }
@@ -1725,6 +1725,8 @@ textarea {
 .seating-print-grid {
   display: grid;
   gap: 4px;
+  flex: 1 1 0;
+  min-height: 0;
   min-width: 0;
 }
 
