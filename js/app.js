@@ -813,6 +813,21 @@ function buildSeatingPrintSheet() {
   const sheet = document.createElement("div");
   sheet.className = "seating-print-sheet";
 
+  // Students marked "Exclude from Seating" back on the Attendance tab
+  // never appear in the chart itself, so they're called out here
+  // instead — a horizontal list at the very top of the page, shown
+  // only when at least one exists.
+  const excludedStudents = RosterModule.students.filter((s) => s.excludeFromSeating);
+  if (excludedStudents.length > 0) {
+    const excludedEl = document.createElement("p");
+    excludedEl.className = "seating-print-excluded";
+    const names = excludedStudents
+      .map((s) => (s.classNumber ? `#${s.classNumber} ${s.name || "(unnamed)"}` : s.name || "(unnamed)"))
+      .join(", ");
+    excludedEl.textContent = `Not in seating chart: ${names}`;
+    sheet.appendChild(excludedEl);
+  }
+
   const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
   const heading = document.createElement("h2");
   heading.textContent = [course ? course.name : "Seating Chart", periodLabel].filter(Boolean).join(" — ");
@@ -827,12 +842,17 @@ function buildSeatingPrintSheet() {
   // fixed A4-landscape-minus-margins measurements, since a print page's
   // size is known ahead of time. Approximate but self-consistent.
   const PRINT_GRID_WIDTH_PX = 1026; // page width (297mm) minus 0.5in left/right padding, at 96dpi — see .seating-print-sheet in style.css
-  const PRINT_GRID_HEIGHT_PX = 480; // ~ remaining height after heading/front-label/boxes
+  const PRINT_GRID_HEIGHT_PX = 460; // ~ budget left after heading/front-label/boxes/excluded-list
   const deskWidth = PRINT_GRID_WIDTH_PX / SeatingModule.cols;
   const deskHeight = PRINT_GRID_HEIGHT_PX / SeatingModule.rows;
   const deskSize = Math.min(deskWidth, deskHeight);
   grid.style.setProperty("--print-name-size", `${Math.max(7, Math.round(deskSize * 0.15))}px`);
   grid.style.setProperty("--print-subtext-size", `${Math.max(6, Math.round(deskSize * 0.11))}px`);
+  // Explicit height, rather than letting the grid stretch (flex:1) to
+  // fill whatever space remains — see the comment on the heading's
+  // margin-top:auto in style.css for why this matters for anchoring.
+  const GRID_GAP_PX = 4;
+  grid.style.height = `${Math.round(SeatingModule.rows * deskSize + GRID_GAP_PX * (SeatingModule.rows - 1))}px`;
 
   for (let r = 0; r < SeatingModule.rows; r++) {
     for (let c = 0; c < SeatingModule.cols; c++) {
