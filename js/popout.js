@@ -47,19 +47,26 @@ function render() {
 
   // Size desks to fill most of the window, in both directions — not
   // just stretch to the width. Leaves a margin for the header, the
-  // "Front of Classroom" labels, and the status line.
+  // "Front of Classroom" labels, and the status line. Desks are
+  // rectangular (3:2 width:height) rather than square, since a square
+  // grid didn't suit the screen's own rectangular shape.
+  const DESK_ASPECT = 3 / 2;
   const reservedHeight = 80;
   const availableWidth = window.innerWidth * 0.99;
   const availableHeight = window.innerHeight - reservedHeight;
-  const deskSize = Math.max(
-    30,
-    Math.floor(Math.min(availableWidth / seating.cols, availableHeight / seating.rows))
+  // Convert the width budget into an equivalent height budget (at the
+  // target aspect ratio) so both constraints can be compared directly,
+  // then take whichever is tighter.
+  const deskHeight = Math.max(
+    20,
+    Math.floor(Math.min(availableWidth / seating.cols / DESK_ASPECT, availableHeight / seating.rows))
   );
+  const deskWidth = Math.round(deskHeight * DESK_ASPECT);
 
-  grid.style.gridTemplateColumns = `repeat(${seating.cols}, ${deskSize}px)`;
-  grid.style.gridTemplateRows = `repeat(${seating.rows}, ${deskSize}px)`;
-  grid.style.setProperty("--popout-name-size", `${Math.max(10, Math.round(deskSize * 0.16))}px`);
-  grid.style.setProperty("--popout-badge-size", `${Math.max(14, Math.round(deskSize * 0.3))}px`);
+  grid.style.gridTemplateColumns = `repeat(${seating.cols}, ${deskWidth}px)`;
+  grid.style.gridTemplateRows = `repeat(${seating.rows}, ${deskHeight}px)`;
+  grid.style.setProperty("--popout-name-size", `${Math.max(10, Math.round(deskHeight * 0.16))}px`);
+  grid.style.setProperty("--popout-badge-size", `${Math.max(14, Math.round(deskHeight * 0.3))}px`);
 
   // Reversed row order AND mirrored column order — see comment above.
   for (let r = seating.rows - 1; r >= 0; r--) {

@@ -1737,13 +1737,6 @@ textarea {
   color: #000;
   display: flex;
   flex-direction: column;
-  /* justify-content: flex-end anchors the heading/grid/front-label/
-     boxes as a group to the bottom of the page — any vertical space
-     left over (e.g. on a smaller grid) collects above them instead of
-     the group appearing centered. The grid below still has flex-grow
-     + a max-height cap, so on a large grid it's guaranteed to shrink
-     to fit rather than push this sheet onto a second page. */
-  justify-content: flex-end;
   /* The @page rule above is deliberately margin:0 — relying on the
      browser to derive the print content box from an @page margin
      turned out not to be reliable (this is what was letting the grid
@@ -1779,11 +1772,17 @@ textarea {
   flex: 1 1 0;
   min-height: 0;
   min-width: 0;
+  /* Pushes this grid (and the front-label/boxes after it) down to the
+     bottom of the page, leaving any leftover space above it — between
+     it and the heading — rather than the whole sheet being anchored
+     via justify-content, which let overflow silently clip the heading
+     off the top of the page. */
+  margin-top: auto;
 }
 
 .print-desk {
   position: relative;
-  border: 1px solid #999;
+  border: 2pt solid #999;
   border-radius: 4px;
   display: flex;
   flex-direction: column;
