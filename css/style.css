@@ -16,29 +16,40 @@
 }
 
 /* ===== Cyberpunk theme =====
-   A neutral middle-dark grey base — steel and concrete rather than a
-   tinted color — with neon accents doing all the color work: hot
-   magenta as the primary accent, neon yellow for HUD/marker details,
-   cyan reserved for glow effects. Lighter and less purple than a
-   colored-dark base, but still clearly a dark theme; distinguished
-   from Tron: Legacy's disciplined black/cyan/orange two-tone by being
-   brighter and genuinely multi-hue. */
+   Neutral middle-dark grey base. Text — body and headings alike — is
+   neon white; color lives entirely in four accent neons, each with
+   one clear job rather than any single hue dominating: pink for
+   primary/interactive (buttons, active tab, links), blue for glow and
+   focus effects, green for the seating chart's "occupied" cue, purple
+   for HUD/status accents (corner brackets, marker). --green-dark
+   equals --ink (drives every heading in the app via the existing
+   color: var(--green-dark) pattern) — its two former background uses
+   (button/session hover) get their own explicit override below so
+   hover states don't go white-on-white. */
 [data-theme="cyberpunk"] {
   --paper: #2e2e34;
-  --ink: #f2f2f5;
+  --ink: #f5f5ff;
   --ink-soft: #9b9ba6;
   --green: #ff2ec4;
-  --green-dark: #ff6ad5;
-  --marker: #f9f002;
+  --green-dark: #f5f5ff;
+  --marker: #b829ff;
   --line: #55555f;
   --card: #3a3a42;
   --font-heading: "Orbitron", sans-serif;
   --font-body: "Share Tech Mono", monospace;
   --radius: 2px;
   --radius-small: 2px;
-  --card-shadow: 0 0 0 1px rgba(0, 230, 255, 0.18), 0 0 30px rgba(0, 230, 255, 0.07);
+  --card-shadow: 0 0 0 1px rgba(46, 155, 255, 0.18), 0 0 30px rgba(46, 155, 255, 0.07);
   --glow: 0 0 10px rgba(255, 46, 196, 0.55);
-  --focus-glow: 0 0 0 2px rgba(0, 230, 255, 0.35), 0 0 12px rgba(0, 230, 255, 0.4);
+  --focus-glow: 0 0 0 2px rgba(46, 155, 255, 0.35), 0 0 12px rgba(46, 155, 255, 0.4);
+}
+
+/* --green-dark now equals --ink (white), so the two spots that used it
+   as a hover BACKGROUND need their own color — otherwise white text
+   would sit on a white button. */
+[data-theme="cyberpunk"] .btn-primary:hover,
+[data-theme="cyberpunk"] .session-present-btn:hover {
+  background: #e619ac;
 }
 
 * { box-sizing: border-box; }
@@ -91,8 +102,8 @@ body {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(242, 242, 245, 0.03) 0px,
-    rgba(242, 242, 245, 0.03) 1px,
+    rgba(245, 245, 255, 0.03) 0px,
+    rgba(245, 245, 255, 0.03) 1px,
     transparent 1px,
     transparent 3px
   );
@@ -453,7 +464,7 @@ textarea {
 
 [data-theme="cyberpunk"] .roster-table input:hover,
 [data-theme="cyberpunk"] .roster-table input:focus {
-  background: rgba(0, 230, 255, 0.06);
+  background: rgba(46, 155, 255, 0.06);
 }
 
 [data-theme="cyberpunk"] .course-name:hover {
@@ -840,12 +851,12 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .desk-occupied {
-  border-color: #00e6ff;
-  box-shadow: 0 0 8px rgba(0, 230, 255, 0.35);
+  border-color: #39ff14;
+  box-shadow: 0 0 8px rgba(57, 255, 20, 0.35);
 }
 
 [data-theme="cyberpunk"] .desk-occupied:hover {
-  box-shadow: 0 0 12px rgba(249, 240, 2, 0.6);
+  box-shadow: 0 0 12px rgba(184, 41, 255, 0.6);
   border-color: var(--marker);
 }
 
@@ -1468,9 +1479,9 @@ textarea {
 
 [data-theme="cyberpunk"] .weight-total-ok {
   background: var(--card);
-  border-color: #00e6ff;
-  color: #00e6ff;
-  box-shadow: 0 0 8px rgba(0, 230, 255, 0.4);
+  border-color: #39ff14;
+  color: #39ff14;
+  box-shadow: 0 0 8px rgba(57, 255, 20, 0.4);
 }
 
 [data-theme="cyberpunk"] .weight-total-over {
