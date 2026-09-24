@@ -877,6 +877,18 @@ function renderGroupList() {
  * period/time (from Global Settings) appear in the page heading instead
  * of a fourth box.
  */
+/** Largest font size (px) at which `text` fits within `maxWidthPx`, measured with a scratch canvas rather than guessed from character count — reused across calls instead of recreated each time. */
+const _measureCanvas = document.createElement("canvas");
+const _measureCtx = _measureCanvas.getContext("2d");
+function fontSizeToFit(text, maxWidthPx, fontWeight = "400", maxSizePx = 40) {
+  if (!text || maxWidthPx <= 0) return maxSizePx;
+  const refSize = 100;
+  _measureCtx.font = `${fontWeight} ${refSize}px Georgia, "Times New Roman", serif`;
+  const widthAtRef = _measureCtx.measureText(text).width;
+  if (widthAtRef <= 0) return maxSizePx;
+  return Math.min(maxSizePx, (maxWidthPx / widthAtRef) * refSize);
+}
+
 function buildSeatingPrintSheet() {
   const course = CoursesModule.find(RosterModule.currentCourseId);
 
@@ -916,8 +928,25 @@ function buildSeatingPrintSheet() {
   const deskWidth = PRINT_GRID_WIDTH_PX / SeatingModule.cols;
   const deskHeight = PRINT_GRID_HEIGHT_PX / SeatingModule.rows;
   const deskSize = Math.min(deskWidth, deskHeight);
-  grid.style.setProperty("--print-name-size", `${Math.max(10, Math.round(deskSize * 0.22))}px`);
-  grid.style.setProperty("--print-subtext-size", `${Math.max(8, Math.round(deskSize * 0.16))}px`);
+  // A font size purely from grid density (desk count) can still
+  // overflow a long name, or look needlessly large for short ones —
+  // so it's capped by how much room the longest seated name actually
+  // needs at a given size, measured with a scratch canvas rather than
+  // guessed from character count. class-number-tag text ("#12 ") also
+  // has to fit alongside the name on the same line, so it's included
+  // in the same measurement rather than sized separately.
+  const gridBasedNameSize = Math.max(10, Math.round(deskSize * 0.16));
+  const longestNameLabel = Object.values(SeatingModule.seats).reduce((longest, studentId) => {
+    const student = RosterModule.students.find((s) => s.id === studentId);
+    if (!student) return longest;
+    const label = student.classNumber ? `#${student.classNumber} ${student.name || ""}` : student.name || "";
+    return label.length > longest.length ? label : longest;
+  }, "");
+  const nameSize = longestNameLabel
+    ? Math.min(gridBasedNameSize, fontSizeToFit(longestNameLabel, deskWidth - 8, "600"))
+    : gridBasedNameSize;
+  grid.style.setProperty("--print-name-size", `${Math.max(7, Math.round(nameSize))}px`);
+  grid.style.setProperty("--print-subtext-size", `${Math.max(6, Math.round(nameSize * 0.72))}px`);
   // Caps how big the grid is allowed to grow — flex-grow (see CSS)
   // fills remaining space up to this cap, and flex-shrink (default)
   // still lets it shrink below the cap if the real page has less room

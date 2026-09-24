@@ -51,6 +51,21 @@ button {
   font-family: inherit;
 }
 
+/* A handful of selects and a few numeric inputs (session dates,
+   weight/point values) never got an explicit background of their own,
+   so they fell back to the browser's native white box — unreadable
+   once the text color above turns light for a dark theme. This is a
+   fallback only: any element with its own background (transparent on
+   the roster table's inputs, var(--card) elsewhere) keeps it, since a
+   class selector still wins over this plain-tag rule. Left off
+   button, since every button already sets its own background
+   deliberately (solid, transparent, or none). */
+input,
+select,
+textarea {
+  background: var(--card);
+}
+
 body {
   margin: 0;
   background: var(--paper);
