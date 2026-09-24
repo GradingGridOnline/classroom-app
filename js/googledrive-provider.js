@@ -28,6 +28,18 @@ class GoogleDriveProvider extends StorageProvider {
       callback: () => {}, // overridden per-call in _requestToken()
     });
 
+    // Restore a still-valid token from a previous page load first —
+    // access tokens last about an hour, so a plain refresh within that
+    // window can reuse it directly instead of asking Google again.
+    // This matters because the silent re-auth attempt below relies on
+    // Google's own background session check, which some browsers
+    // (Safari in particular) block — without this cache, THAT was
+    // failing on every single reload and forcing you to pick your
+    // account again even though your token hadn't actually expired.
+    if (this._restoreSavedToken()) {
+      return;
+    }
+
     // Try to restore a session silently (no visible popup) — succeeds
     // if the browser still has an active Google session and you've
     // already granted access before. Fails quietly otherwise (e.g. no
@@ -54,6 +66,7 @@ class GoogleDriveProvider extends StorageProvider {
     this.accessToken = null;
     this.tokenExpiresAt = 0;
     this.userEmail = null;
+    this._clearSavedToken();
   }
 
   isSignedIn() {
@@ -145,6 +158,7 @@ class GoogleDriveProvider extends StorageProvider {
         }
         this.accessToken = response.access_token;
         this.tokenExpiresAt = Date.now() + (Number(response.expires_in) || 3600) * 1000 - 60000;
+        this._saveTokenToStorage();
         resolve();
       };
       this.tokenClient.requestAccessToken({ prompt });
@@ -174,7 +188,49 @@ class GoogleDriveProvider extends StorageProvider {
     if (response.ok) {
       const info = await response.json();
       this.userEmail = info.email || null;
+      this._saveTokenToStorage();
     }
+  }
+
+  /** Caches the access token (and its expiry + the signed-in email) in localStorage, so a page reload within the token's ~1hr lifetime can reuse it instead of re-authenticating. The token only grants access to this app's own Drive scope (see the class comment above), so caching it locally carries the same risk as keeping any other short-lived bearer token in the browser. */
+  _saveTokenToStorage() {
+    try {
+      localStorage.setItem(
+        "ggo-auth",
+        JSON.stringify({
+          accessToken: this.accessToken,
+          tokenExpiresAt: this.tokenExpiresAt,
+          userEmail: this.userEmail,
+        })
+      );
+    } catch (e) {
+      // localStorage unavailable — fine, just falls back to re-authenticating every reload, same as before this cache existed.
+    }
+  }
+
+  /** Returns true and restores this.accessToken/tokenExpiresAt/userEmail if a still-valid cached token exists; otherwise leaves state untouched and returns false. */
+  _restoreSavedToken() {
+    try {
+      const raw = localStorage.getItem("ggo-auth");
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      if (!saved.accessToken || !saved.tokenExpiresAt || Date.now() >= saved.tokenExpiresAt) {
+        localStorage.removeItem("ggo-auth");
+        return false;
+      }
+      this.accessToken = saved.accessToken;
+      this.tokenExpiresAt = saved.tokenExpiresAt;
+      this.userEmail = saved.userEmail || null;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _clearSavedToken() {
+    try {
+      localStorage.removeItem("ggo-auth");
+    } catch (e) {}
   }
 
   async _findFileId(fileName, token) {
