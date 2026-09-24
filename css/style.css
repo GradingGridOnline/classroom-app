@@ -16,20 +16,22 @@
 }
 
 /* ===== Cyberpunk theme =====
-   Genuinely multi-hue neon — deep violet base, hot magenta as the
-   primary accent, neon yellow for HUD/marker details, and cyan
-   reserved for glow effects — rather than a single dominant hue.
-   Deliberately brighter and more colorful than Tron: Legacy, which
-   already owns the disciplined black/cyan/orange two-tone look. */
+   A neutral middle-dark grey base — steel and concrete rather than a
+   tinted color — with neon accents doing all the color work: hot
+   magenta as the primary accent, neon yellow for HUD/marker details,
+   cyan reserved for glow effects. Lighter and less purple than a
+   colored-dark base, but still clearly a dark theme; distinguished
+   from Tron: Legacy's disciplined black/cyan/orange two-tone by being
+   brighter and genuinely multi-hue. */
 [data-theme="cyberpunk"] {
-  --paper: #150821;
-  --ink: #f3e8ff;
-  --ink-soft: #a084b8;
+  --paper: #2e2e34;
+  --ink: #f2f2f5;
+  --ink-soft: #9b9ba6;
   --green: #ff2ec4;
   --green-dark: #ff6ad5;
   --marker: #f9f002;
-  --line: #3a1f4d;
-  --card: #1f0e2e;
+  --line: #55555f;
+  --card: #3a3a42;
   --font-heading: "Orbitron", sans-serif;
   --font-body: "Share Tech Mono", monospace;
   --radius: 2px;
@@ -89,8 +91,8 @@ body {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(243, 232, 255, 0.03) 0px,
-    rgba(243, 232, 255, 0.03) 1px,
+    rgba(242, 242, 245, 0.03) 0px,
+    rgba(242, 242, 245, 0.03) 1px,
     transparent 1px,
     transparent 3px
   );
