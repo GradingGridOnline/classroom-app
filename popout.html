@@ -51,6 +51,16 @@
     #popout-grid.seating-grid {
       gap: 4px;
     }
+    /* The base .desk rule's min-height:56px and aspect-ratio:1 exist
+       for the on-screen editor (so desks stay tappable/readable there)
+       — but here they can silently override the exact pixel size the
+       JS above already computes for a 3:2 box, forcing desks taller
+       (more square) than intended once a grid has enough rows to push
+       the computed height below 56px. */
+    #popout-grid .desk {
+      min-height: 0;
+      aspect-ratio: auto;
+    }
     .popout-status {
       color: var(--ink-soft);
       font-size: 0.9rem;
