@@ -8,6 +8,7 @@ const THEMES = [
   { id: "default", label: "Default" },
   { id: "cyberpunk", label: "Cyberpunk" },
   { id: "basic", label: "Basic" },
+  { id: "tron-legacy", label: "Tron: Legacy" },
 ];
 
 const ThemeModule = {

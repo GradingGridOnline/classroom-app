@@ -80,6 +80,7 @@ const el = {
   seatingGrid: document.getElementById("seating-grid"),
   seatingStatus: document.getElementById("seating-status"),
   banksList: document.getElementById("banks-list"),
+  groupListTbody: document.getElementById("group-list-tbody"),
 
   attendanceStatus: document.getElementById("attendance-status"),
   attendanceTable: document.getElementById("attendance-table"),
@@ -784,6 +785,75 @@ function renderSeating() {
   }
 
   renderBanks();
+  renderGroupList();
+}
+
+/** Every seated student (active desk + occupied), with that desk's group number, ordered by group then class number. Ungrouped (0) sorts last. */
+function computeGroupListEntries() {
+  const entries = [];
+  for (let r = 0; r < SeatingModule.rows; r++) {
+    for (let c = 0; c < SeatingModule.cols; c++) {
+      if (!SeatingModule.isActive(r, c)) continue;
+      const studentId = SeatingModule.studentAt(r, c);
+      if (!studentId) continue;
+      const student = RosterModule.students.find((s) => s.id === studentId);
+      if (!student) continue;
+      entries.push({ student, group: SeatingModule.getGroup(r, c) });
+    }
+  }
+  entries.sort((a, b) => {
+    const groupA = a.group || Infinity;
+    const groupB = b.group || Infinity;
+    if (groupA !== groupB) return groupA - groupB;
+    return (a.student.classNumber || 0) - (b.student.classNumber || 0);
+  });
+  return entries;
+}
+
+function renderGroupList() {
+  const entries = computeGroupListEntries();
+  el.groupListTbody.innerHTML = "";
+
+  if (entries.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "hint";
+    td.textContent = "No students seated yet.";
+    tr.appendChild(td);
+    el.groupListTbody.appendChild(tr);
+    return;
+  }
+
+  entries.forEach(({ student, group }) => {
+    const tr = document.createElement("tr");
+
+    const classNumTd = document.createElement("td");
+    classNumTd.textContent = student.classNumber ? `#${student.classNumber}` : "—";
+    tr.appendChild(classNumTd);
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = student.name || "(unnamed)";
+    tr.appendChild(nameTd);
+
+    const pronTd = document.createElement("td");
+    pronTd.textContent = student.pronunciation || "";
+    tr.appendChild(pronTd);
+
+    const idTd = document.createElement("td");
+    idTd.textContent = student.schoolId || "";
+    tr.appendChild(idTd);
+
+    const emailTd = document.createElement("td");
+    emailTd.textContent = student.email || "";
+    tr.appendChild(emailTd);
+
+    const groupTd = document.createElement("td");
+    groupTd.textContent = group ? String(group) : "—";
+    tr.appendChild(groupTd);
+
+    el.groupListTbody.appendChild(tr);
+  });
 }
 
 /**
@@ -889,7 +959,15 @@ function buildSeatingPrintSheet() {
 
         const nameEl = document.createElement("span");
         nameEl.className = "print-desk-name";
-        nameEl.textContent = student.name || "";
+        if (student.classNumber) {
+          const numEl = document.createElement("span");
+          numEl.className = "print-desk-classnumber-tag";
+          numEl.textContent = `#${student.classNumber} `;
+          nameEl.appendChild(numEl);
+        }
+        const nameTextEl = document.createElement("span");
+        nameTextEl.textContent = student.name || "";
+        nameEl.appendChild(nameTextEl);
         desk.appendChild(nameEl);
 
         if (student.schoolId) {

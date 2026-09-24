@@ -877,6 +877,23 @@ textarea {
   color: var(--green-dark);
 }
 
+.group-list-section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.group-list-section h3 {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  margin: 0 0 4px;
+  color: var(--green-dark);
+}
+
+.group-list-table {
+  margin-top: 12px;
+}
+
 .banks-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1797,6 +1814,11 @@ textarea {
   line-height: 1.15;
 }
 
+.print-desk-classnumber-tag {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
 .print-desk-schoolid {
   font-size: var(--print-subtext-size, 0.6rem);
   color: #555;
@@ -1898,4 +1920,155 @@ textarea {
   --radius-small: 5px;
   --card-shadow: 0 1px 3px rgba(31, 36, 48, 0.1), 0 1px 2px rgba(31, 36, 48, 0.06);
   --glow: none;
+}
+
+/* ===== Tron: Legacy theme =====
+   Black-and-cyan glowing grid, with the franchise's orange reserved
+   for warnings/alerts — same two-tone logic the films use it for
+   (Sam/CLU's rival grids). Built with the same level of polish as
+   Cyberpunk (glow effects, HUD accents) rather than a flat palette
+   swap: a faint grid-line background stands in for Cyberpunk's
+   scanlines, and corner brackets/focus-glow/hover-glow all carry
+   over, recolored. Headings use Michroma, body text uses Chakra
+   Petch — both loaded via Google Fonts in index.html/popout.html,
+   alongside Cyberpunk's Orbitron/Share Tech Mono. */
+[data-theme="tron-legacy"] {
+  --paper: #000000;
+  --ink: #d9faff;
+  --ink-soft: #5f8a95;
+  --green: #00d9ff;
+  --green-dark: #4de8ff;
+  --marker: #ff7a1a;
+  --line: #0f3e4a;
+  --card: #050d12;
+  --font-heading: "Michroma", sans-serif;
+  --font-body: "Chakra Petch", sans-serif;
+  --radius: 0px;
+  --radius-small: 0px;
+  --card-shadow: 0 0 0 1px rgba(0, 217, 255, 0.2), 0 0 30px rgba(0, 217, 255, 0.07);
+  --glow: 0 0 10px rgba(0, 217, 255, 0.6);
+  --focus-glow: 0 0 0 2px rgba(0, 217, 255, 0.35), 0 0 12px rgba(0, 217, 255, 0.4);
+}
+
+/* Faint glowing floor-grid, in place of Cyberpunk's scanlines. */
+[data-theme="tron-legacy"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(0, 217, 255, 0.05) 0px, rgba(0, 217, 255, 0.05) 1px, transparent 1px, transparent 40px),
+    repeating-linear-gradient(to right, rgba(0, 217, 255, 0.05) 0px, rgba(0, 217, 255, 0.05) 1px, transparent 1px, transparent 40px);
+  z-index: 0;
+}
+
+/* HUD-style corner brackets, in orange for contrast against the cyan-dominant UI. */
+[data-theme="tron-legacy"] .card::before,
+[data-theme="tron-legacy"] .card::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+[data-theme="tron-legacy"] .card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--marker);
+  border-left: 2px solid var(--marker);
+}
+[data-theme="tron-legacy"] .card::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--marker);
+  border-right: 2px solid var(--marker);
+}
+
+[data-theme="tron-legacy"] .btn-primary:hover {
+  box-shadow: 0 0 16px rgba(0, 217, 255, 0.85);
+}
+
+[data-theme="tron-legacy"] .btn-ghost {
+  border-color: var(--line);
+}
+[data-theme="tron-legacy"] .btn-ghost:hover {
+  box-shadow: var(--focus-glow);
+  border-color: var(--marker);
+}
+
+[data-theme="tron-legacy"] input:focus,
+[data-theme="tron-legacy"] select:focus,
+[data-theme="tron-legacy"] textarea:focus {
+  outline: none;
+  border-color: var(--green) !important;
+  box-shadow: var(--focus-glow);
+}
+
+[data-theme="tron-legacy"] .roster-table input:hover,
+[data-theme="tron-legacy"] .roster-table input:focus {
+  background: rgba(0, 217, 255, 0.06);
+}
+
+[data-theme="tron-legacy"] .course-name:hover {
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.7);
+}
+
+[data-theme="tron-legacy"] .settings-panel {
+  box-shadow: var(--card-shadow);
+}
+
+[data-theme="tron-legacy"] .theme-item-active {
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.7);
+}
+
+[data-theme="tron-legacy"] .header h1,
+[data-theme="tron-legacy"] .section-header h2 {
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.4);
+}
+
+[data-theme="tron-legacy"] .tab-btn-active {
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.6);
+}
+
+[data-theme="tron-legacy"] .unseated-item-selected {
+  box-shadow: var(--glow);
+}
+
+[data-theme="tron-legacy"] .desk-occupied {
+  border-color: #00d9ff;
+  box-shadow: 0 0 8px rgba(0, 217, 255, 0.4);
+}
+[data-theme="tron-legacy"] .desk-occupied:hover {
+  box-shadow: 0 0 12px rgba(255, 122, 26, 0.6);
+  border-color: var(--marker);
+}
+[data-theme="tron-legacy"] .desk-empty:hover {
+  box-shadow: var(--focus-glow);
+}
+[data-theme="tron-legacy"] .desk-inactive {
+  border-color: var(--line);
+}
+[data-theme="tron-legacy"] .desk-grouped.desk-empty,
+[data-theme="tron-legacy"] .desk-grouped.desk-occupied {
+  background: var(--card);
+  border-color: hsl(var(--group-hue), 95%, 62%);
+  border-width: 2px;
+  box-shadow: 0 0 6px hsl(var(--group-hue), 95%, 62%), 0 0 16px hsl(var(--group-hue), 95%, 55%);
+}
+
+[data-theme="tron-legacy"] .bank-card {
+  box-shadow: var(--card-shadow);
+}
+
+[data-theme="tron-legacy"] .weight-total-ok {
+  background: var(--card);
+  border-color: #00d9ff;
+  color: #00d9ff;
+  box-shadow: 0 0 8px rgba(0, 217, 255, 0.4);
+}
+[data-theme="tron-legacy"] .weight-total-over {
+  background: var(--card);
+  border-color: var(--marker);
+  color: var(--marker);
+  box-shadow: 0 0 8px rgba(255, 122, 26, 0.5);
 }

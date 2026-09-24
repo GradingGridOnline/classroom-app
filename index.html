@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&family=Michroma&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div class="wrap">
@@ -187,6 +187,24 @@
             <h3>Memory Banks</h3>
             <p class="hint">Save the current arrangement into a slot, or load/delete a saved one. Saving or loading a bank stores it to Google Drive immediately.</p>
             <div id="banks-list" class="banks-list"></div>
+          </div>
+
+          <div class="group-list-section">
+            <h3>Group Assignments</h3>
+            <p class="hint">Every seated student, ordered by group number. Updates live with the chart above.</p>
+            <table class="roster-table group-list-table">
+              <thead>
+                <tr>
+                  <th>Class #</th>
+                  <th>Name</th>
+                  <th>Pronunciation</th>
+                  <th>School ID</th>
+                  <th>Email Address</th>
+                  <th>Group</th>
+                </tr>
+              </thead>
+              <tbody id="group-list-tbody"></tbody>
+            </table>
           </div>
 
           <p id="seating-status" class="result"></p>
