@@ -15,23 +15,28 @@
   --glow: none;
 }
 
-/* ===== Cyberpunk theme ===== */
+/* ===== Cyberpunk theme =====
+   Genuinely multi-hue neon — deep violet base, hot magenta as the
+   primary accent, neon yellow for HUD/marker details, and cyan
+   reserved for glow effects — rather than a single dominant hue.
+   Deliberately brighter and more colorful than Tron: Legacy, which
+   already owns the disciplined black/cyan/orange two-tone look. */
 [data-theme="cyberpunk"] {
-  --paper: #0a0e1a;
-  --ink: #d7e6ff;
-  --ink-soft: #6e84ac;
-  --green: #0066ff;
-  --green-dark: #3d8bff;
-  --marker: #ffc53d;
-  --line: #24304a;
-  --card: #10182b;
+  --paper: #150821;
+  --ink: #f3e8ff;
+  --ink-soft: #a084b8;
+  --green: #ff2ec4;
+  --green-dark: #ff6ad5;
+  --marker: #f9f002;
+  --line: #3a1f4d;
+  --card: #1f0e2e;
   --font-heading: "Orbitron", sans-serif;
   --font-body: "Share Tech Mono", monospace;
   --radius: 2px;
   --radius-small: 2px;
-  --card-shadow: 0 0 0 1px rgba(33, 230, 193, 0.15), 0 0 30px rgba(33, 230, 193, 0.06);
-  --glow: 0 0 10px rgba(0, 102, 255, 0.55);
-  --focus-glow: 0 0 0 2px rgba(33, 230, 193, 0.35), 0 0 12px rgba(33, 230, 193, 0.4);
+  --card-shadow: 0 0 0 1px rgba(0, 230, 255, 0.18), 0 0 30px rgba(0, 230, 255, 0.07);
+  --glow: 0 0 10px rgba(255, 46, 196, 0.55);
+  --focus-glow: 0 0 0 2px rgba(0, 230, 255, 0.35), 0 0 12px rgba(0, 230, 255, 0.4);
 }
 
 * { box-sizing: border-box; }
@@ -84,8 +89,8 @@ body {
   pointer-events: none;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(215, 230, 255, 0.025) 0px,
-    rgba(215, 230, 255, 0.025) 1px,
+    rgba(243, 232, 255, 0.03) 0px,
+    rgba(243, 232, 255, 0.03) 1px,
     transparent 1px,
     transparent 3px
   );
@@ -190,7 +195,7 @@ body {
 }
 
 [data-theme="cyberpunk"] .btn-primary:hover {
-  box-shadow: 0 0 16px rgba(0, 102, 255, 0.85);
+  box-shadow: 0 0 16px rgba(255, 46, 196, 0.85);
 }
 
 [data-theme="cyberpunk"] .btn-ghost {
@@ -446,11 +451,11 @@ textarea {
 
 [data-theme="cyberpunk"] .roster-table input:hover,
 [data-theme="cyberpunk"] .roster-table input:focus {
-  background: rgba(33, 230, 193, 0.06);
+  background: rgba(0, 230, 255, 0.06);
 }
 
 [data-theme="cyberpunk"] .course-name:hover {
-  text-shadow: 0 0 8px rgba(0, 102, 255, 0.6);
+  text-shadow: 0 0 8px rgba(255, 46, 196, 0.6);
 }
 
 /* ===== Settings menu & theme picker ===== */
@@ -526,7 +531,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .theme-item-active {
-  text-shadow: 0 0 6px rgba(0, 102, 255, 0.6);
+  text-shadow: 0 0 6px rgba(255, 46, 196, 0.6);
 }
 
 [data-theme="cyberpunk"] .header h1,
@@ -566,7 +571,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .tab-btn-active {
-  text-shadow: 0 0 6px rgba(0, 102, 255, 0.5);
+  text-shadow: 0 0 6px rgba(255, 46, 196, 0.5);
 }
 
 .panel-toolbar {
@@ -833,12 +838,12 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .desk-occupied {
-  border-color: #21e6c1;
-  box-shadow: 0 0 8px rgba(33, 230, 193, 0.35);
+  border-color: #00e6ff;
+  box-shadow: 0 0 8px rgba(0, 230, 255, 0.35);
 }
 
 [data-theme="cyberpunk"] .desk-occupied:hover {
-  box-shadow: 0 0 12px rgba(255, 197, 61, 0.6);
+  box-shadow: 0 0 12px rgba(249, 240, 2, 0.6);
   border-color: var(--marker);
 }
 
@@ -1461,9 +1466,9 @@ textarea {
 
 [data-theme="cyberpunk"] .weight-total-ok {
   background: var(--card);
-  border-color: #21e6c1;
-  color: #21e6c1;
-  box-shadow: 0 0 8px rgba(33, 230, 193, 0.4);
+  border-color: #00e6ff;
+  color: #00e6ff;
+  box-shadow: 0 0 8px rgba(0, 230, 255, 0.4);
 }
 
 [data-theme="cyberpunk"] .weight-total-over {
