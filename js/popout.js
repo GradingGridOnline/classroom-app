@@ -48,9 +48,9 @@ function render() {
   // Size desks to fill most of the window, in both directions — not
   // just stretch to the width. Leaves a margin for the header, the
   // "Front of Classroom" labels, and the status line. Desks are
-  // rectangular (3:2 width:height) rather than square, since a square
+  // rectangular (2:1 width:height) rather than square, since a square
   // grid didn't suit the screen's own rectangular shape.
-  const DESK_ASPECT = 3 / 2;
+  const DESK_ASPECT = 2 / 1;
   const reservedHeight = 80;
   const availableWidth = window.innerWidth * 0.99;
   const availableHeight = window.innerHeight - reservedHeight;
@@ -97,10 +97,30 @@ function render() {
       desk.appendChild(nameEl);
 
       grid.appendChild(desk);
+
+      // The desk's actual background varies a lot — a themed dark
+      // card, a light default-theme pastel group color, a dark
+      // cyberpunk/tron group color — too many combinations to hardcode
+      // per theme. Instead, read what actually got rendered and pick
+      // white text whenever that's dark, rather than trusting a single
+      // theme-wide text color that won't fit every case.
+      const contrastColor = pickContrastingTextColor(getComputedStyle(desk).backgroundColor);
+      if (contrastColor) {
+        nameEl.style.color = contrastColor;
+      }
     }
   }
 
   statusEl.textContent = "";
+}
+
+/** Returns "#ffffff" if `bgColorStr` (a computed "rgb(r,g,b)" string) is dark enough to need white text, or null to leave the theme's own default color in place. */
+function pickContrastingTextColor(bgColorStr) {
+  const match = bgColorStr && bgColorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!match) return null;
+  const [r, g, b] = [1, 2, 3].map((i) => Number(match[i]));
+  const perceivedLuminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return perceivedLuminance < 0.55 ? "#ffffff" : null;
 }
 
 render();

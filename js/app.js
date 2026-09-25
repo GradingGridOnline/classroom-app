@@ -52,6 +52,8 @@ const el = {
   saveRosterBtn: document.getElementById("save-roster-btn"),
   collectEmailBtn: document.getElementById("collect-email-btn"),
   syncEmailBtn: document.getElementById("sync-email-btn"),
+  showEmailQrBtn: document.getElementById("show-email-qr-btn"),
+  deleteEmailFormBtn: document.getElementById("delete-email-form-btn"),
   emailCollectStatus: document.getElementById("email-collect-status"),
   rosterTbody: document.getElementById("roster-tbody"),
   rosterStatus: document.getElementById("roster-status"),
@@ -581,9 +583,8 @@ function makeEditableCell(student, field) {
 function makeClassNumberCell(student) {
   const td = document.createElement("td");
   const input = document.createElement("input");
-  input.type = "number";
-  input.min = "1";
-  input.max = String(MAX_STUDENTS);
+  input.type = "text";
+  input.inputMode = "numeric";
   input.className = "class-number-input";
   input.value = student.classNumber || "";
   input.addEventListener("change", () => {
@@ -1156,9 +1157,8 @@ function buildDeskElement(r, c) {
 
   if (active) {
     const groupInput = document.createElement("input");
-    groupInput.type = "number";
-    groupInput.min = "1";
-    groupInput.max = String(MAX_GROUP);
+    groupInput.type = "text";
+    groupInput.inputMode = "numeric";
     groupInput.className = "desk-group-input";
     groupInput.placeholder = "grp";
     groupInput.value = group ? String(group) : "";
@@ -1473,6 +1473,12 @@ function buildAttendanceStudentRow(student) {
   }
   const nameRow = document.createElement("div");
   nameRow.className = "attendance-name-row";
+  if (student.classNumber) {
+    const numSpan = document.createElement("span");
+    numSpan.className = "attendance-classnumber";
+    numSpan.textContent = `#${student.classNumber}`;
+    nameRow.appendChild(numSpan);
+  }
   const nameSpan = document.createElement("span");
   nameSpan.className = "attendance-name";
   nameSpan.textContent = student.name || "(unnamed)";
@@ -1727,9 +1733,8 @@ function renderAttendanceSettings() {
   const termRow = document.createElement("div");
   termRow.className = "mapping-row";
   const termInput = document.createElement("input");
-  termInput.type = "number";
-  termInput.min = "0";
-  termInput.max = "100";
+  termInput.type = "text";
+  termInput.inputMode = "numeric";
   termInput.value = AttendanceModule.settings.termClassCount;
   termInput.addEventListener("change", async () => {
     AttendanceModule.setTermClassCount(termInput.value);
@@ -1751,8 +1756,8 @@ function renderAttendanceSettings() {
   const limitRow = document.createElement("div");
   limitRow.className = "mapping-row";
   const limitInput = document.createElement("input");
-  limitInput.type = "number";
-  limitInput.min = "0";
+  limitInput.type = "text";
+  limitInput.inputMode = "numeric";
   limitInput.value = AttendanceModule.settings.absenceLimit || "";
   limitInput.placeholder = "(none)";
   limitInput.addEventListener("change", async () => {
@@ -1865,8 +1870,8 @@ function buildEditableTypeList(config) {
     }
 
     const pointInput = document.createElement("input");
-    pointInput.type = "number";
-    pointInput.step = "0.1";
+    pointInput.type = "text";
+    pointInput.inputMode = "decimal";
     pointInput.className = "point-value-input";
     pointInput.value = config.points[item] ?? 0;
     pointInput.title = "Point value";
@@ -2252,9 +2257,8 @@ function renderScoringSettings() {
     const countLabel = document.createElement("label");
     countLabel.textContent = "Items:";
     const countInput = document.createElement("input");
-    countInput.type = "number";
-    countInput.min = "0";
-    countInput.max = String(MAX_ITEMS_PER_CATEGORY);
+    countInput.type = "text";
+    countInput.inputMode = "numeric";
     countInput.className = "point-value-input";
     countInput.value = category.items.length;
     countInput.addEventListener("change", async () => {
@@ -2292,8 +2296,8 @@ function renderScoringSettings() {
         });
 
         const itemPointsInput = document.createElement("input");
-        itemPointsInput.type = "number";
-        itemPointsInput.min = "0";
+        itemPointsInput.type = "text";
+        itemPointsInput.inputMode = "numeric";
         itemPointsInput.className = "point-value-input";
         itemPointsInput.value = item.maxPoints;
         itemPointsInput.title = "Max points";
@@ -2380,8 +2384,8 @@ function buildWeightRow(label, value, onChange) {
   labelEl.textContent = label;
 
   const input = document.createElement("input");
-  input.type = "number";
-  input.min = "0";
+  input.type = "text";
+  input.inputMode = "numeric";
   input.className = "weight-input";
   input.value = value || 0;
   input.addEventListener("change", () => onChange(input.value));
@@ -2882,6 +2886,8 @@ function renderEmailCollectButtons() {
   const active = EmailCollectModule.hasActiveForm();
   el.collectEmailBtn.hidden = active;
   el.syncEmailBtn.hidden = !active;
+  el.showEmailQrBtn.hidden = !active;
+  el.deleteEmailFormBtn.hidden = !active;
 }
 
 el.collectEmailBtn.addEventListener("click", async () => {
@@ -2894,6 +2900,22 @@ el.collectEmailBtn.addEventListener("click", async () => {
     window.open("emailqr.html", "ggo-email-qr", "width=480,height=560");
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't create the form: ${err.message}`;
+  }
+});
+
+el.showEmailQrBtn.addEventListener("click", () => {
+  window.open("emailqr.html", "ggo-email-qr", "width=480,height=560");
+});
+
+el.deleteEmailFormBtn.addEventListener("click", async () => {
+  if (!confirm("Delete this email-collection form? Its QR code will stop working — you'd need to create a new one to collect more emails.")) return;
+  el.emailCollectStatus.textContent = "Deleting form…";
+  try {
+    await EmailCollectModule.deleteForm();
+    renderEmailCollectButtons();
+    el.emailCollectStatus.textContent = "Form deleted.";
+  } catch (err) {
+    el.emailCollectStatus.textContent = `Couldn't delete the form: ${err.message}`;
   }
 });
 

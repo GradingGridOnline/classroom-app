@@ -1034,6 +1034,23 @@ textarea {
   top: 0;
 }
 
+/* Freezes the student-info column so it stays visible while the
+   attendance/scoring columns scroll underneath it horizontally.
+   Shared by .attendance-table and .scoring-table, since the latter
+   reuses this same base class. */
+.attendance-table td:first-child,
+.attendance-table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card);
+}
+
+.attendance-table thead th:first-child {
+  background: var(--paper);
+  z-index: 3;
+}
+
 .attendance-student-cell,
 .attendance-notes-input {
   white-space: normal;
@@ -1057,6 +1074,12 @@ textarea {
 
 .attendance-name {
   font-weight: 600;
+}
+
+.attendance-classnumber {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--green-dark);
 }
 
 .attendance-schoolid {

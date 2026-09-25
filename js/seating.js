@@ -300,13 +300,18 @@ const SeatingModule = {
     await this.save();
   },
 
-  /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs. Desks carrying a label (e.g. "do not sit here") are skipped, same as locked and inactive desks. */
+  /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs shuffled into random order first. Desks carrying a label (e.g. "do not sit here") are skipped, same as locked and inactive desks. */
   autoFill(studentIds) {
+    const shuffled = [...studentIds];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     let i = 0;
-    for (let r = 0; r < this.rows && i < studentIds.length; r++) {
-      for (let c = 0; c < this.cols && i < studentIds.length; c++) {
+    for (let r = 0; r < this.rows && i < shuffled.length; r++) {
+      for (let c = 0; c < this.cols && i < shuffled.length; c++) {
         if (this.isActive(r, c) && !this.studentAt(r, c) && !this.getLabel(r, c)) {
-          this.seats[this.key(r, c)] = studentIds[i++];
+          this.seats[this.key(r, c)] = shuffled[i++];
         }
       }
     }

@@ -10,12 +10,13 @@
 //      submit their ID + email.
 //   3. syncResponses() reads every response via the Forms API,
 //      matches each one to a student by School ID, and returns the
-//      matches for the caller to write into the roster.
-//   4. After a successful sync, the whole form is deleted (via the
-//      Drive API, since a Form is just a Drive file) so the next
-//      "Collect Email Addresses" click starts fresh. Google's API has
-//      no way to just clear a form's responses, so deleting the whole
-//      form is how we get the same "ready to do it again" result.
+//      matches for the caller to write into the roster. The form is
+//      left active and reusable — its QR code keeps working, and
+//      syncing again later just re-reads whatever's been submitted
+//      since (a student who already matched just gets matched again).
+//   4. deleteForm() permanently deletes the form (via the Drive API,
+//      since a Form is just a Drive file) when the user is done
+//      collecting for good, or wants to start over with a new form.
 
 const FORMS_API_BASE = "https://forms.googleapis.com/v1/forms";
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3/files";
@@ -153,9 +154,13 @@ const EmailCollectModule = {
   },
 
   /**
-   * Reads every response from the active form, matches each to a
-   * student by School ID, and returns the matches. Deletes the form
-   * afterward (see the module comment above for why).
+   * Reads every response from the active form and matches each to a
+   * student by School ID. The form is left active and reusable — its
+   * QR code keeps working, and syncing again later just re-reads
+   * whatever's been submitted since (already-matched students are
+   * simply matched again, overwriting the same email). Call
+   * deleteForm() when you're done collecting for good, or want to
+   * start fresh with a new form.
    */
   async syncResponses(students) {
     if (!this.activeFormId) throw new Error("There's no active form to sync from — click \"Collect Email Addresses\" first.");
@@ -182,21 +187,17 @@ const EmailCollectModule = {
       else unmatchedCount++;
     });
 
-    // Delete the whole form now that we've read it — see module comment.
-    try {
-      await this._apiFetch(`${DRIVE_API_BASE}/${this.activeFormId}`, { method: "DELETE" });
-    } catch (err) {
-      // Non-fatal: the sync itself succeeded even if cleanup failed.
-      // The stale form just won't get cleared automatically this time.
-      console.warn("Couldn't delete the form after syncing:", err.message);
-    }
+    return { matches, unmatchedCount, totalResponses: responses.length };
+  },
 
+  /** Permanently deletes the active form — its QR code stops working. Use this when you're done collecting for good, or want to start over with a fresh form/QR code. */
+  async deleteForm() {
+    if (!this.activeFormId) return;
+    await this._apiFetch(`${DRIVE_API_BASE}/${this.activeFormId}`, { method: "DELETE" });
     this.activeFormId = null;
     this.activeFormUrl = null;
     this.questionIds = null;
     await this.save();
-
-    return { matches, unmatchedCount, totalResponses: responses.length };
   },
 };
 
