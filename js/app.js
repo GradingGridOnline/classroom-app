@@ -93,6 +93,7 @@ const el = {
   scoringTable: document.getElementById("scoring-table"),
   toggleScoringSettingsBtn: document.getElementById("toggle-scoring-settings-btn"),
   scoringSettingsBody: document.getElementById("scoring-settings-body"),
+  scoringModeRow: document.getElementById("scoring-mode-row"),
 
   presentationCalcStatus: document.getElementById("presentationcalc-status"),
   presentationCalcBankSelect: document.getElementById("presentationcalc-bank-select"),
@@ -522,7 +523,10 @@ function showTab(tab) {
   } else if (tab === "attendance") {
     renderAttendance(); // roster may have changed since the tab was last shown
   } else if (tab === "scoring") {
-    renderScoring(); // roster/attendance may have changed since the tab was last shown
+    // roster/attendance may have changed since the tab was last shown —
+    // re-render whichever Scoring sub-tab (entry, or a future tool) is showing.
+    const renderFn = SCORING_MODE_RENDERERS[scoringMode];
+    if (renderFn) renderFn();
   } else if (tab === "reportcard") {
     renderConsultationStudentOptions(); // roster may have changed since the tab was last shown
   } else if (tab === "presentationcalc") {
@@ -2079,6 +2083,12 @@ function buildAttendanceFooterRow() {
 }
 
 // ===== Scoring =====
+//
+// The Scoring panel is itself tabbed (see the "Scoring tabs" block
+// below), mirroring the Report Card panel's mode-switch pattern. This
+// first tab, "entry", is everything that used to be the whole Scoring
+// panel — the score table plus Scoring Settings. Further tool tabs get
+// added to SCORING_MODE_RENDERERS as they're built.
 
 function renderScoring() {
   el.scoringTable.innerHTML = "";
@@ -2523,6 +2533,36 @@ async function saveScoringThen(after) {
   }
   if (after) after();
 }
+
+// ----- Scoring tabs (Scoring panel's own sub-tabs) -----
+//
+// "entry" is the score table + Scoring Settings above. Further tool
+// tabs (a matching <button data-scoring-mode="..."> in index.html and
+// a <div id="scoring-mode-<id>-view" class="scoring-mode-view" hidden>)
+// register their render function here.
+
+let scoringMode = "entry"; // which Scoring sub-tab is currently showing
+
+const SCORING_MODE_RENDERERS = {
+  entry: renderScoring,
+};
+
+function showScoringMode(mode) {
+  scoringMode = mode;
+  document.querySelectorAll(".scoring-mode-view").forEach((view) => {
+    view.hidden = view.id !== `scoring-mode-${mode}-view`;
+  });
+  document.querySelectorAll("#scoring-mode-row .tab-btn").forEach((btn) => {
+    btn.classList.toggle("tab-btn-active", btn.dataset.scoringMode === mode);
+  });
+  const renderFn = SCORING_MODE_RENDERERS[mode];
+  if (renderFn) renderFn();
+}
+
+el.scoringModeRow.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-scoring-mode]");
+  if (btn) showScoringMode(btn.dataset.scoringMode);
+});
 
 // ===== Report Card =====
 

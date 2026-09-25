@@ -233,20 +233,31 @@
 
         <!-- ----- Scoring panel ----- -->
         <div id="scoring-panel" class="tab-panel" hidden>
-          <div class="panel-toolbar">
-            <span id="scoring-status" class="result"></span>
-          </div>
-          <div class="attendance-table-wrap">
-            <table id="scoring-table" class="attendance-table scoring-table"></table>
+          <div class="tab-row reportcard-mode-row" id="scoring-mode-row">
+            <button id="scoring-mode-entry-btn" class="tab-btn tab-btn-active" data-scoring-mode="entry">Scoring</button>
+            <!-- future tool tabs get added here, one <button class="tab-btn" data-scoring-mode="..."> each -->
           </div>
 
-          <div class="attendance-settings">
-            <div class="attendance-settings-header">
-              <h3>Scoring Settings</h3>
-              <button id="toggle-scoring-settings-btn" class="btn btn-ghost btn-small">Edit Settings</button>
+          <!-- ----- Scoring: score entry (formerly the whole panel) ----- -->
+          <div id="scoring-mode-entry-view" class="scoring-mode-view">
+            <div class="panel-toolbar">
+              <span id="scoring-status" class="result"></span>
             </div>
-            <div id="scoring-settings-body"></div>
+            <div class="attendance-table-wrap">
+              <table id="scoring-table" class="attendance-table scoring-table"></table>
+            </div>
+
+            <div class="attendance-settings">
+              <div class="attendance-settings-header">
+                <h3>Scoring Settings</h3>
+                <button id="toggle-scoring-settings-btn" class="btn btn-ghost btn-small">Edit Settings</button>
+              </div>
+              <div id="scoring-settings-body"></div>
+            </div>
           </div>
+
+          <!-- future tool views get added here, one
+               <div id="scoring-mode-<id>-view" class="scoring-mode-view" hidden>...</div> each -->
         </div>
 
         <!-- ----- Report Card panel ----- -->
