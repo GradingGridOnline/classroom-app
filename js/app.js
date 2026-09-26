@@ -140,6 +140,11 @@ let attendanceSettingsEditing = false;
 let scoringSettingsEditing = false;
 let consultationDisplayMode = "percent"; // "percent" or "points" — Total Score in Student Consultation
 
+// Per-tool "Edit Settings" state for Scoring tool tabs (Table, etc.) —
+// keyed by tool id, not persisted (same as attendanceSettingsEditing/
+// scoringSettingsEditing, just one map since there can be several tools).
+const scoringToolSettingsEditing = new Map();
+
 async function main() {
   ThemeModule.initLocal();
   renderThemeList();
@@ -467,7 +472,9 @@ async function openCourseDetail(course) {
 
   try {
     await ScoringModule.load(course.id);
-    renderScoring();
+    scoringMode = "entry"; // reset to Main Scores each time a course is opened
+    renderScoringToolTabs(); // (re)builds tabs/views for this course's saved tools
+    showScoringMode("entry");
     el.scoringStatus.textContent = "";
   } catch (err) {
     el.scoringStatus.textContent = `Couldn't load scoring: ${err.message}`;
@@ -2220,6 +2227,13 @@ function renderScoringSettings() {
   el.scoringSettingsBody.innerHTML = "";
   el.scoringSettingsBody.appendChild(buildScoringDisplayToggles());
 
+  const toolsSummary = document.createElement("p");
+  toolsSummary.className = "hint";
+  toolsSummary.textContent = `Scoring tools: ${
+    ScoringModule.tools.length ? ScoringModule.tools.map((t) => t.name).join(", ") : "(none)"
+  }`;
+  el.scoringSettingsBody.appendChild(toolsSummary);
+
   if (!scoringSettingsEditing) {
     if (ScoringModule.categories.length === 0) {
       const hint = document.createElement("p");
@@ -2342,6 +2356,9 @@ function renderScoringSettings() {
   manageWrap.appendChild(addBtn);
   el.scoringSettingsBody.appendChild(manageWrap);
 
+  // ----- Edit mode: scoring tools (extra tabs alongside Main Scores) -----
+  el.scoringSettingsBody.appendChild(buildScoringToolsManageBlock());
+
   if (ScoringModule.categories.length === 0) return;
 
   // ----- Edit mode: category weights -----
@@ -2402,6 +2419,90 @@ function buildWeightRow(label, value, onChange) {
 
   row.append(labelEl, input);
   return row;
+}
+
+/** Lists the tools currently added (each with a Remove button) and an "+ Add Scoring Tool" button that opens a small menu of tool types to add — this is how tabs alongside Main Scores get added/removed. Each tool's own content and settings live in its own tab, not here. */
+function buildScoringToolsManageBlock() {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Scoring Tools";
+  wrap.appendChild(heading);
+
+  if (ScoringModule.tools.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "infraction-edit-list";
+    ScoringModule.tools.forEach((tool) => {
+      const li = document.createElement("li");
+
+      const label = document.createElement("span");
+      label.className = "fixed-type-label";
+      label.textContent = `${tool.name} (${SCORING_TOOL_TYPES[tool.type] || tool.type})`;
+      li.appendChild(label);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn btn-ghost btn-small";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", async () => {
+        if (!confirm(`Remove the "${tool.name}" tab? This can't be undone.`)) return;
+        ScoringModule.removeTool(tool.id);
+        delete SCORING_MODE_RENDERERS[tool.id];
+        scoringToolSettingsEditing.delete(tool.id);
+        if (scoringMode === tool.id) scoringMode = "entry";
+        await saveScoringThen(() => {
+          renderScoringToolTabs();
+          showScoringMode(scoringMode);
+        });
+      });
+      li.appendChild(removeBtn);
+
+      list.appendChild(li);
+    });
+    wrap.appendChild(list);
+  }
+
+  const addWrap = document.createElement("div");
+  addWrap.style.position = "relative";
+  addWrap.style.display = "inline-block";
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn btn-ghost btn-small";
+  addBtn.textContent = "+ Add Scoring Tool";
+
+  const menu = document.createElement("ul");
+  menu.className = "theme-list settings-panel";
+  menu.hidden = true;
+  Object.entries(SCORING_TOOL_TYPES).forEach(([type, label]) => {
+    const li = document.createElement("li");
+    li.className = "theme-item";
+    li.textContent = label;
+    li.addEventListener("click", async () => {
+      let tool;
+      try {
+        tool = ScoringModule.addTool(type);
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+      menu.hidden = true;
+      await saveScoringThen(() => {
+        renderScoringToolTabs();
+        showScoringMode(tool.id);
+      });
+    });
+    menu.appendChild(li);
+  });
+
+  addBtn.addEventListener("click", () => {
+    menu.hidden = !menu.hidden;
+  });
+
+  addWrap.append(addBtn, menu);
+  wrap.appendChild(addWrap);
+
+  return wrap;
 }
 
 function buildScoringStudentRow(student) {
@@ -2536,15 +2637,26 @@ async function saveScoringThen(after) {
 
 // ----- Scoring tabs (Scoring panel's own sub-tabs) -----
 //
-// "entry" is the score table + Scoring Settings above. Further tool
-// tabs (a matching <button data-scoring-mode="..."> in index.html and
-// a <div id="scoring-mode-<id>-view" class="scoring-mode-view" hidden>)
-// register their render function here.
+// "entry" (Main Scores) is the score table + Scoring Settings above —
+// its tab button and view live in index.html. Every other tab is a
+// scoring TOOL, added/removed from Main Scores' own Settings (see
+// buildScoringToolsManageBlock above) rather than hardcoded in the
+// HTML: renderScoringToolTabs() builds one <button> + one view <div>
+// per tool in ScoringModule.tools and registers a render function for
+// it here, so showScoringMode/the click handler below need no changes
+// as tools are added or removed.
 
 let scoringMode = "entry"; // which Scoring sub-tab is currently showing
 
 const SCORING_MODE_RENDERERS = {
   entry: renderScoring,
+};
+
+// One render function per tool TYPE (not per tool instance) — add an
+// entry here (and to SCORING_TOOL_TYPES in scoring.js) for each new
+// kind of scoring tool.
+const SCORING_TOOL_RENDERERS = {
+  table: renderScoringToolTableView,
 };
 
 function showScoringMode(mode) {
@@ -2563,6 +2675,99 @@ el.scoringModeRow.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-scoring-mode]");
   if (btn) showScoringMode(btn.dataset.scoringMode);
 });
+
+/** Rebuilds the tool tab buttons and their view containers from ScoringModule.tools — call after loading a course's scoring data, and after adding/removing a tool. Safe to call repeatedly: previously-built tool buttons/views are removed first. */
+function renderScoringToolTabs() {
+  el.scoringModeRow.querySelectorAll("[data-dynamic-tool]").forEach((btn) => btn.remove());
+  el.scoringPanel.querySelectorAll(".scoring-tool-view").forEach((view) => view.remove());
+
+  ScoringModule.tools.forEach((tool) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab-btn";
+    btn.dataset.scoringMode = tool.id;
+    btn.dataset.dynamicTool = "true";
+    btn.textContent = tool.name;
+    el.scoringModeRow.appendChild(btn);
+
+    const view = document.createElement("div");
+    view.id = `scoring-mode-${tool.id}-view`;
+    view.className = "scoring-mode-view scoring-tool-view";
+    view.hidden = true;
+    el.scoringPanel.appendChild(view);
+
+    SCORING_MODE_RENDERERS[tool.id] = () => renderScoringToolView(tool, view);
+  });
+}
+
+/** Dispatches to the render function for `tool.type`, filling `container`. */
+function renderScoringToolView(tool, container) {
+  const renderFn = SCORING_TOOL_RENDERERS[tool.type];
+  container.innerHTML = "";
+  if (!renderFn) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "Unknown scoring tool type.";
+    container.appendChild(p);
+    return;
+  }
+  renderFn(tool, container);
+}
+
+/**
+ * The "Table" scoring tool. Not connected to anything yet — this is
+ * just the tab's scaffolding (a placeholder plus its own Settings
+ * section, matching the Attendance/Scoring settings pattern) so real
+ * behavior can be wired in later.
+ */
+function renderScoringToolTableView(tool, container) {
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = "This Table isn't connected to anything yet — that'll be set up later.";
+  container.appendChild(hint);
+
+  const placeholderWrap = document.createElement("div");
+  placeholderWrap.className = "attendance-table-wrap";
+  const table = document.createElement("table");
+  table.className = "attendance-table scoring-table";
+  const thead = document.createElement("thead");
+  const tr = document.createElement("tr");
+  const th = document.createElement("th");
+  th.textContent = tool.name;
+  tr.appendChild(th);
+  thead.appendChild(tr);
+  table.appendChild(thead);
+  placeholderWrap.appendChild(table);
+  container.appendChild(placeholderWrap);
+
+  const settingsWrap = document.createElement("div");
+  settingsWrap.className = "attendance-settings";
+
+  const header = document.createElement("div");
+  header.className = "attendance-settings-header";
+  const heading = document.createElement("h3");
+  heading.textContent = `${tool.name} Settings`;
+  header.appendChild(heading);
+
+  const editing = scoringToolSettingsEditing.get(tool.id) || false;
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "btn btn-ghost btn-small";
+  toggleBtn.textContent = editing ? "Done Editing" : "Edit Settings";
+  toggleBtn.addEventListener("click", () => {
+    scoringToolSettingsEditing.set(tool.id, !editing);
+    renderScoringToolView(tool, container);
+  });
+  header.appendChild(toggleBtn);
+  settingsWrap.appendChild(header);
+
+  const bodyHint = document.createElement("p");
+  bodyHint.className = "hint";
+  bodyHint.textContent = "Nothing to configure yet — this tool isn't connected to anything.";
+  settingsWrap.appendChild(bodyHint);
+
+  container.appendChild(settingsWrap);
+}
 
 // ===== Report Card =====
 

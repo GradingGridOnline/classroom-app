@@ -12,9 +12,24 @@
 // - weights: percentage weight per category id, plus one for
 //   "attendance" — pulled from AttendanceModule's percent score
 //   rather than stored here.
+// - tools: extra tabs alongside "Main Scores" (the score-entry screen
+//   above), added/removed from Main Scores' own Settings. Each is
+//   { id, type, name } — `type` picks which scoring tool it is (only
+//   "table" exists so far, and it isn't wired to anything yet), and
+//   `name` is a display label, auto-numbered when more than one of
+//   the same type exists (e.g. "Table", "Table 2"). A tool's own
+//   settings/content live in its own tab, not here.
 
 const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categories as needed
 const MAX_ITEMS_PER_CATEGORY = 50;
+const MAX_SCORING_TOOLS = 10;
+
+// The set of scoring tool types that can be added from Main Scores'
+// Settings. Add a new entry here (and a matching renderer in app.js)
+// to offer a new kind of tool.
+const SCORING_TOOL_TYPES = {
+  table: "Table",
+};
 
 function defaultScoringWeights(categories) {
   const weights = { attendance: 0 };
@@ -28,6 +43,7 @@ const ScoringModule = {
   categories: [],
   records: {},
   weights: {},
+  tools: [], // [{ id, type, name }] — extra tabs alongside Main Scores
   scoreDisplayMode: "percent", // "percent" or "points" — for the Total Score column
   attendanceDisplayMode: "percent", // "percent" or "points" — for the Attendance column
   currentCourseId: null,
@@ -43,12 +59,14 @@ const ScoringModule = {
       this.categories = this._normalizeCategories(data.categories);
       this.records = data.records || {};
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
+      this.tools = Array.isArray(data.tools) ? data.tools : [];
       this.scoreDisplayMode = data.scoreDisplayMode === "points" ? "points" : "percent";
       this.attendanceDisplayMode = data.attendanceDisplayMode === "points" ? "points" : "percent";
     } else {
       this.categories = [];
       this.records = {};
       this.weights = { attendance: 0 };
+      this.tools = [];
       this.scoreDisplayMode = "percent";
       this.attendanceDisplayMode = "percent";
     }
@@ -60,6 +78,7 @@ const ScoringModule = {
       categories: this.categories,
       records: this.records,
       weights: this.weights,
+      tools: this.tools,
       scoreDisplayMode: this.scoreDisplayMode,
       attendanceDisplayMode: this.attendanceDisplayMode,
     });
@@ -196,6 +215,35 @@ const ScoringModule = {
 
   setAttendanceDisplayMode(mode) {
     this.attendanceDisplayMode = mode === "points" ? "points" : "percent";
+  },
+
+  // ----- Scoring tools (extra tabs alongside Main Scores) -----
+
+  /** Adds a new tool of the given type (must be a key in SCORING_TOOL_TYPES) and returns it. Auto-numbers the name when more than one of the same type exists. */
+  addTool(type) {
+    if (!SCORING_TOOL_TYPES[type]) {
+      throw new Error(`Unknown scoring tool type: ${type}`);
+    }
+    if (this.tools.length >= MAX_SCORING_TOOLS) {
+      throw new Error(`You've reached the limit of ${MAX_SCORING_TOOLS} scoring tools.`);
+    }
+    const label = SCORING_TOOL_TYPES[type];
+    const countOfType = this.tools.filter((t) => t.type === type).length;
+    const tool = {
+      id: `tool-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      name: countOfType === 0 ? label : `${label} ${countOfType + 1}`,
+    };
+    this.tools.push(tool);
+    return tool;
+  },
+
+  removeTool(toolId) {
+    this.tools = this.tools.filter((t) => t.id !== toolId);
+  },
+
+  findTool(toolId) {
+    return this.tools.find((t) => t.id === toolId) || null;
   },
 
   /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
