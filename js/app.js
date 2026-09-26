@@ -2728,30 +2728,23 @@ function renderScoringToolView(tool, container) {
 }
 
 /**
- * The "Table" scoring tool. Not connected to anything yet — this is
- * just the tab's scaffolding (a placeholder plus its own Settings
- * section, matching the Attendance/Scoring settings pattern) so real
- * behavior can be wired in later.
+ * The "Table" scoring tool. Its shape (rows, subrows, columns, and
+ * the first column's Groups/Students mode) is fully configurable in
+ * Settings below; the preview grid at the top reflects that shape
+ * live. Nothing here is wired to real data yet — score/cum. score
+ * cells are placeholders, not editable inputs.
  */
 function renderScoringToolTableView(tool, container) {
+  const cfg = ScoringModule.getTableConfig(tool.id);
+  container.innerHTML = "";
+
   const hint = document.createElement("p");
   hint.className = "hint";
-  hint.textContent = "This Table isn't connected to anything yet — that'll be set up later.";
+  hint.textContent =
+    "This Table isn't connected to anything yet — that'll be set up later. The preview below reflects this tool's Settings.";
   container.appendChild(hint);
 
-  const placeholderWrap = document.createElement("div");
-  placeholderWrap.className = "attendance-table-wrap";
-  const table = document.createElement("table");
-  table.className = "attendance-table scoring-table";
-  const thead = document.createElement("thead");
-  const tr = document.createElement("tr");
-  const th = document.createElement("th");
-  th.textContent = tool.name;
-  tr.appendChild(th);
-  thead.appendChild(tr);
-  table.appendChild(thead);
-  placeholderWrap.appendChild(table);
-  container.appendChild(placeholderWrap);
+  container.appendChild(buildTablePreview(cfg));
 
   const settingsWrap = document.createElement("div");
   settingsWrap.className = "attendance-settings";
@@ -2774,12 +2767,284 @@ function renderScoringToolTableView(tool, container) {
   header.appendChild(toggleBtn);
   settingsWrap.appendChild(header);
 
-  const bodyHint = document.createElement("p");
-  bodyHint.className = "hint";
-  bodyHint.textContent = "Nothing to configure yet — this tool isn't connected to anything.";
-  settingsWrap.appendChild(bodyHint);
+  if (!editing) {
+    const summary = document.createElement("p");
+    summary.className = "hint";
+    summary.textContent =
+      `First column: ${cfg.firstColumn.name} (${cfg.firstColumn.mode === "groups" ? "Groups" : "Students"}) — ` +
+      `${cfg.rows.length} row(s), ${cfg.columns.length} column(s).`;
+    settingsWrap.appendChild(summary);
+  } else {
+    settingsWrap.appendChild(buildTableFirstColumnBlock(tool, cfg, container));
+    settingsWrap.appendChild(buildTableRowsBlock(tool, cfg, container));
+    settingsWrap.appendChild(buildTableColumnsBlock(tool, cfg, container));
+  }
 
   container.appendChild(settingsWrap);
+}
+
+/** Saves the whole ScoringModule (tool config lives inside ScoringModule.tools) and re-renders just this one tool's view. */
+async function saveScoringToolThen(tool, container) {
+  el.scoringStatus.textContent = "Saving…";
+  try {
+    await ScoringModule.save();
+    el.scoringStatus.textContent = "";
+  } catch (err) {
+    el.scoringStatus.textContent = `Couldn't save: ${err.message}`;
+  }
+  renderScoringToolView(tool, container);
+}
+
+function tableColumnTypeLabel(type) {
+  if (type === "score") return "Score";
+  if (type === "cum_score") return "Cum. Score";
+  return "Description";
+}
+
+/** Read-only preview grid built from a table tool's current config — one column per cfg.columns entry (plus the first column), one row per row/subrow. Score and Cum. Score cells are placeholder-only since nothing is wired up yet. */
+function buildTablePreview(cfg) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-table-wrap";
+  const table = document.createElement("table");
+  table.className = "attendance-table scoring-table";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const firstTh = document.createElement("th");
+  firstTh.textContent = cfg.firstColumn.name;
+  headRow.appendChild(firstTh);
+  cfg.columns.forEach((col) => {
+    const th = document.createElement("th");
+    th.textContent = `${col.name} (${tableColumnTypeLabel(col.type)})`;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  if (cfg.rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = Math.max(1, cfg.columns.length + 1);
+    td.className = "hint";
+    td.textContent = "No rows set up yet — add some in Settings below.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  } else {
+    cfg.rows.forEach((row) => {
+      if (row.subrows.length === 0) {
+        tbody.appendChild(buildTablePreviewRow(row.name, cfg.columns));
+      } else {
+        row.subrows.forEach((subrow) => {
+          tbody.appendChild(buildTablePreviewRow(`${row.name} — ${subrow.name}`, cfg.columns));
+        });
+      }
+    });
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function buildTablePreviewRow(label, columns) {
+  const tr = document.createElement("tr");
+  const labelTd = document.createElement("td");
+  labelTd.textContent = label;
+  tr.appendChild(labelTd);
+  columns.forEach((col) => {
+    const td = document.createElement("td");
+    td.className = "hint";
+    td.textContent = col.type === "cum_score" ? "—" : "";
+    tr.appendChild(td);
+  });
+  return tr;
+}
+
+/** First-column settings: its display name, and whether rows represent Groups or Students. */
+function buildTableFirstColumnBlock(tool, cfg, container) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "First column";
+  wrap.appendChild(heading);
+
+  const row = document.createElement("div");
+  row.className = "mapping-row";
+
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.value = cfg.firstColumn.name;
+  nameInput.addEventListener("change", async () => {
+    ScoringModule.setTableFirstColumnName(tool.id, nameInput.value);
+    await saveScoringToolThen(tool, container);
+  });
+
+  const modeLabel = document.createElement("label");
+  modeLabel.textContent = "Rows represent:";
+
+  const modeSelect = document.createElement("select");
+  [
+    ["students", "Students"],
+    ["groups", "Groups"],
+  ].forEach(([val, label]) => {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    if (val === cfg.firstColumn.mode) opt.selected = true;
+    modeSelect.appendChild(opt);
+  });
+  modeSelect.addEventListener("change", async () => {
+    ScoringModule.setTableFirstColumnMode(tool.id, modeSelect.value);
+    await saveScoringToolThen(tool, container);
+  });
+
+  row.append(nameInput, modeLabel, modeSelect);
+  wrap.appendChild(row);
+  return wrap;
+}
+
+/** Row count setting plus a nameable, editable list of rows — each row also gets its own subrow-count setting and, if that's above zero, a nested nameable list of subrows. */
+function buildTableRowsBlock(tool, cfg, container) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Rows";
+  wrap.appendChild(heading);
+
+  const countRow = document.createElement("div");
+  countRow.className = "mapping-row";
+  const countInput = document.createElement("input");
+  countInput.type = "text";
+  countInput.inputMode = "numeric";
+  countInput.value = cfg.rows.length;
+  countInput.addEventListener("change", async () => {
+    ScoringModule.setTableRowCount(tool.id, countInput.value);
+    await saveScoringToolThen(tool, container);
+  });
+  const countHint = document.createElement("label");
+  countHint.textContent = "Number of rows";
+  countRow.append(countInput, countHint);
+  wrap.appendChild(countRow);
+
+  const list = document.createElement("ul");
+  list.className = "infraction-edit-list category-manage-list";
+  cfg.rows.forEach((row) => {
+    const li = document.createElement("li");
+    li.className = "category-manage-item";
+
+    const topRow = document.createElement("div");
+    topRow.className = "category-manage-top-row";
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = row.name;
+    nameInput.addEventListener("change", async () => {
+      ScoringModule.setTableRowName(tool.id, row.id, nameInput.value);
+      await saveScoringToolThen(tool, container);
+    });
+    topRow.appendChild(nameInput);
+
+    const subCountLabel = document.createElement("label");
+    subCountLabel.textContent = "Subrows:";
+    const subCountInput = document.createElement("input");
+    subCountInput.type = "text";
+    subCountInput.inputMode = "numeric";
+    subCountInput.className = "point-value-input";
+    subCountInput.value = row.subrows.length;
+    subCountInput.addEventListener("change", async () => {
+      ScoringModule.setTableSubrowCount(tool.id, row.id, subCountInput.value);
+      await saveScoringToolThen(tool, container);
+    });
+    topRow.append(subCountLabel, subCountInput);
+
+    li.appendChild(topRow);
+
+    if (row.subrows.length > 0) {
+      const subList = document.createElement("div");
+      subList.className = "category-items-edit-list";
+      row.subrows.forEach((subrow) => {
+        const subRowEl = document.createElement("div");
+        subRowEl.className = "category-item-edit-row";
+        const subNameInput = document.createElement("input");
+        subNameInput.type = "text";
+        subNameInput.value = subrow.name;
+        subNameInput.addEventListener("change", async () => {
+          ScoringModule.setTableSubrowName(tool.id, row.id, subrow.id, subNameInput.value);
+          await saveScoringToolThen(tool, container);
+        });
+        subRowEl.appendChild(subNameInput);
+        subList.appendChild(subRowEl);
+      });
+      li.appendChild(subList);
+    }
+
+    list.appendChild(li);
+  });
+  wrap.appendChild(list);
+
+  return wrap;
+}
+
+/** Column count setting plus a nameable, typed, editable list of columns (description / score / cum. score). Doesn't include the first column, which has its own block above. */
+function buildTableColumnsBlock(tool, cfg, container) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Columns";
+  wrap.appendChild(heading);
+
+  const countRow = document.createElement("div");
+  countRow.className = "mapping-row";
+  const countInput = document.createElement("input");
+  countInput.type = "text";
+  countInput.inputMode = "numeric";
+  countInput.value = cfg.columns.length;
+  countInput.addEventListener("change", async () => {
+    ScoringModule.setTableColumnCount(tool.id, countInput.value);
+    await saveScoringToolThen(tool, container);
+  });
+  const countHint = document.createElement("label");
+  countHint.textContent = "Number of columns (besides the first column)";
+  countRow.append(countInput, countHint);
+  wrap.appendChild(countRow);
+
+  const list = document.createElement("ul");
+  list.className = "infraction-edit-list";
+  cfg.columns.forEach((column) => {
+    const li = document.createElement("li");
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = column.name;
+    nameInput.addEventListener("change", async () => {
+      ScoringModule.setTableColumnName(tool.id, column.id, nameInput.value);
+      await saveScoringToolThen(tool, container);
+    });
+    li.appendChild(nameInput);
+
+    const typeSelect = document.createElement("select");
+    [
+      ["description", "Description"],
+      ["score", "Score"],
+      ["cum_score", "Cum. Score"],
+    ].forEach(([val, label]) => {
+      const opt = document.createElement("option");
+      opt.value = val;
+      opt.textContent = label;
+      if (val === column.type) opt.selected = true;
+      typeSelect.appendChild(opt);
+    });
+    typeSelect.addEventListener("change", async () => {
+      ScoringModule.setTableColumnType(tool.id, column.id, typeSelect.value);
+      await saveScoringToolThen(tool, container);
+    });
+    li.appendChild(typeSelect);
+
+    list.appendChild(li);
+  });
+  wrap.appendChild(list);
+
+  return wrap;
 }
 
 // ===== Report Card =====

@@ -23,6 +23,9 @@
 const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categories as needed
 const MAX_ITEMS_PER_CATEGORY = 50;
 const MAX_SCORING_TOOLS = 10;
+const MAX_TABLE_ROWS = 50;
+const MAX_TABLE_SUBROWS = 20;
+const MAX_TABLE_COLUMNS = 20;
 
 // The set of scoring tool types that can be added from Main Scores'
 // Settings. Add a new entry here (and a matching renderer in app.js)
@@ -249,6 +252,133 @@ const ScoringModule = {
 
   findTool(toolId) {
     return this.tools.find((t) => t.id === toolId) || null;
+  },
+
+  // ----- Table tool config -----
+  // tool.config for a "table"-type tool: { firstColumn: { name, mode },
+  // rows: [{ id, name, subrows: [{ id, name }] }], columns: [{ id,
+  // name, type }] }. firstColumn.mode is "students" or "groups" and
+  // has no `type` of its own — it's a separate toggle, not one of the
+  // three column types below. columns[].type is "description",
+  // "score", or "cum_score". Nothing here is wired to real data yet —
+  // this only defines the Table's shape.
+
+  /** Returns tool.config for a table tool, creating/normalizing it (and any missing pieces) in place first. Returns null if the tool doesn't exist. */
+  getTableConfig(toolId) {
+    const tool = this.findTool(toolId);
+    if (!tool) return null;
+    if (!tool.config || typeof tool.config !== "object") tool.config = {};
+    const cfg = tool.config;
+
+    if (!cfg.firstColumn || typeof cfg.firstColumn !== "object") cfg.firstColumn = {};
+    if (cfg.firstColumn.mode !== "groups" && cfg.firstColumn.mode !== "students") {
+      cfg.firstColumn.mode = "students";
+    }
+    if (typeof cfg.firstColumn.name !== "string" || !cfg.firstColumn.name.trim()) {
+      cfg.firstColumn.name = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
+    }
+
+    if (!Array.isArray(cfg.rows)) cfg.rows = [];
+    cfg.rows.forEach((row) => {
+      if (!Array.isArray(row.subrows)) row.subrows = [];
+    });
+
+    if (!Array.isArray(cfg.columns)) cfg.columns = [];
+
+    return cfg;
+  },
+
+  setTableFirstColumnMode(toolId, mode) {
+    const cfg = this.getTableConfig(toolId);
+    if (cfg) cfg.firstColumn.mode = mode === "groups" ? "groups" : "students";
+  },
+
+  setTableFirstColumnName(toolId, name) {
+    const cfg = this.getTableConfig(toolId);
+    if (cfg) cfg.firstColumn.name = (name || "").trim() || cfg.firstColumn.name;
+  },
+
+  /** Sets the row count, adding default-named trailing rows or trimming from the end. */
+  setTableRowCount(toolId, count) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    count = Math.max(0, Math.min(MAX_TABLE_ROWS, Math.round(Number(count) || 0)));
+    if (count > cfg.rows.length) {
+      while (cfg.rows.length < count) {
+        const n = cfg.rows.length + 1;
+        cfg.rows.push({
+          id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: `Row ${n}`,
+          subrows: [],
+        });
+      }
+    } else if (count < cfg.rows.length) {
+      cfg.rows = cfg.rows.slice(0, count);
+    }
+  },
+
+  setTableRowName(toolId, rowId, name) {
+    const cfg = this.getTableConfig(toolId);
+    const row = cfg && cfg.rows.find((r) => r.id === rowId);
+    if (row) row.name = (name || "").trim() || row.name;
+  },
+
+  /** Sets one row's subrow count, adding default-named trailing subrows or trimming from the end. */
+  setTableSubrowCount(toolId, rowId, count) {
+    const cfg = this.getTableConfig(toolId);
+    const row = cfg && cfg.rows.find((r) => r.id === rowId);
+    if (!row) return;
+    count = Math.max(0, Math.min(MAX_TABLE_SUBROWS, Math.round(Number(count) || 0)));
+    if (count > row.subrows.length) {
+      while (row.subrows.length < count) {
+        const n = row.subrows.length + 1;
+        row.subrows.push({
+          id: `subrow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: `Subrow ${n}`,
+        });
+      }
+    } else if (count < row.subrows.length) {
+      row.subrows = row.subrows.slice(0, count);
+    }
+  },
+
+  setTableSubrowName(toolId, rowId, subrowId, name) {
+    const cfg = this.getTableConfig(toolId);
+    const row = cfg && cfg.rows.find((r) => r.id === rowId);
+    const subrow = row && row.subrows.find((s) => s.id === subrowId);
+    if (subrow) subrow.name = (name || "").trim() || subrow.name;
+  },
+
+  /** Sets the column count (not including the first column), adding default-named/typed trailing columns or trimming from the end. */
+  setTableColumnCount(toolId, count) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    count = Math.max(0, Math.min(MAX_TABLE_COLUMNS, Math.round(Number(count) || 0)));
+    if (count > cfg.columns.length) {
+      while (cfg.columns.length < count) {
+        const n = cfg.columns.length + 1;
+        cfg.columns.push({
+          id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: `Column ${n}`,
+          type: "description",
+        });
+      }
+    } else if (count < cfg.columns.length) {
+      cfg.columns = cfg.columns.slice(0, count);
+    }
+  },
+
+  setTableColumnName(toolId, columnId, name) {
+    const cfg = this.getTableConfig(toolId);
+    const column = cfg && cfg.columns.find((c) => c.id === columnId);
+    if (column) column.name = (name || "").trim() || column.name;
+  },
+
+  setTableColumnType(toolId, columnId, type) {
+    const cfg = this.getTableConfig(toolId);
+    const column = cfg && cfg.columns.find((c) => c.id === columnId);
+    if (!column) return;
+    column.type = ["description", "score", "cum_score"].includes(type) ? type : "description";
   },
 
   /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
