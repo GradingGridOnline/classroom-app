@@ -2797,11 +2797,13 @@ async function saveScoringToolThen(tool, container) {
 
 function tableColumnTypeLabel(type) {
   if (type === "score") return "Score";
-  if (type === "cum_score") return "Cum. Score";
+  if (type === "total_score_raw") return "Total Score - Raw";
+  if (type === "total_score_points") return "Total Score - Points";
+  if (type === "total_score_percentage") return "Total Score - Percentage";
   return "Description";
 }
 
-/** The Table's actual grid — one column per cfg.columns entry (plus the first, identifier-only column), one line per row/subrow. Description and Score cells are editable inputs backed by ScoringModule's per-cell value storage; Cum. Score cells are read-only, computed from that line's Score columns. */
+/** The Table's actual grid — one column per cfg.columns entry (plus the first, identifier-only column), one line per row/subrow. Description and Score cells are editable inputs backed by ScoringModule's per-cell value storage; the three "total_score_*" cells are read-only, computed from that line's Score columns. */
 function buildTablePreview(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-table-wrap";
@@ -2815,8 +2817,9 @@ function buildTablePreview(tool, cfg, container) {
   headRow.appendChild(firstTh);
   cfg.columns.forEach((col) => {
     const th = document.createElement("th");
-    // Once the user has given a column its own label, the "(Description)"
-    // / "(Score)" / "(Cum. Score)" hint is no longer needed alongside it.
+    // Once the user has given a column its own label, the type hint
+    // ("Description" / "Score" / "Total Score - ...") next to its
+    // name in the header goes away.
     th.textContent = col.labeled ? col.name : `${col.name} (${tableColumnTypeLabel(col.type)})`;
     headRow.appendChild(th);
   });
@@ -2859,10 +2862,18 @@ function buildTablePreviewRow(tool, cfg, container, lineId, label) {
 
   cfg.columns.forEach((col) => {
     const td = document.createElement("td");
-    if (col.type === "cum_score") {
-      const sum = ScoringModule.computeTableCumScore(tool.id, lineId);
+    if (col.type === "total_score_raw" || col.type === "total_score_points" || col.type === "total_score_percentage") {
+      const sum = ScoringModule.computeTableScoreSum(tool.id, lineId);
       td.className = "hint";
-      td.textContent = sum === null ? "—" : String(sum);
+      if (sum === null) {
+        td.textContent = "—"; // no "score" columns exist to sum
+      } else if (col.type === "total_score_raw") {
+        td.textContent = String(sum);
+      } else if (col.type === "total_score_points") {
+        td.textContent = col.maxPoints > 0 ? `${sum}/${col.maxPoints}` : "—";
+      } else {
+        td.textContent = col.maxPoints > 0 ? `${Math.round((sum / col.maxPoints) * 100)}%` : "—";
+      }
     } else {
       const input = document.createElement("input");
       input.type = "text";
@@ -3046,7 +3057,9 @@ function buildTableColumnsBlock(tool, cfg, container) {
     [
       ["description", "Description"],
       ["score", "Score"],
-      ["cum_score", "Cum. Score"],
+      ["total_score_raw", "Total Score - Raw"],
+      ["total_score_points", "Total Score - Points"],
+      ["total_score_percentage", "Total Score - Percentage"],
     ].forEach(([val, label]) => {
       const opt = document.createElement("option");
       opt.value = val;
@@ -3059,6 +3072,21 @@ function buildTableColumnsBlock(tool, cfg, container) {
       await saveScoringToolThen(tool, container);
     });
     li.appendChild(typeSelect);
+
+    if (column.type === "total_score_points" || column.type === "total_score_percentage") {
+      const maxInput = document.createElement("input");
+      maxInput.type = "text";
+      maxInput.inputMode = "decimal";
+      maxInput.className = "point-value-input";
+      maxInput.title = "Total possible score";
+      maxInput.placeholder = "Total possible";
+      maxInput.value = column.maxPoints || "";
+      maxInput.addEventListener("change", async () => {
+        ScoringModule.setTableColumnMaxPoints(tool.id, column.id, maxInput.value);
+        await saveScoringToolThen(tool, container);
+      });
+      li.appendChild(maxInput);
+    }
 
     list.appendChild(li);
   });

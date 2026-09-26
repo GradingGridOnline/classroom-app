@@ -27,6 +27,19 @@ const MAX_TABLE_ROWS = 50;
 const MAX_TABLE_SUBROWS = 20;
 const MAX_TABLE_COLUMNS = 20;
 
+// A column's type. "score" is a plain enterable number; the three
+// "total_score_*" types are read-only and computed from that line's
+// "score" columns — raw sum, sum shown out of a set total ("points"),
+// or that sum as a percentage of a set total ("percentage"). The
+// points/percentage variants use column.maxPoints as their total.
+const TABLE_COLUMN_TYPES = [
+  "description",
+  "score",
+  "total_score_raw",
+  "total_score_points",
+  "total_score_percentage",
+];
+
 // The set of scoring tool types that can be added from Main Scores'
 // Settings. Add a new entry here (and a matching renderer in app.js)
 // to offer a new kind of tool.
@@ -257,11 +270,17 @@ const ScoringModule = {
   // ----- Table tool config -----
   // tool.config for a "table"-type tool: { firstColumn: { name, mode },
   // rows: [{ id, name, subrows: [{ id, name }] }], columns: [{ id,
-  // name, type }] }. firstColumn.mode is "students" or "groups" and
-  // has no `type` of its own — it's a separate toggle, not one of the
-  // three column types below. columns[].type is "description",
-  // "score", or "cum_score". Nothing here is wired to real data yet —
-  // this only defines the Table's shape.
+  // name, type, labeled, maxPoints }] }. firstColumn.mode is
+  // "students" or "groups" and has no `type` of its own — it's a
+  // separate toggle, not one of the column types below. columns[].type
+  // is one of TABLE_COLUMN_TYPES: "description", "score" (a plain
+  // enterable number), or one of the three read-only "total_score_*"
+  // types, each summing that line's "score" columns — raw, out of
+  // maxPoints ("points"), or as a percentage of maxPoints
+  // ("percentage"). `labeled` is true once a user has renamed a
+  // column, at which point its type no longer shows next to its name
+  // in the header. Nothing here is wired to real data yet — this only
+  // defines the Table's shape.
 
   /** Returns tool.config for a table tool, creating/normalizing it (and any missing pieces) in place first. Returns null if the tool doesn't exist. */
   getTableConfig(toolId) {
@@ -284,8 +303,16 @@ const ScoringModule = {
     });
 
     if (!Array.isArray(cfg.columns)) cfg.columns = [];
-    cfg.columns.forEach((column) => {
-      if (typeof column.labeled !== "boolean") column.labeled = false;
+    cfg.columns.forEach((column, i) => {
+      if (column.type === "cum_score") column.type = "total_score_raw"; // legacy type key
+      if (!TABLE_COLUMN_TYPES.includes(column.type)) column.type = "description";
+      if (typeof column.labeled !== "boolean") {
+        // Data saved before the "labeled" flag existed — best guess:
+        // if the name isn't the auto-generated default for this slot,
+        // a user must have already set it, so don't show the type hint.
+        column.labeled = column.name !== `Column ${i + 1}`;
+      }
+      if (typeof column.maxPoints !== "number") column.maxPoints = 0;
     });
 
     if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
@@ -377,6 +404,7 @@ const ScoringModule = {
           name: `Column ${n}`,
           type: "description",
           labeled: false,
+          maxPoints: 0,
         });
       }
     } else if (count < cfg.columns.length) {
@@ -392,10 +420,9 @@ const ScoringModule = {
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
     if (!column) return;
     column.name = (name || "").trim() || column.name;
-    // Once a user has set a column's name, the "(Description)" /
-    // "(Score)" / "(Cum. Score)" hint next to it in the header goes
-    // away — the label itself is assumed to make the column's purpose
-    // clear from here on.
+    // Once a user has set a column's name, the type hint next to it
+    // in the header goes away — the label itself is assumed to make
+    // the column's purpose clear from here on.
     column.labeled = true;
   },
 
@@ -403,15 +430,23 @@ const ScoringModule = {
     const cfg = this.getTableConfig(toolId);
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
     if (!column) return;
-    column.type = ["description", "score", "cum_score"].includes(type) ? type : "description";
+    column.type = TABLE_COLUMN_TYPES.includes(type) ? type : "description";
+  },
+
+  /** The total possible score for a "total_score_points" or "total_score_percentage" column — unused by the other types. */
+  setTableColumnMaxPoints(toolId, columnId, value) {
+    const cfg = this.getTableConfig(toolId);
+    const column = cfg && cfg.columns.find((c) => c.id === columnId);
+    if (!column) return;
+    column.maxPoints = Math.max(0, Number(value) || 0);
   },
 
   // ----- Table cell values -----
   // Keyed by "lineId|columnId", where lineId is a row's id (for a row
   // with no subrows) or a subrow's id (for one of a row's subrows) —
-  // whichever the grid actually draws as its own line. Cum. Score
-  // columns store nothing here; they're computed from the "score"
-  // columns on the same line.
+  // whichever the grid actually draws as its own line. The three
+  // "total_score_*" columns store nothing here; they're computed from
+  // the "score" columns on the same line.
 
   getTableValue(toolId, lineId, columnId) {
     const cfg = this.getTableConfig(toolId);
@@ -428,8 +463,8 @@ const ScoringModule = {
     else cfg.values[key] = trimmed;
   },
 
-  /** Sum of every "score"-type column's value on this line, parsed as a number (blank/non-numeric entries count as 0 toward the sum). Returns null if the table has no score columns at all, so the caller can show "—" instead of a bare 0. */
-  computeTableCumScore(toolId, lineId) {
+  /** Sum of every "score"-type column's value on this line, parsed as a number (blank/non-numeric entries count as 0 toward the sum). Returns null if the table has no score columns at all, so the caller can show "—" instead of a bare 0. Shared by all three "total_score_*" column types. */
+  computeTableScoreSum(toolId, lineId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return null;
     let hasScoreColumn = false;
