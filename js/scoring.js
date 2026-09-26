@@ -242,6 +242,11 @@ const ScoringModule = {
     this.tools = this.tools.filter((t) => t.id !== toolId);
   },
 
+  renameTool(toolId, name) {
+    const tool = this.findTool(toolId);
+    if (tool) tool.name = (name || "").trim() || tool.name;
+  },
+
   findTool(toolId) {
     return this.tools.find((t) => t.id === toolId) || null;
   },

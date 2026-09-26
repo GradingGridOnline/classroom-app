@@ -2435,10 +2435,23 @@ function buildScoringToolsManageBlock() {
     ScoringModule.tools.forEach((tool) => {
       const li = document.createElement("li");
 
-      const label = document.createElement("span");
-      label.className = "fixed-type-label";
-      label.textContent = `${tool.name} (${SCORING_TOOL_TYPES[tool.type] || tool.type})`;
-      li.appendChild(label);
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = tool.name;
+      nameInput.title = "Rename this tool's tab";
+      nameInput.addEventListener("change", async () => {
+        ScoringModule.renameTool(tool.id, nameInput.value);
+        await saveScoringThen(() => {
+          renderScoringToolTabs(); // tab label needs the new name too
+          showScoringMode(scoringMode);
+        });
+      });
+      li.appendChild(nameInput);
+
+      const typeLabel = document.createElement("span");
+      typeLabel.className = "hint";
+      typeLabel.textContent = `(${SCORING_TOOL_TYPES[tool.type] || tool.type})`;
+      li.appendChild(typeLabel);
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
