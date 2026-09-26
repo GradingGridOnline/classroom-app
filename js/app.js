@@ -3975,3 +3975,4 @@ async function deleteScoreForm(recordId) {
 }
 
 main();
+

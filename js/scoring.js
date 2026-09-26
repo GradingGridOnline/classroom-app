@@ -567,3 +567,4 @@ const ScoringModule = {
 };
 
 window.ScoringModule = ScoringModule;
+
