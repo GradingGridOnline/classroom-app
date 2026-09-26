@@ -2744,7 +2744,7 @@ function renderScoringToolTableView(tool, container) {
     "This Table isn't connected to anything yet — that'll be set up later. The preview below reflects this tool's Settings.";
   container.appendChild(hint);
 
-  container.appendChild(buildTablePreview(cfg));
+  container.appendChild(buildTablePreview(tool, cfg, container));
 
   const settingsWrap = document.createElement("div");
   settingsWrap.className = "attendance-settings";
@@ -2801,8 +2801,8 @@ function tableColumnTypeLabel(type) {
   return "Description";
 }
 
-/** Read-only preview grid built from a table tool's current config — one column per cfg.columns entry (plus the first column), one row per row/subrow. Score and Cum. Score cells are placeholder-only since nothing is wired up yet. */
-function buildTablePreview(cfg) {
+/** The Table's actual grid — one column per cfg.columns entry (plus the first, identifier-only column), one line per row/subrow. Description and Score cells are editable inputs backed by ScoringModule's per-cell value storage; Cum. Score cells are read-only, computed from that line's Score columns. */
+function buildTablePreview(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-table-wrap";
   const table = document.createElement("table");
@@ -2815,7 +2815,9 @@ function buildTablePreview(cfg) {
   headRow.appendChild(firstTh);
   cfg.columns.forEach((col) => {
     const th = document.createElement("th");
-    th.textContent = `${col.name} (${tableColumnTypeLabel(col.type)})`;
+    // Once the user has given a column its own label, the "(Description)"
+    // / "(Score)" / "(Cum. Score)" hint is no longer needed alongside it.
+    th.textContent = col.labeled ? col.name : `${col.name} (${tableColumnTypeLabel(col.type)})`;
     headRow.appendChild(th);
   });
   thead.appendChild(headRow);
@@ -2833,10 +2835,12 @@ function buildTablePreview(cfg) {
   } else {
     cfg.rows.forEach((row) => {
       if (row.subrows.length === 0) {
-        tbody.appendChild(buildTablePreviewRow(row.name, cfg.columns));
+        tbody.appendChild(buildTablePreviewRow(tool, cfg, container, row.id, row.name));
       } else {
         row.subrows.forEach((subrow) => {
-          tbody.appendChild(buildTablePreviewRow(`${row.name} — ${subrow.name}`, cfg.columns));
+          tbody.appendChild(
+            buildTablePreviewRow(tool, cfg, container, subrow.id, `${row.name} — ${subrow.name}`)
+          );
         });
       }
     });
@@ -2846,15 +2850,31 @@ function buildTablePreview(cfg) {
   return wrap;
 }
 
-function buildTablePreviewRow(label, columns) {
+/** One grid line. `lineId` is the row's id (if it has no subrows) or a subrow's id — whichever the line actually represents — and is what per-cell values are keyed by. */
+function buildTablePreviewRow(tool, cfg, container, lineId, label) {
   const tr = document.createElement("tr");
   const labelTd = document.createElement("td");
   labelTd.textContent = label;
   tr.appendChild(labelTd);
-  columns.forEach((col) => {
+
+  cfg.columns.forEach((col) => {
     const td = document.createElement("td");
-    td.className = "hint";
-    td.textContent = col.type === "cum_score" ? "—" : "";
+    if (col.type === "cum_score") {
+      const sum = ScoringModule.computeTableCumScore(tool.id, lineId);
+      td.className = "hint";
+      td.textContent = sum === null ? "—" : String(sum);
+    } else {
+      const input = document.createElement("input");
+      input.type = "text";
+      if (col.type === "score") input.inputMode = "decimal";
+      input.className = "scoring-score-input";
+      input.value = ScoringModule.getTableValue(tool.id, lineId, col.id);
+      input.addEventListener("change", async () => {
+        ScoringModule.setTableValue(tool.id, lineId, col.id, input.value);
+        await saveScoringToolThen(tool, container);
+      });
+      td.appendChild(input);
+    }
     tr.appendChild(td);
   });
   return tr;

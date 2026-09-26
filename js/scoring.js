@@ -284,6 +284,11 @@ const ScoringModule = {
     });
 
     if (!Array.isArray(cfg.columns)) cfg.columns = [];
+    cfg.columns.forEach((column) => {
+      if (typeof column.labeled !== "boolean") column.labeled = false;
+    });
+
+    if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
 
     return cfg;
   },
@@ -313,7 +318,14 @@ const ScoringModule = {
         });
       }
     } else if (count < cfg.rows.length) {
+      const removed = cfg.rows.slice(count);
+      const lineIds = new Set();
+      removed.forEach((r) => {
+        if (r.subrows.length === 0) lineIds.add(r.id);
+        else r.subrows.forEach((s) => lineIds.add(s.id));
+      });
       cfg.rows = cfg.rows.slice(0, count);
+      this._purgeTableValues(cfg, { lineIds });
     }
   },
 
@@ -338,7 +350,10 @@ const ScoringModule = {
         });
       }
     } else if (count < row.subrows.length) {
+      const removed = row.subrows.slice(count);
+      const lineIds = new Set(removed.map((s) => s.id));
       row.subrows = row.subrows.slice(0, count);
+      this._purgeTableValues(cfg, { lineIds });
     }
   },
 
@@ -361,17 +376,27 @@ const ScoringModule = {
           id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: `Column ${n}`,
           type: "description",
+          labeled: false,
         });
       }
     } else if (count < cfg.columns.length) {
+      const removed = cfg.columns.slice(count);
+      const columnIds = new Set(removed.map((c) => c.id));
       cfg.columns = cfg.columns.slice(0, count);
+      this._purgeTableValues(cfg, { columnIds });
     }
   },
 
   setTableColumnName(toolId, columnId, name) {
     const cfg = this.getTableConfig(toolId);
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
-    if (column) column.name = (name || "").trim() || column.name;
+    if (!column) return;
+    column.name = (name || "").trim() || column.name;
+    // Once a user has set a column's name, the "(Description)" /
+    // "(Score)" / "(Cum. Score)" hint next to it in the header goes
+    // away — the label itself is assumed to make the column's purpose
+    // clear from here on.
+    column.labeled = true;
   },
 
   setTableColumnType(toolId, columnId, type) {
@@ -379,6 +404,57 @@ const ScoringModule = {
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
     if (!column) return;
     column.type = ["description", "score", "cum_score"].includes(type) ? type : "description";
+  },
+
+  // ----- Table cell values -----
+  // Keyed by "lineId|columnId", where lineId is a row's id (for a row
+  // with no subrows) or a subrow's id (for one of a row's subrows) —
+  // whichever the grid actually draws as its own line. Cum. Score
+  // columns store nothing here; they're computed from the "score"
+  // columns on the same line.
+
+  getTableValue(toolId, lineId, columnId) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return "";
+    return cfg.values[`${lineId}|${columnId}`] || "";
+  },
+
+  setTableValue(toolId, lineId, columnId, value) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    const key = `${lineId}|${columnId}`;
+    const trimmed = value == null ? "" : String(value).trim();
+    if (trimmed === "") delete cfg.values[key];
+    else cfg.values[key] = trimmed;
+  },
+
+  /** Sum of every "score"-type column's value on this line, parsed as a number (blank/non-numeric entries count as 0 toward the sum). Returns null if the table has no score columns at all, so the caller can show "—" instead of a bare 0. */
+  computeTableCumScore(toolId, lineId) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return null;
+    let hasScoreColumn = false;
+    let sum = 0;
+    cfg.columns.forEach((col) => {
+      if (col.type !== "score") return;
+      hasScoreColumn = true;
+      const raw = cfg.values[`${lineId}|${col.id}`];
+      const num = Number(raw);
+      if (raw !== undefined && !Number.isNaN(num)) sum += num;
+    });
+    return hasScoreColumn ? sum : null;
+  },
+
+  /** Deletes any stored cell values whose lineId is in `lineIds` and/or whose columnId is in `columnIds` — called when rows, subrows, or columns are removed so their old values don't linger as orphaned data. */
+  _purgeTableValues(cfg, { lineIds, columnIds } = {}) {
+    if (!lineIds && !columnIds) return;
+    Object.keys(cfg.values).forEach((key) => {
+      const sepIndex = key.indexOf("|");
+      const lineId = key.slice(0, sepIndex);
+      const columnId = key.slice(sepIndex + 1);
+      if ((lineIds && lineIds.has(lineId)) || (columnIds && columnIds.has(columnId))) {
+        delete cfg.values[key];
+      }
+    });
   },
 
   /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
