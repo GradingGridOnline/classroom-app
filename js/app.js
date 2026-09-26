@@ -138,6 +138,9 @@ const el = {
 let selectedStudentId = null; // currently-selected student in the "Unseated" list
 let attendanceSettingsEditing = false;
 let scoringSettingsEditing = false;
+// Which item ids currently have their "Sources" panel expanded in the
+// Main Scores header — UI state only, not persisted.
+const itemScoreSourcesOpen = new Set();
 let consultationDisplayMode = "percent"; // "percent" or "points" — Total Score in Student Consultation
 
 // Per-tool "Edit Settings" state for Scoring tool tabs (Table, etc.) —
@@ -2172,6 +2175,22 @@ function buildScoringHeaderRows() {
       pointsLine.textContent = `/${item.maxPoints}`;
 
       itemTh.append(nameLine, pointsLine);
+
+      const isOpen = itemScoreSourcesOpen.has(item.id);
+      const sourcesToggleBtn = document.createElement("button");
+      sourcesToggleBtn.type = "button";
+      sourcesToggleBtn.className = "score-toggle-btn";
+      sourcesToggleBtn.textContent = isOpen ? "Sources ▲" : "Sources ▼";
+      sourcesToggleBtn.title = "Optionally draw this item's score from a Scoring Tool";
+      sourcesToggleBtn.addEventListener("click", () => {
+        if (isOpen) itemScoreSourcesOpen.delete(item.id);
+        else itemScoreSourcesOpen.add(item.id);
+        renderScoring();
+      });
+      itemTh.appendChild(sourcesToggleBtn);
+
+      if (isOpen) itemTh.appendChild(buildItemScoreSourcesPanel(item));
+
       row2.appendChild(itemTh);
     });
   });
@@ -2182,6 +2201,64 @@ function buildScoringHeaderRows() {
   row1.appendChild(rawPointsTh);
 
   return { row1, row2 };
+}
+
+/**
+ * The "Sources" panel for one item: a "Manual" weight (default 100,
+ * meaning this item behaves exactly like plain manual entry until
+ * changed) plus one weight per Scoring Tool. A tool at weight 0 (the
+ * default) contributes nothing; any other weight blends its
+ * rightmost Total Score column into this item's grade, per student —
+ * see ScoringModule.computeItemEffectiveScore for the actual math.
+ */
+function buildItemScoreSourcesPanel(item) {
+  const sources = ScoringModule.getItemScoreSources(item.id);
+  const panel = document.createElement("div");
+
+  const manualRow = document.createElement("div");
+  manualRow.className = "weight-row";
+  const manualLabel = document.createElement("span");
+  manualLabel.className = "weight-label";
+  manualLabel.textContent = "Manual";
+  const manualInput = document.createElement("input");
+  manualInput.type = "text";
+  manualInput.inputMode = "numeric";
+  manualInput.className = "weight-input";
+  manualInput.value = sources.manualWeight;
+  manualInput.addEventListener("change", async () => {
+    ScoringModule.setItemManualWeight(item.id, manualInput.value);
+    await saveScoringThen(renderScoring);
+  });
+  manualRow.append(manualLabel, manualInput);
+  panel.appendChild(manualRow);
+
+  if (ScoringModule.tools.length === 0) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "No scoring tools added yet.";
+    panel.appendChild(hint);
+  } else {
+    ScoringModule.tools.forEach((tool) => {
+      const row = document.createElement("div");
+      row.className = "weight-row";
+      const label = document.createElement("span");
+      label.className = "weight-label";
+      label.textContent = tool.name;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.className = "weight-input";
+      input.value = sources.toolWeights[tool.id] || 0;
+      input.addEventListener("change", async () => {
+        ScoringModule.setItemToolWeight(item.id, tool.id, input.value);
+        await saveScoringThen(renderScoring);
+      });
+      row.append(label, input);
+      panel.appendChild(row);
+    });
+  }
+
+  return panel;
 }
 
 el.toggleScoringSettingsBtn.addEventListener("click", () => {
@@ -2601,6 +2678,17 @@ function buildScoringStudentRow(student) {
       });
 
       td.appendChild(input);
+
+      const itemSources = ScoringModule.getItemScoreSources(item.id);
+      if (Object.values(itemSources.toolWeights).some((w) => w > 0)) {
+        const effective = ScoringModule.computeItemEffectiveScore(student.id, item);
+        const readout = document.createElement("div");
+        readout.className = "hint score-source-readout";
+        readout.dataset.itemId = item.id;
+        readout.textContent = effective === null ? "→ —" : `→ ${Math.round(effective * 10) / 10}`;
+        td.appendChild(readout);
+      }
+
       tr.appendChild(td);
     });
   });
@@ -2635,6 +2723,15 @@ function refreshScoringTotalCell(studentId) {
   if (cell) cell.textContent = formatScoringTotal(ScoringModule.totalScore(studentId));
   const rawCell = row.querySelector(".scoring-rawpoints-cell");
   if (rawCell) rawCell.textContent = String(ScoringModule.totalRawPoints(studentId));
+
+  // This item's own edit can shift its own blended Score Sources
+  // readout (if it has one) — refresh whichever are in this row.
+  row.querySelectorAll(".score-source-readout").forEach((readoutEl) => {
+    const item = ScoringModule.findItem(readoutEl.dataset.itemId);
+    if (!item) return;
+    const effective = ScoringModule.computeItemEffectiveScore(studentId, item);
+    readoutEl.textContent = effective === null ? "→ —" : `→ ${Math.round(effective * 10) / 10}`;
+  });
 }
 
 async function saveScoringThen(after) {
@@ -2817,10 +2914,7 @@ function buildTablePreview(tool, cfg, container) {
   headRow.appendChild(firstTh);
   cfg.columns.forEach((col) => {
     const th = document.createElement("th");
-    // Once the user has given a column its own label, the type hint
-    // ("Description" / "Score" / "Total Score - ...") next to its
-    // name in the header goes away.
-    th.textContent = col.labeled ? col.name : `${col.name} (${tableColumnTypeLabel(col.type)})`;
+    th.textContent = col.name; // never shows the column's type
     headRow.appendChild(th);
   });
   thead.appendChild(headRow);
@@ -3975,4 +4069,3 @@ async function deleteScoreForm(recordId) {
 }
 
 main();
-

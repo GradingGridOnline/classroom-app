@@ -256,6 +256,13 @@ const ScoringModule = {
 
   removeTool(toolId) {
     this.tools = this.tools.filter((t) => t.id !== toolId);
+    this.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        if (item.scoreSources && item.scoreSources.toolWeights) {
+          delete item.scoreSources.toolWeights[toolId];
+        }
+      });
+    });
   },
 
   renameTool(toolId, name) {
@@ -270,17 +277,18 @@ const ScoringModule = {
   // ----- Table tool config -----
   // tool.config for a "table"-type tool: { firstColumn: { name, mode },
   // rows: [{ id, name, subrows: [{ id, name }] }], columns: [{ id,
-  // name, type, labeled, maxPoints }] }. firstColumn.mode is
+  // name, type, maxPoints }] }. firstColumn.mode is
   // "students" or "groups" and has no `type` of its own — it's a
   // separate toggle, not one of the column types below. columns[].type
   // is one of TABLE_COLUMN_TYPES: "description", "score" (a plain
   // enterable number), or one of the three read-only "total_score_*"
   // types, each summing that line's "score" columns — raw, out of
   // maxPoints ("points"), or as a percentage of maxPoints
-  // ("percentage"). `labeled` is true once a user has renamed a
-  // column, at which point its type no longer shows next to its name
-  // in the header. Nothing here is wired to real data yet — this only
-  // defines the Table's shape.
+  // ("percentage"). Headers show only a column's name — never its
+  // type. Nothing here is wired to real data yet, apart from Main
+  // Scores optionally drawing on a Table's rightmost total_score_*
+  // column via that item's Score Sources (see computeItemEffectiveScore
+  // below).
 
   /** Returns tool.config for a table tool, creating/normalizing it (and any missing pieces) in place first. Returns null if the tool doesn't exist. */
   getTableConfig(toolId) {
@@ -303,15 +311,9 @@ const ScoringModule = {
     });
 
     if (!Array.isArray(cfg.columns)) cfg.columns = [];
-    cfg.columns.forEach((column, i) => {
+    cfg.columns.forEach((column) => {
       if (column.type === "cum_score") column.type = "total_score_raw"; // legacy type key
       if (!TABLE_COLUMN_TYPES.includes(column.type)) column.type = "description";
-      if (typeof column.labeled !== "boolean") {
-        // Data saved before the "labeled" flag existed — best guess:
-        // if the name isn't the auto-generated default for this slot,
-        // a user must have already set it, so don't show the type hint.
-        column.labeled = column.name !== `Column ${i + 1}`;
-      }
       if (typeof column.maxPoints !== "number") column.maxPoints = 0;
     });
 
@@ -403,7 +405,6 @@ const ScoringModule = {
           id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: `Column ${n}`,
           type: "description",
-          labeled: false,
           maxPoints: 0,
         });
       }
@@ -420,10 +421,6 @@ const ScoringModule = {
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
     if (!column) return;
     column.name = (name || "").trim() || column.name;
-    // Once a user has set a column's name, the type hint next to it
-    // in the header goes away — the label itself is assumed to make
-    // the column's purpose clear from here on.
-    column.labeled = true;
   },
 
   setTableColumnType(toolId, columnId, type) {
@@ -499,9 +496,156 @@ const ScoringModule = {
     return { earned: null, possible: null, percent: stats.percent, points: stats.points };
   },
 
+  // ----- Item Score Sources -----
+  // Each item can optionally draw part (or all) of its grade from
+  // Scoring Tools instead of purely manual entry. item.scoreSources =
+  // { manualWeight, toolWeights: { toolId: weight } }. manualWeight
+  // defaults to 100 so an item behaves exactly as before until this
+  // is actually configured. A tool with weight 0 (the default for
+  // every tool) contributes nothing; any other weight brings it into
+  // the weighted blend computed by computeItemEffectiveScore.
+
+  /** Returns item.scoreSources, creating/normalizing it in place first. */
+  getItemScoreSources(itemId) {
+    const item = this.findItem(itemId);
+    if (!item) return { manualWeight: 100, toolWeights: {} };
+    if (!item.scoreSources || typeof item.scoreSources !== "object") {
+      item.scoreSources = {};
+    }
+    if (typeof item.scoreSources.manualWeight !== "number") item.scoreSources.manualWeight = 100;
+    if (!item.scoreSources.toolWeights || typeof item.scoreSources.toolWeights !== "object") {
+      item.scoreSources.toolWeights = {};
+    }
+    return item.scoreSources;
+  },
+
+  setItemManualWeight(itemId, weight) {
+    const sources = this.getItemScoreSources(itemId);
+    sources.manualWeight = Math.max(0, Number(weight) || 0);
+  },
+
+  setItemToolWeight(itemId, toolId, weight) {
+    const sources = this.getItemScoreSources(itemId);
+    const n = Math.max(0, Number(weight) || 0);
+    if (n === 0) delete sources.toolWeights[toolId];
+    else sources.toolWeights[toolId] = n;
+  },
+
+  /** The current Seating Chart's group number for a student (from the live chart, not a memory bank), or null if they're unseated or at an ungrouped desk. */
+  _studentGroupNumber(studentId) {
+    if (!window.SeatingModule) return null;
+    const seats = window.SeatingModule.seats || {};
+    const key = Object.keys(seats).find((k) => seats[k] === studentId);
+    if (!key) return null;
+    const [r, c] = key.split("-").map(Number);
+    return window.SeatingModule.getGroup(r, c) || null;
+  },
+
+  /** The row or subrow in a table config whose name exactly matches `name`, returning its lineId, or null if nothing matches. */
+  _findTableLineByName(cfg, name) {
+    for (const row of cfg.rows) {
+      if (row.subrows.length === 0) {
+        if (row.name === name) return row.id;
+      } else {
+        const subrow = row.subrows.find((s) => s.name === name);
+        if (subrow) return subrow.id;
+      }
+    }
+    return null;
+  },
+
+  /**
+   * What one Scoring Tool contributes for one student, read from that
+   * tool's rightmost total_score_* column. Matches the student to a
+   * table row/subrow by exact name: directly by the student's own
+   * name when the tool's first column is "students", or by the
+   * student's current Seating Chart group number (as a string) when
+   * it's "groups". Returns null if the tool isn't a table, has no
+   * total-score column, or no row/subrow name matches.
+   * { raw: true, value } for a "total_score_raw" column means value
+   * is used as-is; { raw: false, value } for the points/percentage
+   * types means value is a 0-1 decimal (sum ÷ that column's total
+   * possible score) for the caller to scale to the item's own points.
+   */
+  _toolContributionForStudent(tool, studentId) {
+    if (tool.type !== "table") return null;
+    const cfg = this.getTableConfig(tool.id);
+    if (!cfg) return null;
+
+    let scoreColumn = null;
+    for (let i = cfg.columns.length - 1; i >= 0; i--) {
+      const c = cfg.columns[i];
+      if (c.type === "total_score_raw" || c.type === "total_score_points" || c.type === "total_score_percentage") {
+        scoreColumn = c;
+        break;
+      }
+    }
+    if (!scoreColumn) return null;
+
+    let lineId = null;
+    if (cfg.firstColumn.mode === "groups") {
+      const groupNumber = this._studentGroupNumber(studentId);
+      if (!groupNumber) return null;
+      lineId = this._findTableLineByName(cfg, String(groupNumber));
+    } else {
+      const student = window.RosterModule && window.RosterModule.students.find((s) => s.id === studentId);
+      if (!student) return null;
+      lineId = this._findTableLineByName(cfg, student.name);
+    }
+    if (!lineId) return null;
+
+    const sum = this.computeTableScoreSum(tool.id, lineId);
+    if (sum === null) return null;
+
+    if (scoreColumn.type === "total_score_raw") return { raw: true, value: sum };
+    if (!(scoreColumn.maxPoints > 0)) return null;
+    return { raw: false, value: sum / scoreColumn.maxPoints };
+  },
+
+  /**
+   * The score actually used for grading one student on one item — a
+   * weighted blend of the manual entry and any Scoring Tools weighted
+   * above 0 in that item's Score Sources, all expressed on the item's
+   * own 0-maxPoints scale (a tool's points/percentage contribution is
+   * scaled by maxPoints; a raw contribution is used as-is, on the
+   * assumption its scale already matches). With every tool at weight
+   * 0 (the default), this is exactly the manual entry — nothing
+   * changes unless Score Sources are actually set up. Returns null
+   * when nothing usable is available (same meaning as a blank manual
+   * entry). The caller is responsible for handling "E" (exempt)
+   * before reaching this — it isn't a Score Sources concept.
+   */
+  computeItemEffectiveScore(studentId, item) {
+    const sourcesCfg = this.getItemScoreSources(item.id);
+    const sources = [];
+
+    if (sourcesCfg.manualWeight > 0) {
+      const rec = this.getRecord(studentId, item.id);
+      if (rec !== "" && rec !== "E") {
+        sources.push({ weight: sourcesCfg.manualWeight, points: Number(rec) });
+      }
+    }
+
+    Object.entries(sourcesCfg.toolWeights).forEach(([toolId, weight]) => {
+      if (!(weight > 0)) return;
+      const tool = this.findTool(toolId);
+      if (!tool) return;
+      const contribution = this._toolContributionForStudent(tool, studentId);
+      if (!contribution) return;
+      const points = contribution.raw ? contribution.value : contribution.value * item.maxPoints;
+      sources.push({ weight, points });
+    });
+
+    if (sources.length === 0) return null;
+    const weightTotal = sources.reduce((sum, s) => sum + s.weight, 0);
+    if (weightTotal <= 0) return null;
+    const weightedSum = sources.reduce((sum, s) => sum + s.points * s.weight, 0);
+    return weightedSum / weightTotal;
+  },
+
   // ----- Scores -----
 
-  /** { earned, possible, percent } for one student in one category. Exempt items are excluded from both earned and possible. */
+  /** { earned, possible, percent } for one student in one category. Exempt items are excluded from both earned and possible; everything else runs through computeItemEffectiveScore, so a blended Score Sources result feeds in exactly like a plain manual entry would. */
   categoryScore(studentId, categoryId) {
     const category = this.findCategory(categoryId);
     if (!category) return { earned: 0, possible: 0, percent: null };
@@ -510,23 +654,25 @@ const ScoringModule = {
     let possible = 0;
     category.items.forEach((item) => {
       const rec = this.getRecord(studentId, item.id);
-      if (rec === "" || rec === "E") return;
-      earned += Number(rec);
+      if (rec === "E") return;
+      const effective = this.computeItemEffectiveScore(studentId, item);
+      if (effective === null) return;
+      earned += effective;
       possible += item.maxPoints;
     });
 
     return { earned, possible, percent: possible > 0 ? Math.round((earned / possible) * 100) : null };
   },
 
-  /** Raw sum of all earned points across all categories (excludes exempt and blank items). */
+  /** Raw sum of all earned points across all categories (excludes exempt and not-yet-recorded items), using each item's blended Score Sources result. */
   totalRawPoints(studentId) {
     let total = 0;
     this.categories.forEach((category) => {
       category.items.forEach((item) => {
         const rec = this.getRecord(studentId, item.id);
-        if (rec !== "" && rec !== "E") {
-          total += Number(rec);
-        }
+        if (rec === "E") return;
+        const effective = this.computeItemEffectiveScore(studentId, item);
+        if (effective !== null) total += effective;
       });
     });
     return total;
@@ -567,4 +713,3 @@ const ScoringModule = {
 };
 
 window.ScoringModule = ScoringModule;
-
