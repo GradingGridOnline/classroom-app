@@ -23,7 +23,6 @@
 const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categories as needed
 const MAX_ITEMS_PER_CATEGORY = 50;
 const MAX_SCORING_TOOLS = 10;
-const MAX_TABLE_ROWS = 100; // matches MAX_STUDENTS, so filling rows from the full roster never gets truncated
 const MAX_TABLE_SUBROWS = 20;
 const MAX_TABLE_COLUMNS = 20;
 
@@ -276,19 +275,26 @@ const ScoringModule = {
 
   // ----- Table tool config -----
   // tool.config for a "table"-type tool: { firstColumn: { name, mode },
-  // rows: [{ id, name, subrows: [{ id, name }] }], columns: [{ id,
-  // name, type, maxPoints }] }. firstColumn.mode is
-  // "students" or "groups" and has no `type` of its own — it's a
-  // separate toggle, not one of the column types below. columns[].type
-  // is one of TABLE_COLUMN_TYPES: "description", "score" (a plain
-  // enterable number), or one of the three read-only "total_score_*"
-  // types, each summing that line's "score" columns — raw, out of
-  // maxPoints ("points"), or as a percentage of maxPoints
-  // ("percentage"). Headers show only a column's name — never its
-  // type. Nothing here is wired to real data yet, apart from Main
-  // Scores optionally drawing on a Table's rightmost total_score_*
-  // column via that item's Score Sources (see computeItemEffectiveScore
-  // below).
+  // rowSubrows: { [identityKey]: [{ id, name }] }, columns: [{ id,
+  // name, type, maxPoints }] }. firstColumn.mode is "students" or
+  // "groups" and drives where rows come from: in "students" mode
+  // there's one row per current roster student, keyed and named by
+  // that student (their name shown, non-editable — it's always
+  // whatever the roster currently says); in "groups" mode there's one
+  // row per distinct group number currently in use on the live
+  // Seating Chart, keyed and named by that number. Rows are never
+  // manually added, removed, or renamed — this is what keeps them
+  // reliably matched to Score Sources. A row can still have
+  // user-defined subrows (rowSubrows[identityKey]), each its own grid
+  // line, for splitting one student/group's entry into more than one
+  // row. columns[].type is one of TABLE_COLUMN_TYPES: "description",
+  // "score" (a plain enterable number), or one of the three read-only
+  // "total_score_*" types, each summing that line's "score" columns —
+  // raw, out of maxPoints ("points"), or as a percentage of maxPoints
+  // ("percentage"). Nothing here is wired to real data yet, apart from
+  // Main Scores optionally drawing on a Table's rightmost
+  // total_score_* column via that item's Score Sources (see
+  // computeItemEffectiveScore below).
 
   /** Returns tool.config for a table tool, creating/normalizing it (and any missing pieces) in place first. Returns null if the tool doesn't exist. */
   getTableConfig(toolId) {
@@ -305,9 +311,9 @@ const ScoringModule = {
       cfg.firstColumn.name = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
     }
 
-    if (!Array.isArray(cfg.rows)) cfg.rows = [];
-    cfg.rows.forEach((row) => {
-      if (!Array.isArray(row.subrows)) row.subrows = [];
+    if (!cfg.rowSubrows || typeof cfg.rowSubrows !== "object") cfg.rowSubrows = {};
+    Object.keys(cfg.rowSubrows).forEach((key) => {
+      if (!Array.isArray(cfg.rowSubrows[key])) delete cfg.rowSubrows[key];
     });
 
     if (!Array.isArray(cfg.columns)) cfg.columns = [];
@@ -332,98 +338,65 @@ const ScoringModule = {
     if (cfg) cfg.firstColumn.name = (name || "").trim() || cfg.firstColumn.name;
   },
 
-  /** Sets the row count, adding default-named trailing rows or trimming from the end. */
-  setTableRowCount(toolId, count) {
-    const cfg = this.getTableConfig(toolId);
-    if (!cfg) return;
-    count = Math.max(0, Math.min(MAX_TABLE_ROWS, Math.round(Number(count) || 0)));
-    if (count > cfg.rows.length) {
-      while (cfg.rows.length < count) {
-        const n = cfg.rows.length + 1;
-        cfg.rows.push({
-          id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: `Row ${n}`,
-          subrows: [],
-        });
+  /** Every distinct group number currently in use on the live Seating Chart (ungrouped desks excluded), ascending. */
+  _liveSeatingGroups() {
+    if (!window.SeatingModule) return [];
+    const seating = window.SeatingModule;
+    const groups = new Set();
+    for (let r = 0; r < seating.rows; r++) {
+      for (let c = 0; c < seating.cols; c++) {
+        if (!seating.isActive(r, c)) continue;
+        const g = seating.getGroup(r, c);
+        if (g) groups.add(g);
       }
-    } else if (count < cfg.rows.length) {
-      const removed = cfg.rows.slice(count);
-      const lineIds = new Set();
-      removed.forEach((r) => {
-        if (r.subrows.length === 0) lineIds.add(r.id);
-        else r.subrows.forEach((s) => lineIds.add(s.id));
-      });
-      cfg.rows = cfg.rows.slice(0, count);
-      this._purgeTableValues(cfg, { lineIds });
     }
+    return Array.from(groups).sort((a, b) => a - b);
   },
 
-  setTableRowName(toolId, rowId, name) {
+  /** This table's identity rows, live: one per roster student ({ key: studentId, label: student's name }) in "students" mode, or one per group currently on the Seating Chart ({ key: String(groupNumber), label: same }) in "groups" mode. This — not any stored list — is what the grid and Score Sources both use, so rows can never drift out of sync with the roster or seating chart. */
+  getTableIdentityRows(toolId) {
     const cfg = this.getTableConfig(toolId);
-    const row = cfg && cfg.rows.find((r) => r.id === rowId);
-    if (row) row.name = (name || "").trim() || row.name;
+    if (!cfg) return [];
+    if (cfg.firstColumn.mode === "groups") {
+      return this._liveSeatingGroups().map((n) => ({ key: String(n), label: String(n) }));
+    }
+    const students = (window.RosterModule && window.RosterModule.students) || [];
+    return students.map((s) => ({ key: s.id, label: s.name || "(unnamed)" }));
   },
 
-  /** Replaces this table's rows with one un-subrowed row per current roster student, named exactly to match — this is what lets "Students" mode Score Sources actually find them. Existing rows/subrows and their entered values are discarded. */
-  fillTableRowsFromRoster(toolId, students) {
+  getTableRowSubrows(toolId, rowKey) {
     const cfg = this.getTableConfig(toolId);
-    if (!cfg) return;
-    const oldLineIds = new Set();
-    cfg.rows.forEach((r) => {
-      if (r.subrows.length === 0) oldLineIds.add(r.id);
-      else r.subrows.forEach((s) => oldLineIds.add(s.id));
-    });
-    cfg.rows = students.map((s) => ({
-      id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: s.name || "(unnamed)",
-      subrows: [],
-    }));
-    this._purgeTableValues(cfg, { lineIds: oldLineIds });
+    return (cfg && cfg.rowSubrows[rowKey]) || [];
   },
 
-  /** Replaces this table's rows with one un-subrowed row per distinct group number `groupNumbers` (typically every group currently in use on the live Seating Chart), named by that number — what lets "Groups" mode Score Sources match them. Existing rows/subrows and their entered values are discarded. */
-  fillTableRowsFromGroups(toolId, groupNumbers) {
+  /** Sets one identity row's subrow count, adding default-named trailing subrows or trimming from the end. */
+  setTableSubrowCount(toolId, rowKey, count) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return;
-    const oldLineIds = new Set();
-    cfg.rows.forEach((r) => {
-      if (r.subrows.length === 0) oldLineIds.add(r.id);
-      else r.subrows.forEach((s) => oldLineIds.add(s.id));
-    });
-    cfg.rows = groupNumbers.map((n) => ({
-      id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: String(n),
-      subrows: [],
-    }));
-    this._purgeTableValues(cfg, { lineIds: oldLineIds });
-  },
-
-  /** Sets one row's subrow count, adding default-named trailing subrows or trimming from the end. */
-  setTableSubrowCount(toolId, rowId, count) {
-    const cfg = this.getTableConfig(toolId);
-    const row = cfg && cfg.rows.find((r) => r.id === rowId);
-    if (!row) return;
     count = Math.max(0, Math.min(MAX_TABLE_SUBROWS, Math.round(Number(count) || 0)));
-    if (count > row.subrows.length) {
-      while (row.subrows.length < count) {
-        const n = row.subrows.length + 1;
-        row.subrows.push({
+    let subrows = cfg.rowSubrows[rowKey] || [];
+    if (count > subrows.length) {
+      subrows = subrows.slice();
+      while (subrows.length < count) {
+        const n = subrows.length + 1;
+        subrows.push({
           id: `subrow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: `Subrow ${n}`,
         });
       }
-    } else if (count < row.subrows.length) {
-      const removed = row.subrows.slice(count);
-      const lineIds = new Set(removed.map((s) => s.id));
-      row.subrows = row.subrows.slice(0, count);
-      this._purgeTableValues(cfg, { lineIds });
+    } else if (count < subrows.length) {
+      const removed = subrows.slice(count);
+      subrows = subrows.slice(0, count);
+      this._purgeTableValues(cfg, { lineIds: new Set(removed.map((s) => s.id)) });
     }
+    if (subrows.length === 0) delete cfg.rowSubrows[rowKey];
+    else cfg.rowSubrows[rowKey] = subrows;
   },
 
-  setTableSubrowName(toolId, rowId, subrowId, name) {
+  setTableSubrowName(toolId, rowKey, subrowId, name) {
     const cfg = this.getTableConfig(toolId);
-    const row = cfg && cfg.rows.find((r) => r.id === rowId);
-    const subrow = row && row.subrows.find((s) => s.id === subrowId);
+    const subrows = cfg && cfg.rowSubrows[rowKey];
+    const subrow = subrows && subrows.find((s) => s.id === subrowId);
     if (subrow) subrow.name = (name || "").trim() || subrow.name;
   },
 
@@ -473,11 +446,12 @@ const ScoringModule = {
   },
 
   // ----- Table cell values -----
-  // Keyed by "lineId|columnId", where lineId is a row's id (for a row
-  // with no subrows) or a subrow's id (for one of a row's subrows) —
-  // whichever the grid actually draws as its own line. The three
-  // "total_score_*" columns store nothing here; they're computed from
-  // the "score" columns on the same line.
+  // Keyed by "lineId|columnId", where lineId is an identity row's key
+  // (a student id, or a group number as a string — see
+  // getTableIdentityRows) when it has no subrows, or one of its
+  // subrow's ids when it does — whichever the grid actually draws as
+  // its own line. The three "total_score_*" columns store nothing
+  // here; they're computed from the "score" columns on the same line.
 
   getTableValue(toolId, lineId, columnId) {
     const cfg = this.getTableConfig(toolId);
@@ -510,7 +484,7 @@ const ScoringModule = {
     return hasScoreColumn ? sum : null;
   },
 
-  /** Deletes any stored cell values whose lineId is in `lineIds` and/or whose columnId is in `columnIds` — called when rows, subrows, or columns are removed so their old values don't linger as orphaned data. */
+  /** Deletes any stored cell values whose lineId is in `lineIds` and/or whose columnId is in `columnIds` — called when subrows or columns are removed so their old values don't linger as orphaned data. */
   _purgeTableValues(cfg, { lineIds, columnIds } = {}) {
     if (!lineIds && !columnIds) return;
     Object.keys(cfg.values).forEach((key) => {
@@ -575,31 +549,22 @@ const ScoringModule = {
     return window.SeatingModule.getGroup(r, c) || null;
   },
 
-  /** The row or subrow in a table config whose name exactly matches `name`, returning its lineId, or null if nothing matches. */
-  _findTableLineByName(cfg, name) {
-    for (const row of cfg.rows) {
-      if (row.subrows.length === 0) {
-        if (row.name === name) return row.id;
-      } else {
-        const subrow = row.subrows.find((s) => s.name === name);
-        if (subrow) return subrow.id;
-      }
-    }
-    return null;
-  },
-
   /**
    * What one Scoring Tool contributes for one student, read from that
-   * tool's rightmost total_score_* column. Matches the student to a
-   * table row/subrow by exact name: directly by the student's own
-   * name when the tool's first column is "students", or by the
-   * student's current Seating Chart group number (as a string) when
-   * it's "groups". Returns null if the tool isn't a table, has no
-   * total-score column, or no row/subrow name matches.
-   * { raw: true, value } for a "total_score_raw" column means value
-   * is used as-is; { raw: false, value } for the points/percentage
-   * types means value is a 0-1 decimal (sum ÷ that column's total
-   * possible score) for the caller to scale to the item's own points.
+   * tool's rightmost total_score_* column. The student's identity row
+   * is found directly — by their own id in "students" mode, or by
+   * their current Seating Chart group number in "groups" mode — since
+   * rows are always kept in sync with the roster/seating chart (see
+   * getTableIdentityRows), so there's no name-matching to go stale.
+   * If that identity has subrows, their total_score values are summed
+   * together as this contribution. Returns null if the tool isn't a
+   * table, has no total-score column, the student isn't seated/grouped
+   * (in "groups" mode), or nothing has been entered for their line(s)
+   * yet. { raw: true, value } for a "total_score_raw" column means
+   * value is used as-is; { raw: false, value } for the
+   * points/percentage types means value is a 0-1 decimal (sum ÷ that
+   * column's total possible score) for the caller to scale to the
+   * item's own points.
    */
   _toolContributionForStudent(tool, studentId) {
     if (tool.type !== "table") return null;
@@ -616,24 +581,31 @@ const ScoringModule = {
     }
     if (!scoreColumn) return null;
 
-    let lineId = null;
+    let rowKey;
     if (cfg.firstColumn.mode === "groups") {
       const groupNumber = this._studentGroupNumber(studentId);
       if (!groupNumber) return null;
-      lineId = this._findTableLineByName(cfg, String(groupNumber));
+      rowKey = String(groupNumber);
     } else {
-      const student = window.RosterModule && window.RosterModule.students.find((s) => s.id === studentId);
-      if (!student) return null;
-      lineId = this._findTableLineByName(cfg, student.name);
+      rowKey = studentId;
     }
-    if (!lineId) return null;
 
-    const sum = this.computeTableScoreSum(tool.id, lineId);
-    if (sum === null) return null;
+    const subrows = cfg.rowSubrows[rowKey] || [];
+    const lineIds = subrows.length === 0 ? [rowKey] : subrows.map((s) => s.id);
+    let total = 0;
+    let any = false;
+    lineIds.forEach((lineId) => {
+      const sum = this.computeTableScoreSum(tool.id, lineId);
+      if (sum !== null) {
+        total += sum;
+        any = true;
+      }
+    });
+    if (!any) return null;
 
-    if (scoreColumn.type === "total_score_raw") return { raw: true, value: sum };
+    if (scoreColumn.type === "total_score_raw") return { raw: true, value: total };
     if (!(scoreColumn.maxPoints > 0)) return null;
-    return { raw: false, value: sum / scoreColumn.maxPoints };
+    return { raw: false, value: total / scoreColumn.maxPoints };
   },
 
   /**

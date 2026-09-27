@@ -2498,19 +2498,6 @@ function buildWeightRow(label, value, onChange) {
   return row;
 }
 
-/** Every distinct group number currently in use on the live Seating Chart (ungrouped desks excluded), ascending — used to fill a table's rows to match Score Sources' "Groups" mode. */
-function distinctSeatingGroupNumbers() {
-  const groups = new Set();
-  for (let r = 0; r < SeatingModule.rows; r++) {
-    for (let c = 0; c < SeatingModule.cols; c++) {
-      if (!SeatingModule.isActive(r, c)) continue;
-      const g = SeatingModule.getGroup(r, c);
-      if (g) groups.add(g);
-    }
-  }
-  return Array.from(groups).sort((a, b) => a - b);
-}
-
 /** Lists the tools currently added (each with a Remove button) and an "+ Add Scoring Tool" button that opens a small menu of tool types to add — this is how tabs alongside Main Scores get added/removed. Each tool's own content and settings live in its own tab, not here. */
 function buildScoringToolsManageBlock() {
   const wrap = document.createElement("div");
@@ -2880,9 +2867,10 @@ function renderScoringToolTableView(tool, container) {
   if (!editing) {
     const summary = document.createElement("p");
     summary.className = "hint";
+    const identityRowCount = ScoringModule.getTableIdentityRows(tool.id).length;
     summary.textContent =
       `First column: ${cfg.firstColumn.name} (${cfg.firstColumn.mode === "groups" ? "Groups" : "Students"}) — ` +
-      `${cfg.rows.length} row(s), ${cfg.columns.length} column(s).`;
+      `${identityRowCount} row(s), ${cfg.columns.length} column(s).`;
     settingsWrap.appendChild(summary);
   } else {
     settingsWrap.appendChild(buildTableFirstColumnBlock(tool, cfg, container));
@@ -2934,22 +2922,27 @@ function buildTablePreview(tool, cfg, container) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  if (cfg.rows.length === 0) {
+  const identityRows = ScoringModule.getTableIdentityRows(tool.id);
+  if (identityRows.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = Math.max(1, cfg.columns.length + 1);
     td.className = "hint";
-    td.textContent = "No rows set up yet — add some in Settings below.";
+    td.textContent =
+      cfg.firstColumn.mode === "groups"
+        ? "No groups are set up on the current Seating Chart yet."
+        : "There are no students on the roster yet.";
     tr.appendChild(td);
     tbody.appendChild(tr);
   } else {
-    cfg.rows.forEach((row) => {
-      if (row.subrows.length === 0) {
-        tbody.appendChild(buildTablePreviewRow(tool, cfg, container, row.id, row.name));
+    identityRows.forEach(({ key, label }) => {
+      const subrows = ScoringModule.getTableRowSubrows(tool.id, key);
+      if (subrows.length === 0) {
+        tbody.appendChild(buildTablePreviewRow(tool, cfg, container, key, label));
       } else {
-        row.subrows.forEach((subrow) => {
+        subrows.forEach((subrow) => {
           tbody.appendChild(
-            buildTablePreviewRow(tool, cfg, container, subrow.id, `${row.name} — ${subrow.name}`)
+            buildTablePreviewRow(tool, cfg, container, subrow.id, `${label} — ${subrow.name}`)
           );
         });
       }
@@ -3042,6 +3035,7 @@ function buildTableFirstColumnBlock(tool, cfg, container) {
 }
 
 /** Row count setting plus a nameable, editable list of rows — each row also gets its own subrow-count setting and, if that's above zero, a nested nameable list of subrows. */
+/** The Rows settings block — rows are no longer manually managed. In "Students" mode there's always exactly one row per current roster student, named to match; in "Groups" mode, one row per group currently on the Seating Chart. This is what keeps Score Sources reliably matched. Subrows are the one thing still user-configurable here, per identity row. */
 function buildTableRowsBlock(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
@@ -3049,110 +3043,67 @@ function buildTableRowsBlock(tool, cfg, container) {
   heading.textContent = "Rows";
   wrap.appendChild(heading);
 
-  const fillHint = document.createElement("p");
-  fillHint.className = "hint";
-  fillHint.textContent =
-    "Score Sources match a row/subrow to a student (or group) by exact name, so if you're using that feature, filling rows here first is the easiest way to get matching names.";
-  wrap.appendChild(fillHint);
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    cfg.firstColumn.mode === "groups"
+      ? "Rows are automatic — one per group currently on the Seating Chart — so they always stay matched for Score Sources. You can still split a group into subrows below."
+      : "Rows are automatic — one per student on the roster — so they always stay matched for Score Sources. You can still split a student into subrows below.";
+  wrap.appendChild(hint);
 
-  const fillBtn = document.createElement("button");
-  fillBtn.type = "button";
-  fillBtn.className = "btn btn-ghost btn-small";
-  if (cfg.firstColumn.mode === "groups") {
-    fillBtn.textContent = "Fill Rows from Seating Groups";
-    fillBtn.addEventListener("click", async () => {
-      const groups = distinctSeatingGroupNumbers();
-      if (groups.length === 0) {
-        alert("No groups are set up on the current Seating Chart yet.");
-        return;
-      }
-      if (
-        !confirm(
-          "Replace this table's rows with one row per group currently on the Seating Chart? Existing rows and entered values will be lost."
-        )
-      )
-        return;
-      ScoringModule.fillTableRowsFromGroups(tool.id, groups);
-      await saveScoringToolThen(tool, container);
-    });
-  } else {
-    fillBtn.textContent = "Fill Rows from Roster";
-    fillBtn.addEventListener("click", async () => {
-      if (RosterModule.students.length === 0) {
-        alert("There are no students on the roster yet.");
-        return;
-      }
-      if (
-        !confirm(
-          "Replace this table's rows with one row per current roster student? Existing rows and entered values will be lost."
-        )
-      )
-        return;
-      ScoringModule.fillTableRowsFromRoster(tool.id, RosterModule.students);
-      await saveScoringToolThen(tool, container);
-    });
+  const identityRows = ScoringModule.getTableIdentityRows(tool.id);
+  if (identityRows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent =
+      cfg.firstColumn.mode === "groups"
+        ? "No groups are set up on the current Seating Chart yet."
+        : "There are no students on the roster yet.";
+    wrap.appendChild(empty);
+    return wrap;
   }
-  wrap.appendChild(fillBtn);
-
-  const countRow = document.createElement("div");
-  countRow.className = "mapping-row";
-  const countInput = document.createElement("input");
-  countInput.type = "text";
-  countInput.inputMode = "numeric";
-  countInput.value = cfg.rows.length;
-  countInput.addEventListener("change", async () => {
-    ScoringModule.setTableRowCount(tool.id, countInput.value);
-    await saveScoringToolThen(tool, container);
-  });
-  const countHint = document.createElement("label");
-  countHint.textContent = "Number of rows";
-  countRow.append(countInput, countHint);
-  wrap.appendChild(countRow);
 
   const list = document.createElement("ul");
   list.className = "infraction-edit-list category-manage-list";
-  cfg.rows.forEach((row) => {
+  identityRows.forEach(({ key, label }) => {
     const li = document.createElement("li");
     li.className = "category-manage-item";
 
     const topRow = document.createElement("div");
     topRow.className = "category-manage-top-row";
 
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.value = row.name;
-    nameInput.addEventListener("change", async () => {
-      ScoringModule.setTableRowName(tool.id, row.id, nameInput.value);
-      await saveScoringToolThen(tool, container);
-    });
-    topRow.appendChild(nameInput);
+    const nameLabel = document.createElement("span");
+    nameLabel.className = "fixed-type-label";
+    nameLabel.textContent = label;
+    topRow.appendChild(nameLabel);
 
+    const subrows = ScoringModule.getTableRowSubrows(tool.id, key);
     const subCountLabel = document.createElement("label");
     subCountLabel.textContent = "Subrows:";
     const subCountInput = document.createElement("input");
     subCountInput.type = "text";
     subCountInput.inputMode = "numeric";
     subCountInput.className = "point-value-input";
-    subCountInput.value = row.subrows.length;
+    subCountInput.value = subrows.length;
     subCountInput.addEventListener("change", async () => {
-      ScoringModule.setTableSubrowCount(tool.id, row.id, subCountInput.value);
+      ScoringModule.setTableSubrowCount(tool.id, key, subCountInput.value);
       await saveScoringToolThen(tool, container);
     });
     topRow.append(subCountLabel, subCountInput);
 
     li.appendChild(topRow);
 
-    if (row.subrows.length > 0) {
+    if (subrows.length > 0) {
       const subList = document.createElement("div");
       subList.className = "category-items-edit-list";
-      row.subrows.forEach((subrow) => {
+      subrows.forEach((subrow) => {
         const subRowEl = document.createElement("div");
         subRowEl.className = "category-item-edit-row";
         const subNameInput = document.createElement("input");
         subNameInput.type = "text";
         subNameInput.value = subrow.name;
         subNameInput.addEventListener("change", async () => {
-          ScoringModule.setTableSubrowName(tool.id, row.id, subrow.id, subNameInput.value);
+          ScoringModule.setTableSubrowName(tool.id, key, subrow.id, subNameInput.value);
           await saveScoringToolThen(tool, container);
         });
         subRowEl.appendChild(subNameInput);
