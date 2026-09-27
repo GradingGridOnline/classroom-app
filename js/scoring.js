@@ -23,7 +23,7 @@
 const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categories as needed
 const MAX_ITEMS_PER_CATEGORY = 50;
 const MAX_SCORING_TOOLS = 10;
-const MAX_TABLE_ROWS = 50;
+const MAX_TABLE_ROWS = 100; // matches MAX_STUDENTS, so filling rows from the full roster never gets truncated
 const MAX_TABLE_SUBROWS = 20;
 const MAX_TABLE_COLUMNS = 20;
 
@@ -362,6 +362,40 @@ const ScoringModule = {
     const cfg = this.getTableConfig(toolId);
     const row = cfg && cfg.rows.find((r) => r.id === rowId);
     if (row) row.name = (name || "").trim() || row.name;
+  },
+
+  /** Replaces this table's rows with one un-subrowed row per current roster student, named exactly to match — this is what lets "Students" mode Score Sources actually find them. Existing rows/subrows and their entered values are discarded. */
+  fillTableRowsFromRoster(toolId, students) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    const oldLineIds = new Set();
+    cfg.rows.forEach((r) => {
+      if (r.subrows.length === 0) oldLineIds.add(r.id);
+      else r.subrows.forEach((s) => oldLineIds.add(s.id));
+    });
+    cfg.rows = students.map((s) => ({
+      id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: s.name || "(unnamed)",
+      subrows: [],
+    }));
+    this._purgeTableValues(cfg, { lineIds: oldLineIds });
+  },
+
+  /** Replaces this table's rows with one un-subrowed row per distinct group number `groupNumbers` (typically every group currently in use on the live Seating Chart), named by that number — what lets "Groups" mode Score Sources match them. Existing rows/subrows and their entered values are discarded. */
+  fillTableRowsFromGroups(toolId, groupNumbers) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    const oldLineIds = new Set();
+    cfg.rows.forEach((r) => {
+      if (r.subrows.length === 0) oldLineIds.add(r.id);
+      else r.subrows.forEach((s) => oldLineIds.add(s.id));
+    });
+    cfg.rows = groupNumbers.map((n) => ({
+      id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: String(n),
+      subrows: [],
+    }));
+    this._purgeTableValues(cfg, { lineIds: oldLineIds });
   },
 
   /** Sets one row's subrow count, adding default-named trailing subrows or trimming from the end. */
