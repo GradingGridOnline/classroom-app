@@ -55,7 +55,7 @@ const ReportCardModule = {
     else this.selectedItemIds.add(itemId);
   },
 
-  /** Full detail for one student: every category's items, each category's subtotal, attendance, and the overall total. */
+  /** Full detail for one student: every category's items, each category's subtotal, attendance, and the overall total. `total` is in points — see ScoringModule.totalPoints. */
   studentDetail(studentId) {
     const categories = ScoringModule.categories.map((category) => ({
       id: category.id,
@@ -72,7 +72,7 @@ const ReportCardModule = {
 
     return {
       categories,
-      total: ScoringModule.totalScore(studentId),
+      total: ScoringModule.totalPoints(studentId),
       attendance: AttendanceModule.stats(studentId),
       attendanceWeight: ScoringModule.weights.attendance || 0,
       attendanceSessions: AttendanceModule.sessionBreakdown(studentId),

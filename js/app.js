@@ -1407,27 +1407,11 @@ function renderAttendance() {
 function buildAttendanceHeaderRow() {
   const tr = document.createElement("tr");
 
-  ["Student", "Notes"].forEach((label) => {
+  ["Student", "Notes", "Score"].forEach((label) => {
     const th = document.createElement("th");
     th.textContent = label;
     tr.appendChild(th);
   });
-
-  const scoreTh = document.createElement("th");
-  const scoreToggleBtn = document.createElement("button");
-  scoreToggleBtn.type = "button";
-  scoreToggleBtn.className = "score-toggle-btn";
-  scoreToggleBtn.textContent =
-    AttendanceModule.settings.scoreDisplayMode === "points" ? "Score (pts) ⇄" : "Score (%) ⇄";
-  scoreToggleBtn.title = "Click to switch between percent and points";
-  scoreToggleBtn.addEventListener("click", async () => {
-    AttendanceModule.setScoreDisplayMode(
-      AttendanceModule.settings.scoreDisplayMode === "points" ? "percent" : "points"
-    );
-    await saveAttendanceThen(renderAttendance);
-  });
-  scoreTh.appendChild(scoreToggleBtn);
-  tr.appendChild(scoreTh);
 
   ["Attended", "Absences"].forEach((label) => {
     const th = document.createElement("th");
@@ -1657,10 +1641,7 @@ function absenceCellColor(absences) {
 }
 
 function formatAttendanceScore(stats) {
-  if (AttendanceModule.settings.scoreDisplayMode === "points") {
-    return stats.points === null ? "—" : String(stats.points);
-  }
-  return stats.percent === null ? "—" : `${stats.percent}%`;
+  return stats.points === null ? "—" : String(stats.points);
 }
 
 function appendAttendanceStatCells(tr, studentId) {
@@ -1726,7 +1707,6 @@ function renderAttendanceSettings() {
       `Infractions: ${AttendanceModule.settings.infractionOptions
         .map((o) => `${o} (${AttendanceModule.settings.infractionPoints[o]})`)
         .join(", ") || "(none)"}`,
-      `Score display: ${AttendanceModule.settings.scoreDisplayMode === "points" ? "Points" : "Percent"}`,
     ];
     lines.forEach((line) => {
       const p = document.createElement("p");
@@ -2154,14 +2134,14 @@ function buildScoringHeaderRows() {
 
   const attendanceTh = document.createElement("th");
   attendanceTh.rowSpan = 2;
-  attendanceTh.textContent = "Attendance";
+  attendanceTh.textContent = `Attendance (${ScoringModule.weights.attendance || 0}%)`;
   row1.appendChild(attendanceTh);
 
   ScoringModule.categories.forEach((category) => {
     const th = document.createElement("th");
     th.className = "category-header-cell";
     th.colSpan = Math.max(1, category.items.length);
-    th.textContent = category.name;
+    th.textContent = `${category.name} (${ScoringModule.weights[category.id] || 0}%)`;
     row1.appendChild(th);
 
     category.items.forEach((item) => {
@@ -2267,42 +2247,8 @@ el.toggleScoringSettingsBtn.addEventListener("click", () => {
   renderScoringSettings();
 });
 
-/** Two toggle buttons — Total Score display and Attendance display — shown at the top of Scoring Settings regardless of edit mode. */
-function buildScoringDisplayToggles() {
-  const wrap = document.createElement("div");
-  wrap.className = "attendance-settings-block scoring-display-toggles";
-
-  const totalBtn = document.createElement("button");
-  totalBtn.type = "button";
-  totalBtn.className = "score-toggle-btn";
-  totalBtn.textContent =
-    ScoringModule.scoreDisplayMode === "points" ? "Total Score (pts) ⇄" : "Total Score (%) ⇄";
-  totalBtn.title = "Click to switch the Total Score column between percent and points";
-  totalBtn.addEventListener("click", async () => {
-    ScoringModule.setScoreDisplayMode(ScoringModule.scoreDisplayMode === "points" ? "percent" : "points");
-    await saveScoringThen(renderScoring);
-  });
-
-  const attendanceBtn = document.createElement("button");
-  attendanceBtn.type = "button";
-  attendanceBtn.className = "score-toggle-btn";
-  attendanceBtn.textContent =
-    ScoringModule.attendanceDisplayMode === "points" ? "Attendance (pts) ⇄" : "Attendance (%) ⇄";
-  attendanceBtn.title = "Click to switch the Attendance column between percent and points";
-  attendanceBtn.addEventListener("click", async () => {
-    ScoringModule.setAttendanceDisplayMode(
-      ScoringModule.attendanceDisplayMode === "points" ? "percent" : "points"
-    );
-    await saveScoringThen(renderScoring);
-  });
-
-  wrap.append(totalBtn, attendanceBtn);
-  return wrap;
-}
-
 function renderScoringSettings() {
   el.scoringSettingsBody.innerHTML = "";
-  el.scoringSettingsBody.appendChild(buildScoringDisplayToggles());
 
   const toolsSummary = document.createElement("p");
   toolsSummary.className = "hint";
@@ -2629,16 +2575,19 @@ function buildScoringStudentRow(student) {
   infoTd.appendChild(nameRow);
   tr.appendChild(infoTd);
 
-  // ----- Total score -----
+  // ----- Total score: points primary, percent secondary -----
   const totalTd = document.createElement("td");
   totalTd.className = "attendance-stat-cell attendance-score-cell";
-  totalTd.textContent = formatScoringTotal(ScoringModule.totalScore(student.id));
+  totalTd.appendChild(
+    buildPointsWithPercentCell(ScoringModule.totalPoints(student.id), ScoringModule.weightedPercent(student.id))
+  );
   tr.appendChild(totalTd);
 
-  // ----- Attendance (read-only, computed from the Attendance tab) -----
+  // ----- Attendance (read-only, computed from the Attendance tab): points primary, percent secondary -----
+  const attendanceStats = ScoringModule.attendanceScore(student.id);
   const attendanceTd = document.createElement("td");
   attendanceTd.className = "attendance-stat-cell scoring-attendance-cell";
-  attendanceTd.textContent = formatScoringValue(ScoringModule.attendanceScore(student.id));
+  attendanceTd.appendChild(buildPointsWithPercentCell(attendanceStats.points, attendanceStats.percent));
   tr.appendChild(attendanceTd);
 
   // ----- One cell per item, grouped by category (no separate cell needed — colspan lives in the header) -----
@@ -2702,25 +2651,29 @@ function buildScoringStudentRow(student) {
   return tr;
 }
 
-/** Formats an { earned, possible, percent, points } result (e.g. from attendanceScore) according to the Attendance column's display mode. */
-function formatScoringValue(result) {
-  if (ScoringModule.attendanceDisplayMode === "points") {
-    return result.points === null || result.points === undefined ? "—" : `${result.points} pts`;
-  }
-  return result.percent === null || result.percent === undefined ? "—" : `${result.percent}%`;
-}
-
-/** Formats the raw totalScore() number (already percent or points depending on mode) for display. */
-function formatScoringTotal(total) {
-  if (total === null || total === undefined) return "—";
-  return ScoringModule.scoreDisplayMode === "points" ? `${total} pts` : `${total}%`;
+/** A small two-line display: the points value on top, its equivalent percentage underneath in a lighter style. Either can be null/undefined, shown as "—". Used for Total Score and Attendance, now that both are points-first with percent as secondary context. */
+function buildPointsWithPercentCell(points, percent) {
+  const wrap = document.createElement("div");
+  const pointsLine = document.createElement("div");
+  pointsLine.className = "score-points-line";
+  pointsLine.textContent = points === null || points === undefined ? "—" : String(points);
+  const percentLine = document.createElement("div");
+  percentLine.className = "hint score-percent-line";
+  percentLine.textContent = percent === null || percent === undefined ? "—" : `${Math.round(percent)}%`;
+  wrap.append(pointsLine, percentLine);
+  return wrap;
 }
 
 function refreshScoringTotalCell(studentId) {
   const row = el.scoringTable.querySelector(`tr[data-student-id="${studentId}"]`);
   if (!row) return;
   const cell = row.querySelector(".attendance-score-cell");
-  if (cell) cell.textContent = formatScoringTotal(ScoringModule.totalScore(studentId));
+  if (cell) {
+    cell.innerHTML = "";
+    cell.appendChild(
+      buildPointsWithPercentCell(ScoringModule.totalPoints(studentId), ScoringModule.weightedPercent(studentId))
+    );
+  }
   const rawCell = row.querySelector(".scoring-rawpoints-cell");
   if (rawCell) rawCell.textContent = String(ScoringModule.totalRawPoints(studentId));
 
@@ -3238,11 +3191,14 @@ function renderConsultationStudentOptions() {
 
 el.consultationStudentSelect.addEventListener("change", renderConsultationDetail);
 
-/** Total Score for Student Consultation, respecting its own local toggle (independent of the Scoring tab's toggle). Points mode = weighted percent × 100, same convention as the Scoring tab. */
+/** Total Score for Student Consultation, respecting its own local toggle. Points mode now uses ScoringModule.totalPoints (the same weighted-points figure shown on the Scoring tab), not an inflated percent×100. */
 function formatConsultationTotal(studentId) {
+  if (consultationDisplayMode === "points") {
+    const points = ScoringModule.totalPoints(studentId);
+    return points === null ? "—" : String(points);
+  }
   const percent = ScoringModule.weightedPercent(studentId);
-  if (percent === null) return "—";
-  return consultationDisplayMode === "points" ? `${Math.round(percent * 100)} pts` : `${Math.round(percent)}%`;
+  return percent === null ? "—" : `${Math.round(percent)}%`;
 }
 
 function renderConsultationDetail() {
@@ -3519,7 +3475,7 @@ function buildReportCardSheet(studentId) {
 
   const totalBlock = document.createElement("div");
   totalBlock.className = "report-sheet-total-block";
-  totalBlock.textContent = `Total Score: ${detail.total === null ? "—" : `${detail.total}%`}`;
+  totalBlock.textContent = `Total Score: ${detail.total === null ? "—" : detail.total}`;
   sheet.appendChild(totalBlock);
 
   return sheet;

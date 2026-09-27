@@ -18,7 +18,6 @@
 //   - points / infractionPoints: the point value each participation
 //     type / infraction contributes toward the computed score.
 //   - termClassCount: how many session columns exist.
-//   - scoreDisplayMode: "percent" or "points".
 
 const FIXED_PARTICIPATION_TYPES = ["P", "A"];
 
@@ -29,7 +28,6 @@ function defaultAttendanceSettings() {
     points: { P: 1, A: 0, L: 0.5, E: 1 },
     infractionPoints: { Sleeping: -0.2, "Phone use": -0.2, "Talking too much": -0.2 },
     termClassCount: 0,
-    scoreDisplayMode: "percent",
     absenceLimit: null,
     exportTemplate: null,
   };
@@ -63,7 +61,6 @@ const AttendanceModule = {
         infractionPoints: { ...defaults.infractionPoints, ...saved.infractionPoints },
         termClassCount:
           typeof saved.termClassCount === "number" ? saved.termClassCount : this.sessions.length,
-        scoreDisplayMode: saved.scoreDisplayMode === "points" ? "points" : "percent",
         absenceLimit: typeof saved.absenceLimit === "number" ? saved.absenceLimit : null,
         exportTemplate: saved.exportTemplate || null,
       };
@@ -187,10 +184,6 @@ const AttendanceModule = {
 
   setInfractionPointValue(infraction, value) {
     this.settings.infractionPoints[infraction] = Number(value) || 0;
-  },
-
-  setScoreDisplayMode(mode) {
-    this.settings.scoreDisplayMode = mode === "points" ? "points" : "percent";
   },
 
   setAbsenceLimit(n) {

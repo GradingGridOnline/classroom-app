@@ -59,8 +59,6 @@ const ScoringModule = {
   records: {},
   weights: {},
   tools: [], // [{ id, type, name }] — extra tabs alongside Main Scores
-  scoreDisplayMode: "percent", // "percent" or "points" — for the Total Score column
-  attendanceDisplayMode: "percent", // "percent" or "points" — for the Attendance column
   currentCourseId: null,
 
   fileName(courseId) {
@@ -75,15 +73,11 @@ const ScoringModule = {
       this.records = data.records || {};
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
       this.tools = Array.isArray(data.tools) ? data.tools : [];
-      this.scoreDisplayMode = data.scoreDisplayMode === "points" ? "points" : "percent";
-      this.attendanceDisplayMode = data.attendanceDisplayMode === "points" ? "points" : "percent";
     } else {
       this.categories = [];
       this.records = {};
       this.weights = { attendance: 0 };
       this.tools = [];
-      this.scoreDisplayMode = "percent";
-      this.attendanceDisplayMode = "percent";
     }
   },
 
@@ -94,8 +88,6 @@ const ScoringModule = {
       records: this.records,
       weights: this.weights,
       tools: this.tools,
-      scoreDisplayMode: this.scoreDisplayMode,
-      attendanceDisplayMode: this.attendanceDisplayMode,
     });
   },
 
@@ -222,14 +214,6 @@ const ScoringModule = {
 
   setWeight(key, value) {
     this.weights[key] = Math.max(0, Number(value) || 0);
-  },
-
-  setScoreDisplayMode(mode) {
-    this.scoreDisplayMode = mode === "points" ? "points" : "percent";
-  },
-
-  setAttendanceDisplayMode(mode) {
-    this.attendanceDisplayMode = mode === "points" ? "points" : "percent";
   },
 
   // ----- Scoring tools (extra tabs alongside Main Scores) -----
@@ -684,7 +668,7 @@ const ScoringModule = {
     return total;
   },
 
-  /** The weighted average percent (0-100) across categories plus Attendance, normalized by the sum of weights actually entered. Shared by both display modes below. */
+  /** The weighted average percent (0-100) across categories plus Attendance, normalized by the sum of weights actually entered — "how well are they doing, relative to what's been weighted so far." Used for the secondary percentage shown under Total Score/Attendance, and by Student Consultation's own Percent mode. */
   weightedPercent(studentId) {
     let weightedSum = 0;
     let weightTotal = 0;
@@ -710,11 +694,42 @@ const ScoringModule = {
     return weightTotal > 0 ? weightedSum / weightTotal : null;
   },
 
-  /** Weighted total across the 10 categories plus Attendance. Percent mode returns the weighted percent (0-100, rounded); points mode returns that same weighted percent scaled ×100. */
-  totalScore(studentId) {
-    const percent = this.weightedPercent(studentId);
-    if (percent === null) return null;
-    return this.scoreDisplayMode === "points" ? Math.round(percent * 100) : Math.round(percent);
+  /**
+   * The actual Total Score, in points: each category's percent (as a
+   * 0-1 fraction) times its own weight, summed with Attendance's the
+   * same way — NOT normalized by the sum of weights, unlike
+   * weightedPercent. So with weights set to sum to 100 (the Scoring
+   * Settings weight-total box turns green there), a perfect score in
+   * everything gives exactly 100 points. A category or Attendance
+   * with nothing recorded yet is skipped (contributes nothing, same
+   * as elsewhere) rather than counted as zero, so a partially-graded
+   * student shows a partial total rather than being penalized for
+   * ungraded work. Returns null only if nothing anywhere has been
+   * graded yet.
+   */
+  totalPoints(studentId) {
+    let total = 0;
+    let any = false;
+
+    this.categories.forEach((category) => {
+      const weight = this.weights[category.id] || 0;
+      if (weight <= 0) return;
+      const { percent } = this.categoryScore(studentId, category.id);
+      if (percent === null) return;
+      total += (percent / 100) * weight;
+      any = true;
+    });
+
+    const attendanceWeight = this.weights.attendance || 0;
+    if (attendanceWeight > 0 && window.AttendanceModule) {
+      const attendancePercent = window.AttendanceModule.stats(studentId).percent;
+      if (attendancePercent !== null) {
+        total += (attendancePercent / 100) * attendanceWeight;
+        any = true;
+      }
+    }
+
+    return any ? Math.round(total * 10) / 10 : null;
   },
 };
 
