@@ -304,12 +304,8 @@ const SeatingModule = {
   // (size + active + seats + locks + groups + labels) or null if
   // that slot hasn't been saved into yet. A slot's name persists
   // independently of its snapshot, so you can label a slot before
-  // ever saving into it. Save/Load/Delete/Rename all persist to
-  // Drive immediately, rather than waiting for a separate "Save
-  // Seating Chart" click — this is a deliberate exception to the
-  // rest of the app's deferred-save convention, since saving into (or
-  // loading from) a named slot IS itself the explicit save action,
-  // not an incidental side effect of editing something else.
+  // ever saving into it. These only change data locally — nothing is
+  // written to Google Drive until "Save Seating Chart" is clicked.
 
   bankIsEmpty(index) {
     return !this.banks[index].snapshot;
@@ -326,12 +322,28 @@ const SeatingModule = {
       labels: { ...this.labels },
       savedAt: new Date().toISOString(),
     };
-    await this.save();
   },
 
-  2. js/seating.js (4 deletions)
-Find await this.save(); inside saveBank, loadBank, deleteBank, and renameBank (the four methods under "Memory banks"). Delete that line in each. Leave the one in the main save() method alone.
+  async loadBank(index) {
+    const snapshot = this.banks[index].snapshot;
+    if (!snapshot) throw new Error("That memory bank is empty.");
+    this.rows = snapshot.rows;
+    this.cols = snapshot.cols;
+    this.active = { ...(snapshot.active || {}) };
+    this.seats = { ...snapshot.seats };
+    this.locks = { ...snapshot.locks };
+    this.groups = { ...snapshot.groups };
+    this.labels = { ...(snapshot.labels || {}) };
+  },
 
+  async deleteBank(index) {
+    this.banks[index].snapshot = null;
+  },
+
+  async renameBank(index, name) {
+    const trimmed = (name || "").trim();
+    this.banks[index].name = trimmed || `Bank ${index + 1}`;
+  },
 
   /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs shuffled into random order first. Desks carrying a label (e.g. "do not sit here") are skipped, same as locked and inactive desks. */
   autoFill(studentIds) {
