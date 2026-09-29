@@ -12,7 +12,7 @@ const el = {
   courseList: document.getElementById("course-list"),
   courseCount: document.getElementById("course-count"),
   newCourseName: document.getElementById("new-course-name"),
-  addCourseBtn: document.getElementById("add-course-btn"),
+  addCourseBtn: document.getElementById("add-course-btn"), saveCoursesBtn: document.getElementById("save-courses-btn"),
   courseStatus: document.getElementById("course-status"),
 
   courseDetailSection: document.getElementById("course-detail-section"),
@@ -41,7 +41,7 @@ const el = {
   itemSelectionList: document.getElementById("item-selection-list"),
   printcardStudentSelect: document.getElementById("printcard-student-select"),
   printOneBtn: document.getElementById("print-one-btn"),
-  printAllBtn: document.getElementById("print-all-btn"),
+  printAllBtn: document.getElementById("print-all-btn"), savePrintcardBtn: document.getElementById("save-printcard-btn"),
   printcardStatus: document.getElementById("printcard-status"),
   printArea: document.getElementById("print-area"),
 
@@ -102,7 +102,7 @@ const el = {
 
   presentationCalcStatus: document.getElementById("presentationcalc-status"),
   presentationCalcBankSelect: document.getElementById("presentationcalc-bank-select"),
-  importPresentationCalcBtn: document.getElementById("import-presentationcalc-btn"),
+  importPresentationCalcBtn: document.getElementById("import-presentationcalc-btn"), savePresentationCalcBtn: document.getElementById("save-presentationcalc-btn"),
   presentationCalcSource: document.getElementById("presentationcalc-source"),
   presentationCalcTbody: document.getElementById("presentationcalc-tbody"),
 
@@ -209,11 +209,7 @@ function renderThemeList() {
 // ===== Settings / periods =====
 
 async function savePeriodsThen(after) {
-  try {
-    await PeriodsModule.save();
-  } catch (err) {
-    el.courseStatus.textContent = `Couldn't save periods: ${err.message}`;
-  }
+  function savePeriodsThen(after) {
   if (after) after();
 }
 
@@ -283,7 +279,7 @@ function renderPeriodsList() {
         renderPeriodsList();
         renderCourseList();
       });
-      await CoursesModule.save().catch(() => {});
+      
     });
     removeTd.appendChild(removeBtn);
     tr.appendChild(removeTd);
@@ -378,11 +374,7 @@ function renderCourseList() {
     periodSelect.addEventListener("click", (e) => e.stopPropagation());
     periodSelect.addEventListener("change", async () => {
       CoursesModule.setPeriod(course.id, periodSelect.value);
-      try {
-        await CoursesModule.save();
-      } catch (err) {
-        el.courseStatus.textContent = `Couldn't save: ${err.message}`;
-      }
+      
     });
 
     const renameBtn = document.createElement("button");
@@ -411,9 +403,7 @@ function renderCourseList() {
       if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
       CoursesModule.remove(course.id);
       renderCourseList();
-      CoursesModule.save().catch((err) => {
-        el.courseStatus.textContent = `Couldn't save: ${err.message}`;
-      });
+      
     });
 
     li.append(nameSpan, periodSelect, renameBtn, deleteBtn);
@@ -421,16 +411,25 @@ function renderCourseList() {
   });
 }
 
-el.addCourseBtn.addEventListener("click", async () => {
+el.addCourseBtn.addEventListener("click", () => {
   try {
     CoursesModule.add(el.newCourseName.value);
     el.newCourseName.value = "";
     renderCourseList();
-    el.courseStatus.textContent = "Saving…";
-    await CoursesModule.save();
-    el.courseStatus.textContent = "Saved ✓";
+    el.courseStatus.textContent = "";
   } catch (err) {
     el.courseStatus.textContent = err.message;
+  }
+});
+
+el.saveCoursesBtn.addEventListener("click", async () => {
+  el.courseStatus.textContent = "Saving…";
+  try {
+    await CoursesModule.save();
+    await PeriodsModule.save();
+    el.courseStatus.textContent = "Saved to Google Drive ✓";
+  } catch (err) {
+    el.courseStatus.textContent = `Save failed: ${err.message}`;
   }
 });
 
@@ -3312,16 +3311,19 @@ el.selectNoItemsBtn.addEventListener("click", async () => {
   await savePrintcardThen(renderItemSelectionList);
 });
 
-async function savePrintcardThen(after) {
+function savePrintcardThen(after) {
+  if (after) after();
+}
+
+el.savePrintcardBtn.addEventListener("click", async () => {
   el.printcardStatus.textContent = "Saving…";
   try {
     await ReportCardModule.save();
-    el.printcardStatus.textContent = "";
+    el.printcardStatus.textContent = "Saved to Google Drive ✓";
   } catch (err) {
-    el.printcardStatus.textContent = `Couldn't save: ${err.message}`;
+    el.printcardStatus.textContent = `Save failed: ${err.message}`;
   }
-  if (after) after();
-}
+});
 
 // ----- Student picker for single-student printing -----
 
@@ -3506,7 +3508,7 @@ el.syncEmailBtn.addEventListener("click", async () => {
       RosterModule.updateStudent(m.studentId, { email: m.email });
     });
     if (result.matches.length > 0) {
-      await RosterModule.save();
+
       renderRoster();
     }
     renderEmailCollectButtons();
@@ -3604,7 +3606,7 @@ el.importPresentationCalcBtn.addEventListener("click", async () => {
   el.presentationCalcStatus.textContent = "Importing…";
   try {
     PresentationCalcModule.importFromBank(bank, RosterModule);
-    await PresentationCalcModule.save();
+
     renderPresentationCalc();
     el.presentationCalcStatus.textContent = `Imported ${PresentationCalcModule.roster.length} seated student(s) from ${bank.name}.`;
   } catch (err) {
@@ -3614,16 +3616,19 @@ el.importPresentationCalcBtn.addEventListener("click", async () => {
 
 // ===== Rubrics (Rubric Bank + Active Teacher / Audience rubric grids) =====
 
-async function savePresentationCalcThen(after) {
+function savePresentationCalcThen(after) {
+  if (after) after();
+}
+
+el.savePresentationCalcBtn.addEventListener("click", async () => {
   el.presentationCalcStatus.textContent = "Saving…";
   try {
     await PresentationCalcModule.save();
-    el.presentationCalcStatus.textContent = "";
+    el.presentationCalcStatus.textContent = "Saved to Google Drive ✓";
   } catch (err) {
-    el.presentationCalcStatus.textContent = `Couldn't save: ${err.message}`;
+    el.presentationCalcStatus.textContent = `Save failed: ${err.message}`;
   }
-  if (after) after();
-}
+});
 
 function renderRubrics() {
   renderRubricBank();

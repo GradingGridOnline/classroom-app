@@ -329,29 +329,9 @@ const SeatingModule = {
     await this.save();
   },
 
-  async loadBank(index) {
-    const snapshot = this.banks[index].snapshot;
-    if (!snapshot) throw new Error("That memory bank is empty.");
-    this.rows = snapshot.rows;
-    this.cols = snapshot.cols;
-    this.active = { ...(snapshot.active || {}) };
-    this.seats = { ...snapshot.seats };
-    this.locks = { ...snapshot.locks };
-    this.groups = { ...snapshot.groups };
-    this.labels = { ...(snapshot.labels || {}) };
-    await this.save();
-  },
+  2. js/seating.js (4 deletions)
+Find await this.save(); inside saveBank, loadBank, deleteBank, and renameBank (the four methods under "Memory banks"). Delete that line in each. Leave the one in the main save() method alone.
 
-  async deleteBank(index) {
-    this.banks[index].snapshot = null;
-    await this.save();
-  },
-
-  async renameBank(index, name) {
-    const trimmed = (name || "").trim();
-    this.banks[index].name = trimmed || `Bank ${index + 1}`;
-    await this.save();
-  },
 
   /** Fills empty ACTIVE desks only, in row-major order, with the given student IDs shuffled into random order first. Desks carrying a label (e.g. "do not sit here") are skipped, same as locked and inactive desks. */
   autoFill(studentIds) {
