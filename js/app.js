@@ -208,7 +208,7 @@ function renderThemeList() {
 
 // ===== Settings / periods =====
 
-async function savePeriodsThen(after) {
+(after) {
   function savePeriodsThen(after) {
   if (after) after();
 }
