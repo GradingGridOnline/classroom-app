@@ -208,8 +208,7 @@ function renderThemeList() {
 
 // ===== Settings / periods =====
 
-(after) {
-  function savePeriodsThen(after) {
+function savePeriodsThen(after) {
   if (after) after();
 }
 
@@ -279,7 +278,6 @@ function renderPeriodsList() {
         renderPeriodsList();
         renderCourseList();
       });
-      
     });
     removeTd.appendChild(removeBtn);
     tr.appendChild(removeTd);
@@ -372,9 +370,8 @@ function renderCourseList() {
       periodSelect.appendChild(opt);
     });
     periodSelect.addEventListener("click", (e) => e.stopPropagation());
-    periodSelect.addEventListener("change", async () => {
+    periodSelect.addEventListener("change", () => {
       CoursesModule.setPeriod(course.id, periodSelect.value);
-      
     });
 
     const renameBtn = document.createElement("button");
@@ -387,9 +384,6 @@ function renderCourseList() {
       try {
         CoursesModule.rename(course.id, newName);
         renderCourseList();
-        CoursesModule.save().catch((err) => {
-          el.courseStatus.textContent = `Couldn't save: ${err.message}`;
-        });
       } catch (err) {
         alert(err.message);
       }
@@ -403,7 +397,6 @@ function renderCourseList() {
       if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
       CoursesModule.remove(course.id);
       renderCourseList();
-      
     });
 
     li.append(nameSpan, periodSelect, renameBtn, deleteBtn);
@@ -877,27 +870,6 @@ function renderGroupList() {
   });
 }
 
-/**
- * Builds one desk. States:
- *  - inactive: no desk here yet. Click activates it (and seats the
- *    selected student in the same click, if one is selected).
- *  - active + empty, nothing selected: click deactivates it again.
- *  - active + empty, student selected: click seats them.
- *  - active + occupied: click unseats (unless locked — unlock first).
- * Group number (text input) and label (button, opens a prompt) are
- * available on any active desk, regardless of occupancy.
- */
-/**
- * Builds a printable sheet of the current seating arrangement, from the
- * teacher's own viewpoint (same row/column order as the on-screen
- * editor — unmirrored, unlike the pop-out). Landscape A4. Desks scale to
- * fill the available grid space, each showing pronunciation (top),
- * name, and School ID (bottom), all top-left justified. Three thin
- * fill-in boxes — Lesson Contents, Homework, Date of Lesson — are
- * pinned to the bottom of the page for handwriting; course name and
- * period/time (from Global Settings) appear in the page heading instead
- * of a fourth box.
- */
 /** Largest font size (px) at which `text` fits within `maxWidthPx`, measured with a scratch canvas rather than guessed from character count — reused across calls instead of recreated each time. */
 const _measureCanvas = document.createElement("canvas");
 const _measureCtx = _measureCanvas.getContext("2d");
@@ -910,6 +882,17 @@ function fontSizeToFit(text, maxWidthPx, fontWeight = "400", maxSizePx = 40) {
   return Math.min(maxSizePx, (maxWidthPx / widthAtRef) * refSize);
 }
 
+/**
+ * Builds a printable sheet of the current seating arrangement, from the
+ * teacher's own viewpoint (same row/column order as the on-screen
+ * editor — unmirrored, unlike the pop-out). Landscape A4. Desks scale to
+ * fill the available grid space, each showing pronunciation (top),
+ * name, and School ID (bottom), all top-left justified. Three thin
+ * fill-in boxes — Lesson Contents, Homework, Date of Lesson — are
+ * pinned to the bottom of the page for handwriting; course name and
+ * period/time (from Global Settings) appear in the page heading and in
+ * a fourth pre-filled box.
+ */
 function buildSeatingPrintSheet() {
   const course = CoursesModule.find(RosterModule.currentCourseId);
 
@@ -1092,6 +1075,16 @@ function buildSeatingPrintCourseBox(course, periodLabel) {
   return box;
 }
 
+/**
+ * Builds one desk. States:
+ *  - inactive: no desk here yet. Click activates it (and seats the
+ *    selected student in the same click, if one is selected).
+ *  - active + empty, nothing selected: click deactivates it again.
+ *  - active + empty, student selected: click seats them.
+ *  - active + occupied: click unseats (unless locked — unlock first).
+ * Group number (text input) and label (button, opens a prompt) are
+ * available on any active desk, regardless of occupancy.
+ */
 function buildDeskElement(r, c) {
   const active = SeatingModule.isActive(r, c);
   const studentId = SeatingModule.studentAt(r, c);
@@ -1238,10 +1231,9 @@ function renderBanks() {
     saveBtn.textContent = "Save";
     saveBtn.addEventListener("click", async () => {
       if (!isEmpty && !confirm(`Overwrite "${bank.name}" with the current arrangement?`)) return;
-      el.seatingStatus.textContent = "Saving to memory bank…";
       try {
         await SeatingModule.saveBank(index);
-        el.seatingStatus.textContent = `Saved to "${bank.name}" ✓`;
+        el.seatingStatus.textContent = `Saved to "${bank.name}" — click Save Seating Chart to store it.`;
         renderBanks();
       } catch (err) {
         el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
@@ -1256,7 +1248,6 @@ function renderBanks() {
     loadBtn.disabled = isEmpty;
     loadBtn.addEventListener("click", async () => {
       if (!confirm(`Load "${bank.name}"? This replaces your current seating arrangement (including grid size).`)) return;
-      el.seatingStatus.textContent = "Loading memory bank…";
       try {
         await SeatingModule.loadBank(index);
         selectedStudentId = null;
@@ -1275,7 +1266,6 @@ function renderBanks() {
     renameBtn.addEventListener("click", async () => {
       const next = prompt("Name this memory bank:", bank.name);
       if (next === null) return;
-      el.seatingStatus.textContent = "Renaming…";
       try {
         await SeatingModule.renameBank(index, next);
         renderBanks();
@@ -1293,7 +1283,6 @@ function renderBanks() {
     deleteBtn.disabled = isEmpty;
     deleteBtn.addEventListener("click", async () => {
       if (!confirm(`Delete the saved arrangement in "${bank.name}"? This can't be undone.`)) return;
-      el.seatingStatus.textContent = "Deleting…";
       try {
         await SeatingModule.deleteBank(index);
         el.seatingStatus.textContent = `"${bank.name}" cleared.`;
@@ -1692,7 +1681,7 @@ function refreshAttendanceStatsRow(studentId) {
   }
 }
 
-/** Applies a local change's follow-up UI update (e.g. a re-render). Persistence to Google Drive now happens only via the explicit "Save Attendance" button — kept as a function (rather than inlining every call site) so that button is the one place that actually saves. */
+/** Applies a local change's follow-up UI update (e.g. a re-render). Persistence to Google Drive happens only via the explicit "Save Attendance" button — kept as a function (rather than inlining every call site) so that button is the one place that actually saves. */
 function saveAttendanceThen(after) {
   if (after) after();
 }
@@ -1931,7 +1920,7 @@ function buildExportTemplateBlock() {
   hint.className = "hint";
   hint.textContent = tpl
     ? `Template loaded: ${tpl.headers.length} columns, ${tpl.rows.length} rows.`
-    : "Upload a CSV template from your LMS. After uploading, choose which column identifies each student and which column receives their attendance code.";
+    : "Upload a CSV template from your LMS. After uploading, choose which column identifies each student and which column receives their attendance points.";
   wrap.appendChild(hint);
 
   const fileInput = document.createElement("input");
@@ -2026,7 +2015,7 @@ function buildExportTemplateBlock() {
   const valueRow = document.createElement("div");
   valueRow.className = "mapping-row";
   const valueLabel = document.createElement("label");
-  valueLabel.textContent = "Attendance value column";
+  valueLabel.textContent = "Points column";
   const valueSelect = buildColumnSelect(tpl.valueColumn, async () => {
     AttendanceModule.updateExportMapping({ valueColumn: Number(valueSelect.value) });
     await saveAttendanceThen();
@@ -2705,7 +2694,7 @@ function refreshScoringTotalCell(studentId) {
   });
 }
 
-/** Applies a local change's follow-up UI update. Persistence to Google Drive now happens only via the explicit "Save Scoring" button, which covers Main Scores and every tool tab at once (they're all one file). */
+/** Applies a local change's follow-up UI update. Persistence to Google Drive happens only via the explicit "Save Scoring" button, which covers Main Scores and every tool tab at once (they're all one file). */
 function saveScoringThen(after) {
   if (after) after();
 }
@@ -2846,7 +2835,6 @@ function renderScoringToolTableView(tool, container) {
   container.appendChild(settingsWrap);
 }
 
-/** Saves the whole ScoringModule (tool config lives inside ScoringModule.tools) and re-renders just this one tool's view. */
 /** Re-renders this one tool's view after a local change. Persistence happens only via the explicit "Save Scoring" button. */
 function saveScoringToolThen(tool, container) {
   renderScoringToolView(tool, container);
@@ -3508,13 +3496,13 @@ el.syncEmailBtn.addEventListener("click", async () => {
       RosterModule.updateStudent(m.studentId, { email: m.email });
     });
     if (result.matches.length > 0) {
-
       renderRoster();
     }
     renderEmailCollectButtons();
     el.emailCollectStatus.textContent =
       `Matched ${result.matches.length} of ${result.totalResponses} response(s).` +
-      (result.unmatchedCount > 0 ? ` ${result.unmatchedCount} didn't match any School ID.` : "");
+      (result.unmatchedCount > 0 ? ` ${result.unmatchedCount} didn't match any School ID.` : "") +
+      (result.matches.length > 0 ? " Click Save Roster to store the emails." : "");
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't sync: ${err.message}`;
   }
@@ -3606,9 +3594,8 @@ el.importPresentationCalcBtn.addEventListener("click", async () => {
   el.presentationCalcStatus.textContent = "Importing…";
   try {
     PresentationCalcModule.importFromBank(bank, RosterModule);
-
     renderPresentationCalc();
-    el.presentationCalcStatus.textContent = `Imported ${PresentationCalcModule.roster.length} seated student(s) from ${bank.name}.`;
+    el.presentationCalcStatus.textContent = `Imported ${PresentationCalcModule.roster.length} seated student(s) from ${bank.name} — click Save Presentation Calc to store.`;
   } catch (err) {
     el.presentationCalcStatus.textContent = `Couldn't import: ${err.message}`;
   }
