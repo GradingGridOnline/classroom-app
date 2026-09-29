@@ -124,9 +124,9 @@ const SeatingModule = {
     });
   },
 
-  async toggleShowGroupsInPopout() {
+  /** Only flips the flag locally — persisting it is left to the explicit "Save Seating Chart" button, like every other seating change. */
+  toggleShowGroupsInPopout() {
     this.showGroupsInPopout = !this.showGroupsInPopout;
-    await this.save();
   },
 
   /** Resizing keeps anything that still falls within the new bounds. */
@@ -149,6 +149,56 @@ const SeatingModule = {
     this.labels = filterMap(this.labels);
     this.rows = rows;
     this.cols = cols;
+  },
+
+  /**
+   * Removes any row or column that currently has zero active desks
+   * anywhere in it, shifting the remaining rows/columns together so
+   * every existing desk (and its seat/lock/group/label) keeps its
+   * same relative position — just renumbered to close the gap. A
+   * no-op if every row and column already has at least one desk, or
+   * if there are no active desks at all (nothing meaningful to keep).
+   * Returns true if anything was actually trimmed.
+   */
+  trimEmptyRowsAndColumns() {
+    const usedRows = new Set();
+    const usedCols = new Set();
+    for (const key in this.active) {
+      const [r, c] = key.split("-").map(Number);
+      usedRows.add(r);
+      usedCols.add(c);
+    }
+    if (usedRows.size === 0 || usedCols.size === 0) return false;
+
+    const keepRows = [];
+    for (let r = 0; r < this.rows; r++) if (usedRows.has(r)) keepRows.push(r);
+    const keepCols = [];
+    for (let c = 0; c < this.cols; c++) if (usedCols.has(c)) keepCols.push(c);
+
+    if (keepRows.length === this.rows && keepCols.length === this.cols) return false;
+
+    const rowIndex = new Map(keepRows.map((oldR, newR) => [oldR, newR]));
+    const colIndex = new Map(keepCols.map((oldC, newC) => [oldC, newC]));
+
+    const remap = (map) => {
+      const result = {};
+      for (const key in map) {
+        const [r, c] = key.split("-").map(Number);
+        if (rowIndex.has(r) && colIndex.has(c)) {
+          result[`${rowIndex.get(r)}-${colIndex.get(c)}`] = map[key];
+        }
+      }
+      return result;
+    };
+
+    this.active = remap(this.active);
+    this.seats = remap(this.seats);
+    this.locks = remap(this.locks);
+    this.groups = remap(this.groups);
+    this.labels = remap(this.labels);
+    this.rows = keepRows.length;
+    this.cols = keepCols.length;
+    return true;
   },
 
   key(r, c) {
@@ -256,7 +306,10 @@ const SeatingModule = {
   // independently of its snapshot, so you can label a slot before
   // ever saving into it. Save/Load/Delete/Rename all persist to
   // Drive immediately, rather than waiting for a separate "Save
-  // Seating Chart" click.
+  // Seating Chart" click — this is a deliberate exception to the
+  // rest of the app's deferred-save convention, since saving into (or
+  // loading from) a named slot IS itself the explicit save action,
+  // not an incidental side effect of editing something else.
 
   bankIsEmpty(index) {
     return !this.banks[index].snapshot;
@@ -312,6 +365,29 @@ const SeatingModule = {
       for (let c = 0; c < this.cols && i < shuffled.length; c++) {
         if (this.isActive(r, c) && !this.studentAt(r, c) && !this.getLabel(r, c)) {
           this.seats[this.key(r, c)] = shuffled[i++];
+        }
+      }
+    }
+  },
+
+  /**
+   * Fills empty ACTIVE desks only, in ascending Class Number order,
+   * traversing the grid column by column left-to-right, and within
+   * each column bottom-to-top (row index descending) — i.e. starting
+   * at the bottom-left desk, filling upward, then moving one column
+   * right and repeating. Desks carrying a label are skipped, same as
+   * locked and inactive desks. `students` are full student objects
+   * (not bare ids), since sorting needs each one's classNumber.
+   */
+  autoFillNumericalOrder(students) {
+    const sorted = [...students].sort(
+      (a, b) => (a.classNumber || Infinity) - (b.classNumber || Infinity)
+    );
+    let i = 0;
+    for (let c = 0; c < this.cols && i < sorted.length; c++) {
+      for (let r = this.rows - 1; r >= 0 && i < sorted.length; r--) {
+        if (this.isActive(r, c) && !this.studentAt(r, c) && !this.getLabel(r, c)) {
+          this.seats[this.key(r, c)] = sorted[i++].id;
         }
       }
     }

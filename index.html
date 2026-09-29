@@ -131,6 +131,10 @@
               <label>Email column</label>
               <select id="map-email"></select>
             </div>
+            <div class="mapping-row">
+              <label>Email suffix to append (optional)</label>
+              <input type="text" id="map-email-suffix" placeholder="e.g. @university.edu — leave blank to use the column as-is" />
+            </div>
             <div class="mapping-buttons">
               <button id="confirm-import-btn" class="btn btn-primary">Import (replaces current roster)</button>
               <button id="cancel-import-btn" class="btn btn-ghost">Cancel</button>
@@ -163,9 +167,11 @@
               <label>Columns</label>
               <select id="grid-cols"></select>
               <button id="apply-grid-size-btn" class="btn btn-ghost btn-small">Apply Size</button>
+              <button id="trim-empty-btn" class="btn btn-ghost btn-small" title="Removes any row or column with no desks in it — existing desks keep their arrangement, just closer together">Trim Empty Rows/Columns</button>
             </div>
             <div class="panel-toolbar-buttons">
               <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
+              <button id="auto-fill-numerical-btn" class="btn btn-ghost" title="Seats remaining students in Class Number order, starting at the bottom-left desk and filling upward, then moving one column right">Auto-Fill (Numerical Order)</button>
               <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating</button>
               <button id="popout-btn" class="btn btn-ghost">Pop Out ↗</button>
               <button id="toggle-popout-groups-btn" class="btn btn-ghost">Hide Group Colors in Pop-Out</button>
@@ -216,6 +222,7 @@
         <div id="attendance-panel" class="tab-panel" hidden>
           <div class="panel-toolbar">
             <span id="attendance-status" class="result"></span>
+            <button id="save-attendance-btn" class="btn btn-primary">Save Attendance</button>
           </div>
 
           <div class="attendance-table-wrap">
@@ -233,6 +240,11 @@
 
         <!-- ----- Scoring panel ----- -->
         <div id="scoring-panel" class="tab-panel" hidden>
+          <div class="panel-toolbar">
+            <span id="scoring-status" class="result"></span>
+            <button id="save-scoring-btn" class="btn btn-primary">Save Scoring</button>
+          </div>
+
           <div class="tab-row reportcard-mode-row" id="scoring-mode-row">
             <button id="scoring-mode-entry-btn" class="tab-btn tab-btn-active" data-scoring-mode="entry">Main Scores</button>
             <!-- future tool tabs get added here, one <button class="tab-btn" data-scoring-mode="..."> each -->
@@ -240,9 +252,6 @@
 
           <!-- ----- Scoring: score entry (formerly the whole panel) ----- -->
           <div id="scoring-mode-entry-view" class="scoring-mode-view">
-            <div class="panel-toolbar">
-              <span id="scoring-status" class="result"></span>
-            </div>
             <div class="attendance-table-wrap">
               <table id="scoring-table" class="attendance-table scoring-table"></table>
             </div>

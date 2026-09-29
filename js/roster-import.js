@@ -53,27 +53,43 @@ const RosterImport = {
       "フリガナ",
       "ふりがな",
     ]);
+    const emailIdx = find(["email", "e-mail", "mail", "メール"]);
 
     return {
       name: nameIdx !== -1 ? nameIdx : 0,
       classNumber: classNumberIdx,
       schoolId: idIdx,
       pronunciation: pronunciationIdx,
+      email: emailIdx,
     };
   },
 
-  /** mapping: { name: colIndex, classNumber: colIndex|-1, schoolId: colIndex|-1, pronunciation: colIndex|-1 } */
+  /**
+   * mapping: { name: colIndex, classNumber: colIndex|-1, schoolId:
+   * colIndex|-1, pronunciation: colIndex|-1, email: colIndex|-1,
+   * emailSuffix: string }. emailSuffix, if non-empty, is appended
+   * directly onto every non-blank value pulled from the email column
+   * — e.g. a column of bare student IDs plus "@university.edu" typed
+   * into the suffix box. Left blank, nothing is appended and the
+   * column's own values are used exactly as they appear in the file.
+   * A blank email cell never gets the suffix appended to it alone.
+   */
   buildStudents(mapping) {
-    return this.rows.map((row) => ({
-      name: String(row[mapping.name] ?? "").trim(),
-      classNumber:
-        mapping.classNumber >= 0 ? String(row[mapping.classNumber] ?? "").trim() : "",
-      schoolId:
-        mapping.schoolId >= 0 ? String(row[mapping.schoolId] ?? "").trim() : "",
-      pronunciation:
-        mapping.pronunciation >= 0
-          ? String(row[mapping.pronunciation] ?? "").trim()
-          : "",
-    }));
+    const suffix = (mapping.emailSuffix || "").trim();
+    return this.rows.map((row) => {
+      const rawEmail = mapping.email >= 0 ? String(row[mapping.email] ?? "").trim() : "";
+      return {
+        name: String(row[mapping.name] ?? "").trim(),
+        classNumber:
+          mapping.classNumber >= 0 ? String(row[mapping.classNumber] ?? "").trim() : "",
+        schoolId:
+          mapping.schoolId >= 0 ? String(row[mapping.schoolId] ?? "").trim() : "",
+        pronunciation:
+          mapping.pronunciation >= 0
+            ? String(row[mapping.pronunciation] ?? "").trim()
+            : "",
+        email: rawEmail && suffix ? `${rawEmail}${suffix}` : rawEmail,
+      };
+    });
   },
 };

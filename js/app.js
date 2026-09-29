@@ -65,6 +65,7 @@ const el = {
   mapSchoolId: document.getElementById("map-schoolid"),
   mapPronunciation: document.getElementById("map-pronunciation"),
   mapEmail: document.getElementById("map-email"),
+  mapEmailSuffix: document.getElementById("map-email-suffix"),
   confirmImportBtn: document.getElementById("confirm-import-btn"),
   cancelImportBtn: document.getElementById("cancel-import-btn"),
 
@@ -72,6 +73,8 @@ const el = {
   gridCols: document.getElementById("grid-cols"),
   applyGridSizeBtn: document.getElementById("apply-grid-size-btn"),
   autoFillBtn: document.getElementById("auto-fill-btn"),
+  autoFillNumericalBtn: document.getElementById("auto-fill-numerical-btn"),
+  trimEmptyBtn: document.getElementById("trim-empty-btn"),
   clearSeatingBtn: document.getElementById("clear-seating-btn"),
   popoutBtn: document.getElementById("popout-btn"),
   togglePopoutGroupsBtn: document.getElementById("toggle-popout-groups-btn"),
@@ -85,11 +88,13 @@ const el = {
   groupListTbody: document.getElementById("group-list-tbody"),
 
   attendanceStatus: document.getElementById("attendance-status"),
+  saveAttendanceBtn: document.getElementById("save-attendance-btn"),
   attendanceTable: document.getElementById("attendance-table"),
   toggleAttendanceSettingsBtn: document.getElementById("toggle-attendance-settings-btn"),
   attendanceSettingsBody: document.getElementById("attendance-settings-body"),
 
   scoringStatus: document.getElementById("scoring-status"),
+  saveScoringBtn: document.getElementById("save-scoring-btn"),
   scoringTable: document.getElementById("scoring-table"),
   toggleScoringSettingsBtn: document.getElementById("toggle-scoring-settings-btn"),
   scoringSettingsBody: document.getElementById("scoring-settings-body"),
@@ -688,6 +693,7 @@ function openMappingPanel(headers, rowCount) {
   el.mapSchoolId.value = String(guess.schoolId);
   el.mapPronunciation.value = String(guess.pronunciation);
   el.mapEmail.value = String(guess.email);
+  el.mapEmailSuffix.value = "";
 
   el.mappingPanel.hidden = false;
 }
@@ -703,6 +709,7 @@ el.confirmImportBtn.addEventListener("click", () => {
     schoolId: Number(el.mapSchoolId.value),
     pronunciation: Number(el.mapPronunciation.value),
     email: Number(el.mapEmail.value),
+    emailSuffix: el.mapEmailSuffix.value,
   };
 
   if (RosterModule.students.length > 0) {
@@ -1308,12 +1315,31 @@ el.applyGridSizeBtn.addEventListener("click", () => {
   renderSeating();
 });
 
+el.trimEmptyBtn.addEventListener("click", () => {
+  const trimmed = SeatingModule.trimEmptyRowsAndColumns();
+  if (!trimmed) {
+    el.seatingStatus.textContent = "Nothing to trim — every row and column already has at least one desk.";
+    return;
+  }
+  selectedStudentId = null;
+  renderSeating();
+  el.seatingStatus.textContent = `Trimmed to ${SeatingModule.rows}×${SeatingModule.cols}.`;
+});
+
 el.autoFillBtn.addEventListener("click", () => {
   const seatedIds = SeatingModule.seatedStudentIds();
   const unseatedIds = RosterModule.students
     .filter((s) => !seatedIds.has(s.id))
     .map((s) => s.id);
   SeatingModule.autoFill(unseatedIds);
+  selectedStudentId = null;
+  renderSeating();
+});
+
+el.autoFillNumericalBtn.addEventListener("click", () => {
+  const seatedIds = SeatingModule.seatedStudentIds();
+  const unseatedStudents = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+  SeatingModule.autoFillNumericalOrder(unseatedStudents);
   selectedStudentId = null;
   renderSeating();
 });
@@ -1329,17 +1355,11 @@ el.popoutBtn.addEventListener("click", () => {
   window.open("popout.html", "ggo-seating-popout", "width=900,height=700");
 });
 
-el.togglePopoutGroupsBtn.addEventListener("click", async () => {
-  el.seatingStatus.textContent = "Saving…";
-  try {
-    await SeatingModule.toggleShowGroupsInPopout();
-    el.togglePopoutGroupsBtn.textContent = SeatingModule.showGroupsInPopout
-      ? "Hide Group Colors in Pop-Out"
-      : "Show Group Colors in Pop-Out";
-    el.seatingStatus.textContent = "";
-  } catch (err) {
-    el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
-  }
+el.togglePopoutGroupsBtn.addEventListener("click", () => {
+  SeatingModule.toggleShowGroupsInPopout();
+  el.togglePopoutGroupsBtn.textContent = SeatingModule.showGroupsInPopout
+    ? "Hide Group Colors in Pop-Out"
+    : "Show Group Colors in Pop-Out";
 });
 
 el.printSeatingBtn.addEventListener("click", () => {
@@ -1383,6 +1403,16 @@ el.saveSeatingBtn.addEventListener("click", async () => {
 });
 
 // ===== Attendance =====
+
+el.saveAttendanceBtn.addEventListener("click", async () => {
+  el.attendanceStatus.textContent = "Saving…";
+  try {
+    await AttendanceModule.save();
+    el.attendanceStatus.textContent = "Saved to Google Drive ✓";
+  } catch (err) {
+    el.attendanceStatus.textContent = `Save failed: ${err.message}`;
+  }
+});
 
 function renderAttendance() {
   el.attendanceTable.innerHTML = "";
@@ -1514,20 +1544,10 @@ function buildAttendanceStudentRow(student) {
   excludeSeatingBtn.title = student.excludeFromSeating
     ? "Excluded from the seating chart — click to include again"
     : "Click to exclude this student from the seating chart";
-  excludeSeatingBtn.addEventListener("click", async () => {
+  excludeSeatingBtn.addEventListener("click", () => {
     RosterModule.toggleExcludeFromSeating(student.id);
     if (student.excludeFromSeating) {
       SeatingModule.unseatStudent(student.id);
-      try {
-        await SeatingModule.save();
-      } catch (err) {
-        el.attendanceStatus.textContent = `Couldn't save seating chart: ${err.message}`;
-      }
-    }
-    try {
-      await RosterModule.save();
-    } catch (err) {
-      el.attendanceStatus.textContent = `Couldn't save roster: ${err.message}`;
     }
     renderAttendance();
   });
@@ -1541,13 +1561,8 @@ function buildAttendanceStudentRow(student) {
   excludeScoringBtn.title = student.excludeFromScoring
     ? "Excluded from scoring (once built) — click to include again"
     : "Click to exclude this student from the scoring system (once built)";
-  excludeScoringBtn.addEventListener("click", async () => {
+  excludeScoringBtn.addEventListener("click", () => {
     RosterModule.toggleExcludeFromScoring(student.id);
-    try {
-      await RosterModule.save();
-    } catch (err) {
-      el.attendanceStatus.textContent = `Couldn't save roster: ${err.message}`;
-    }
     renderAttendance();
   });
   excludeRow.appendChild(excludeScoringBtn);
@@ -1678,14 +1693,8 @@ function refreshAttendanceStatsRow(studentId) {
   }
 }
 
-async function saveAttendanceThen(after) {
-  el.attendanceStatus.textContent = "Saving…";
-  try {
-    await AttendanceModule.save();
-    el.attendanceStatus.textContent = "";
-  } catch (err) {
-    el.attendanceStatus.textContent = `Couldn't save: ${err.message}`;
-  }
+/** Applies a local change's follow-up UI update (e.g. a re-render). Persistence to Google Drive now happens only via the explicit "Save Attendance" button — kept as a function (rather than inlining every call site) so that button is the one place that actually saves. */
+function saveAttendanceThen(after) {
   if (after) after();
 }
 
@@ -2079,6 +2088,16 @@ function buildAttendanceFooterRow() {
 // first tab, "entry", is everything that used to be the whole Scoring
 // panel — the score table plus Scoring Settings. Further tool tabs get
 // added to SCORING_MODE_RENDERERS as they're built.
+
+el.saveScoringBtn.addEventListener("click", async () => {
+  el.scoringStatus.textContent = "Saving…";
+  try {
+    await ScoringModule.save();
+    el.scoringStatus.textContent = "Saved to Google Drive ✓";
+  } catch (err) {
+    el.scoringStatus.textContent = `Save failed: ${err.message}`;
+  }
+});
 
 function renderScoring() {
   el.scoringTable.innerHTML = "";
@@ -2687,14 +2706,8 @@ function refreshScoringTotalCell(studentId) {
   });
 }
 
-async function saveScoringThen(after) {
-  el.scoringStatus.textContent = "Saving…";
-  try {
-    await ScoringModule.save();
-    el.scoringStatus.textContent = "";
-  } catch (err) {
-    el.scoringStatus.textContent = `Couldn't save: ${err.message}`;
-  }
+/** Applies a local change's follow-up UI update. Persistence to Google Drive now happens only via the explicit "Save Scoring" button, which covers Main Scores and every tool tab at once (they're all one file). */
+function saveScoringThen(after) {
   if (after) after();
 }
 
@@ -2835,14 +2848,8 @@ function renderScoringToolTableView(tool, container) {
 }
 
 /** Saves the whole ScoringModule (tool config lives inside ScoringModule.tools) and re-renders just this one tool's view. */
-async function saveScoringToolThen(tool, container) {
-  el.scoringStatus.textContent = "Saving…";
-  try {
-    await ScoringModule.save();
-    el.scoringStatus.textContent = "";
-  } catch (err) {
-    el.scoringStatus.textContent = `Couldn't save: ${err.message}`;
-  }
+/** Re-renders this one tool's view after a local change. Persistence happens only via the explicit "Save Scoring" button. */
+function saveScoringToolThen(tool, container) {
   renderScoringToolView(tool, container);
 }
 
