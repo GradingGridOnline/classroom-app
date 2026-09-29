@@ -2779,11 +2779,10 @@ function renderScoringToolView(tool, container) {
 }
 
 /**
- * The "Table" scoring tool. Rows are automatic (one per roster
- * student, or one per Seating Chart group, per the first column's
- * mode); columns and their types are configurable in Settings below.
- * The preview grid at the top reflects that shape live, with
- * Description/Score cells editable and total_score_* cells computed.
+ * The "Progress Tracker" scoring tool. Rows are automatic (one per
+ * roster student, or one per Seating Chart group, per the first
+ * column's mode); columns are configurable in Settings below, and a
+ * fixed "Total Score" column at the end adds up each row.
  */
 function renderScoringToolTableView(tool, container) {
   const cfg = ScoringModule.getTableConfig(tool.id);
@@ -2792,7 +2791,7 @@ function renderScoringToolTableView(tool, container) {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "This Table isn't connected to anything yet — that'll be set up later. The preview below reflects this tool's Settings.";
+    "Enter scores below; the Total Score column adds up each row. To use a total in Main Scores, open an item's Sources panel and give this tracker a weight.";
   container.appendChild(hint);
 
   container.appendChild(buildTablePreview(tool, cfg, container));
@@ -2823,8 +2822,8 @@ function renderScoringToolTableView(tool, container) {
     summary.className = "hint";
     const identityRowCount = ScoringModule.getTableIdentityRows(tool.id).length;
     summary.textContent =
-      `First column: ${cfg.firstColumn.name} (${cfg.firstColumn.mode === "groups" ? "Groups" : "Students"}) — ` +
-      `${identityRowCount} row(s), ${cfg.columns.length} column(s).`;
+      `Rows: ${cfg.firstColumn.mode === "groups" ? "Groups" : "Students"} — ` +
+      `${identityRowCount} row(s), ${cfg.columns.length} column(s) plus Total Score.`;
     settingsWrap.appendChild(summary);
   } else {
     settingsWrap.appendChild(buildTableFirstColumnBlock(tool, cfg, container));
@@ -2840,15 +2839,7 @@ function saveScoringToolThen(tool, container) {
   renderScoringToolView(tool, container);
 }
 
-function tableColumnTypeLabel(type) {
-  if (type === "score") return "Score";
-  if (type === "total_score_raw") return "Total Score - Raw";
-  if (type === "total_score_points") return "Total Score - Points";
-  if (type === "total_score_percentage") return "Total Score - Percentage";
-  return "Description";
-}
-
-/** The Table's actual grid — one column per cfg.columns entry (plus the first, identifier-only column), one line per identity row (student or group). Description and Score cells are editable inputs backed by ScoringModule's per-cell value storage; the three "total_score_*" cells are read-only, computed from that line's Score columns. */
+/** The tracker's actual grid — the first (identifier) column, one column per cfg.columns entry, then the fixed Total Score column; one line per identity row (student or group). Score cells are editable inputs; Total Score is read-only. */
 function buildTablePreview(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-table-wrap";
@@ -2862,9 +2853,12 @@ function buildTablePreview(tool, cfg, container) {
   headRow.appendChild(firstTh);
   cfg.columns.forEach((col) => {
     const th = document.createElement("th");
-    th.textContent = col.name; // never shows the column's type
+    th.textContent = col.type === "score_max" && col.maxPoints > 0 ? `${col.name} (/${col.maxPoints})` : col.name;
     headRow.appendChild(th);
   });
+  const totalTh = document.createElement("th");
+  totalTh.textContent = "Total Score";
+  headRow.appendChild(totalTh);
   thead.appendChild(headRow);
   table.appendChild(thead);
 
@@ -2873,7 +2867,7 @@ function buildTablePreview(tool, cfg, container) {
   if (identityRows.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = Math.max(1, cfg.columns.length + 1);
+    td.colSpan = cfg.columns.length + 2;
     td.className = "hint";
     td.textContent =
       cfg.firstColumn.mode === "groups"
@@ -2900,36 +2894,39 @@ function buildTablePreviewRow(tool, cfg, container, lineId, label) {
 
   cfg.columns.forEach((col) => {
     const td = document.createElement("td");
-    if (col.type === "total_score_raw" || col.type === "total_score_points" || col.type === "total_score_percentage") {
-      const sum = ScoringModule.computeTableScoreSum(tool.id, lineId);
-      td.className = "hint";
-      if (sum === null) {
-        td.textContent = "—"; // no "score" columns exist to sum
-      } else if (col.type === "total_score_raw") {
-        td.textContent = String(sum);
-      } else if (col.type === "total_score_points") {
-        td.textContent = col.maxPoints > 0 ? `${sum}/${col.maxPoints}` : "—";
-      } else {
-        td.textContent = col.maxPoints > 0 ? `${Math.round((sum / col.maxPoints) * 100)}%` : "—";
-      }
-    } else {
-      const input = document.createElement("input");
-      input.type = "text";
-      if (col.type === "score") input.inputMode = "decimal";
-      input.className = "scoring-score-input";
-      input.value = ScoringModule.getTableValue(tool.id, lineId, col.id);
-      input.addEventListener("change", async () => {
-        ScoringModule.setTableValue(tool.id, lineId, col.id, input.value);
-        await saveScoringToolThen(tool, container);
-      });
-      td.appendChild(input);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.className = "scoring-score-input";
+    input.value = ScoringModule.getTableValue(tool.id, lineId, col.id);
+    if (col.type === "score_max" && col.maxPoints > 0) {
+      input.placeholder = `/${col.maxPoints}`;
+      input.title = `Out of ${col.maxPoints}`;
     }
+    input.addEventListener("change", async () => {
+      try {
+        ScoringModule.setTableValue(tool.id, lineId, col.id, input.value);
+      } catch (err) {
+        alert(err.message);
+        input.value = ScoringModule.getTableValue(tool.id, lineId, col.id);
+        return;
+      }
+      await saveScoringToolThen(tool, container);
+    });
+    td.appendChild(input);
     tr.appendChild(td);
   });
+
+  const totalTd = document.createElement("td");
+  totalTd.className = "attendance-stat-cell";
+  const sum = ScoringModule.computeTableScoreSum(tool.id, lineId);
+  totalTd.textContent = sum === null ? "—" : String(Math.round(sum * 100) / 100);
+  tr.appendChild(totalTd);
+
   return tr;
 }
 
-/** First-column settings: its display name, and whether rows represent Groups or Students. */
+/** First-column setting: whether rows represent Students or Groups. (The column's name is fixed to match.) */
 function buildTableFirstColumnBlock(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
@@ -2939,14 +2936,6 @@ function buildTableFirstColumnBlock(tool, cfg, container) {
 
   const row = document.createElement("div");
   row.className = "mapping-row";
-
-  const nameInput = document.createElement("input");
-  nameInput.type = "text";
-  nameInput.value = cfg.firstColumn.name;
-  nameInput.addEventListener("change", async () => {
-    ScoringModule.setTableFirstColumnName(tool.id, nameInput.value);
-    await saveScoringToolThen(tool, container);
-  });
 
   const modeLabel = document.createElement("label");
   modeLabel.textContent = "Rows represent:";
@@ -2967,12 +2956,12 @@ function buildTableFirstColumnBlock(tool, cfg, container) {
     await saveScoringToolThen(tool, container);
   });
 
-  row.append(nameInput, modeLabel, modeSelect);
+  row.append(modeLabel, modeSelect);
   wrap.appendChild(row);
   return wrap;
 }
 
-/** The Rows settings block — purely informational now. In "Students" mode there's always exactly one row per current roster student, named to match; in "Groups" mode, one row per group currently on the Seating Chart. Nothing here is editable — this is what keeps Score Sources reliably matched. */
+/** The Rows settings block — purely informational. In "Students" mode there's always exactly one row per current roster student, named to match; in "Groups" mode, one row per group currently on the Seating Chart. Nothing here is editable — this is what keeps Score Sources reliably matched. */
 function buildTableRowsBlock(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
@@ -3008,7 +2997,7 @@ function buildTableRowsBlock(tool, cfg, container) {
   return wrap;
 }
 
-/** Column count setting plus a nameable, typed, editable list of columns (description / score / cum. score). Doesn't include the first column, which has its own block above. */
+/** Column count setting plus a nameable, editable list of columns, each either "Score" or "Score (with max)". Doesn't include the first column (Students/Groups) or the fixed Total Score column at the end. */
 function buildTableColumnsBlock(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
@@ -3027,7 +3016,7 @@ function buildTableColumnsBlock(tool, cfg, container) {
     await saveScoringToolThen(tool, container);
   });
   const countHint = document.createElement("label");
-  countHint.textContent = "Number of columns (besides the first column)";
+  countHint.textContent = "Number of columns (a Total Score column is always added at the end)";
   countRow.append(countInput, countHint);
   wrap.appendChild(countRow);
 
@@ -3047,11 +3036,8 @@ function buildTableColumnsBlock(tool, cfg, container) {
 
     const typeSelect = document.createElement("select");
     [
-      ["description", "Description"],
       ["score", "Score"],
-      ["total_score_raw", "Total Score - Raw"],
-      ["total_score_points", "Total Score - Points"],
-      ["total_score_percentage", "Total Score - Percentage"],
+      ["score_max", "Score (with max)"],
     ].forEach(([val, label]) => {
       const opt = document.createElement("option");
       opt.value = val;
@@ -3065,13 +3051,13 @@ function buildTableColumnsBlock(tool, cfg, container) {
     });
     li.appendChild(typeSelect);
 
-    if (column.type === "total_score_points" || column.type === "total_score_percentage") {
+    if (column.type === "score_max") {
       const maxInput = document.createElement("input");
       maxInput.type = "text";
       maxInput.inputMode = "decimal";
       maxInput.className = "point-value-input";
-      maxInput.title = "Total possible score";
-      maxInput.placeholder = "Total possible";
+      maxInput.title = "Maximum score";
+      maxInput.placeholder = "Max";
       maxInput.value = column.maxPoints || "";
       maxInput.addEventListener("change", async () => {
         ScoringModule.setTableColumnMaxPoints(tool.id, column.id, maxInput.value);

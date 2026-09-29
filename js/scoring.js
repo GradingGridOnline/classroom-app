@@ -1,11 +1,10 @@
 // ===== Scoring module =====
 // One file per course: scoring-<courseId>.json
 //
-// - categories: exactly 10 fixed slots (like the seating chart's 6
-//   memory banks — always present, renamable, not addable/removable).
-//   Each has { id, name, items }. The number of items is a count
-//   setting (like Attendance's term class count), not an "add item"
-//   button — set it and that many item-columns appear.
+// - categories: added as needed (up to MAX_CATEGORIES), renamable,
+//   removable. Each has { id, name, items }. The number of items is a
+//   count setting (like Attendance's term class count), not an "add
+//   item" button — set it and that many item-columns appear.
 // - items: { id, name, maxPoints }.
 // - records: sparse map "studentId|itemId" -> "" (blank), "E"
 //   (exempt), or a numeric string (points earned, 0-maxPoints).
@@ -15,34 +14,31 @@
 // - tools: extra tabs alongside "Main Scores" (the score-entry screen
 //   above), added/removed from Main Scores' own Settings. Each is
 //   { id, type, name } — `type` picks which scoring tool it is (only
-//   "table" exists so far, and it isn't wired to anything yet), and
-//   `name` is a display label, auto-numbered when more than one of
-//   the same type exists (e.g. "Table", "Table 2"). A tool's own
-//   settings/content live in its own tab, not here.
+//   "table" exists so far — shown to the user as "Progress Tracker"),
+//   and `name` is a display label, auto-numbered when more than one of
+//   the same type exists (e.g. "Progress Tracker", "Progress Tracker
+//   2"). A tool's own settings/content live in its own tab, not here.
 
 const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categories as needed
 const MAX_ITEMS_PER_CATEGORY = 50;
 const MAX_SCORING_TOOLS = 10;
 const MAX_TABLE_COLUMNS = 20;
 
-// A column's type. "score" is a plain enterable number; the three
-// "total_score_*" types are read-only and computed from that line's
-// "score" columns — raw sum, sum shown out of a set total ("points"),
-// or that sum as a percentage of a set total ("percentage"). The
-// points/percentage variants use column.maxPoints as their total.
-const TABLE_COLUMN_TYPES = [
-  "description",
-  "score",
-  "total_score_raw",
-  "total_score_points",
-  "total_score_percentage",
-];
+// A Progress Tracker column's type. "score" is a plain enterable
+// number; "score_max" is also an enterable number but out of a set
+// maximum (column.maxPoints), so it's limited to 0-max and shown as
+// "/max" in its header. The last column of every Progress Tracker is
+// always a fixed, read-only "Total Score" (the sum of that row's
+// entries) — it isn't stored as a column, it's added automatically.
+const TABLE_COLUMN_TYPES = ["score", "score_max"];
 
 // The set of scoring tool types that can be added from Main Scores'
 // Settings. Add a new entry here (and a matching renderer in app.js)
-// to offer a new kind of tool.
+// to offer a new kind of tool. The key ("table") is what's saved in
+// each course's data, so it stays as-is; only the label users see
+// changed.
 const SCORING_TOOL_TYPES = {
-  table: "Table",
+  table: "Progress Tracker",
 };
 
 function defaultScoringWeights(categories) {
@@ -72,6 +68,7 @@ const ScoringModule = {
       this.records = data.records || {};
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
       this.tools = Array.isArray(data.tools) ? data.tools : [];
+      this._renameLegacyTools();
     } else {
       this.categories = [];
       this.records = {};
@@ -87,6 +84,15 @@ const ScoringModule = {
       records: this.records,
       weights: this.weights,
       tools: this.tools,
+    });
+  },
+
+  /** Tools created before the rename were auto-named "Table" / "Table 2"; give those the new name. A tool the user renamed themselves is left alone. */
+  _renameLegacyTools() {
+    this.tools.forEach((tool) => {
+      if (tool.type !== "table") return;
+      const match = /^Table(?: (\d+))?$/.exec(tool.name || "");
+      if (match) tool.name = match[1] ? `Progress Tracker ${match[1]}` : "Progress Tracker";
     });
   },
 
@@ -256,26 +262,25 @@ const ScoringModule = {
     return this.tools.find((t) => t.id === toolId) || null;
   },
 
-  // ----- Table tool config -----
-  // tool.config for a "table"-type tool: { firstColumn: { name, mode },
-  // columns: [{ id, name, type, maxPoints }] }. firstColumn.mode is
-  // "students" or "groups" and drives where rows come from: in
-  // "students" mode there's one row per current roster student, keyed
-  // and named by that student (their name shown, non-editable —
-  // it's always whatever the roster currently says); in "groups" mode
-  // there's one row per distinct group number currently in use on the
-  // live Seating Chart, keyed and named by that number. Rows are never
+  // ----- Progress Tracker (type "table") config -----
+  // tool.config: { firstColumn: { name, mode }, columns: [{ id, name,
+  // type, maxPoints }], values }. firstColumn.mode is "students" or
+  // "groups" and drives where rows come from: in "students" mode
+  // there's one row per current roster student, keyed and named by
+  // that student (their name shown, non-editable — it's always
+  // whatever the roster currently says); in "groups" mode there's one
+  // row per distinct group number currently in use on the live
+  // Seating Chart, keyed and named by that number. Rows are never
   // manually added, removed, or renamed — this is what keeps them
-  // reliably matched to Score Sources. columns[].type is one of
-  // TABLE_COLUMN_TYPES: "description", "score" (a plain enterable
-  // number), or one of the three read-only "total_score_*" types, each
-  // summing that line's "score" columns — raw, out of maxPoints
-  // ("points"), or as a percentage of maxPoints ("percentage").
-  // Nothing here is wired to real data yet, apart from Main Scores
-  // optionally drawing on a Table's rightmost total_score_* column via
-  // that item's Score Sources (see computeItemEffectiveScore below).
+  // reliably matched to Score Sources. firstColumn.name is not
+  // user-editable: it's always "Student" or "Group" to match the mode.
+  // columns[].type is "score" or "score_max" (see TABLE_COLUMN_TYPES).
+  // A fixed, read-only "Total Score" column always follows the last
+  // configured column — it's computed (see computeTableScoreSum), not
+  // stored. Main Scores items can draw on it via Score Sources (see
+  // computeItemEffectiveScore below).
 
-  /** Returns tool.config for a table tool, creating/normalizing it (and any missing pieces) in place first. Returns null if the tool doesn't exist. */
+  /** Returns tool.config for a Progress Tracker, creating/normalizing it (and migrating any older Table-tool data) in place first. Returns null if the tool doesn't exist. */
   getTableConfig(toolId) {
     const tool = this.findTool(toolId);
     if (!tool) return null;
@@ -286,30 +291,40 @@ const ScoringModule = {
     if (cfg.firstColumn.mode !== "groups" && cfg.firstColumn.mode !== "students") {
       cfg.firstColumn.mode = "students";
     }
-    if (typeof cfg.firstColumn.name !== "string" || !cfg.firstColumn.name.trim()) {
-      cfg.firstColumn.name = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
-    }
-
-    if (!Array.isArray(cfg.columns)) cfg.columns = [];
-    cfg.columns.forEach((column) => {
-      if (column.type === "cum_score") column.type = "total_score_raw"; // legacy type key
-      if (!TABLE_COLUMN_TYPES.includes(column.type)) column.type = "description";
-      if (typeof column.maxPoints !== "number") column.maxPoints = 0;
-    });
+    // Fixed — follows the mode, never user-edited.
+    cfg.firstColumn.name = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
 
     if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
+    if (!Array.isArray(cfg.columns)) cfg.columns = [];
+
+    // Migration from the old Table tool: its computed "total score"
+    // columns are gone (the fixed Total Score column replaces them),
+    // and its "description" columns become plain score columns.
+    const droppedIds = new Set();
+    cfg.columns = cfg.columns.filter((column) => {
+      const legacyTotal =
+        column.type === "cum_score" ||
+        column.type === "total_score_raw" ||
+        column.type === "total_score_points" ||
+        column.type === "total_score_percentage";
+      if (legacyTotal) droppedIds.add(column.id);
+      return !legacyTotal;
+    });
+    cfg.columns.forEach((column) => {
+      if (!TABLE_COLUMN_TYPES.includes(column.type)) column.type = "score";
+      if (typeof column.maxPoints !== "number") column.maxPoints = 0;
+    });
+    if (droppedIds.size > 0) this._purgeTableValues(cfg, { columnIds: droppedIds });
 
     return cfg;
   },
 
   setTableFirstColumnMode(toolId, mode) {
     const cfg = this.getTableConfig(toolId);
-    if (cfg) cfg.firstColumn.mode = mode === "groups" ? "groups" : "students";
-  },
-
-  setTableFirstColumnName(toolId, name) {
-    const cfg = this.getTableConfig(toolId);
-    if (cfg) cfg.firstColumn.name = (name || "").trim() || cfg.firstColumn.name;
+    if (cfg) {
+      cfg.firstColumn.mode = mode === "groups" ? "groups" : "students";
+      cfg.firstColumn.name = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
+    }
   },
 
   /** Every distinct group number currently in use on the live Seating Chart (ungrouped desks excluded), ascending. */
@@ -327,7 +342,7 @@ const ScoringModule = {
     return Array.from(groups).sort((a, b) => a - b);
   },
 
-  /** This table's identity rows, live: one per roster student ({ key: studentId, label: student's name }) in "students" mode, or one per group currently on the Seating Chart ({ key: String(groupNumber), label: same }) in "groups" mode. This — not any stored list — is what the grid and Score Sources both use, so rows can never drift out of sync with the roster or seating chart. */
+  /** This tracker's identity rows, live: one per roster student ({ key: studentId, label: student's name }) in "students" mode, or one per group currently on the Seating Chart ({ key: String(groupNumber), label: same }) in "groups" mode. This — not any stored list — is what the grid and Score Sources both use, so rows can never drift out of sync with the roster or seating chart. */
   getTableIdentityRows(toolId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return [];
@@ -338,7 +353,7 @@ const ScoringModule = {
     return students.map((s) => ({ key: s.id, label: s.name || "(unnamed)" }));
   },
 
-  /** Sets the column count (not including the first column), adding default-named/typed trailing columns or trimming from the end. */
+  /** Sets the column count (not including the first column or the fixed Total Score column), adding default trailing "score" columns or trimming from the end. */
   setTableColumnCount(toolId, count) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return;
@@ -349,7 +364,7 @@ const ScoringModule = {
         cfg.columns.push({
           id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: `Column ${n}`,
-          type: "description",
+          type: "score",
           maxPoints: 0,
         });
       }
@@ -372,10 +387,10 @@ const ScoringModule = {
     const cfg = this.getTableConfig(toolId);
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
     if (!column) return;
-    column.type = TABLE_COLUMN_TYPES.includes(type) ? type : "description";
+    column.type = TABLE_COLUMN_TYPES.includes(type) ? type : "score";
   },
 
-  /** The total possible score for a "total_score_points" or "total_score_percentage" column — unused by the other types. */
+  /** The maximum for a "score_max" column — unused by "score" columns. */
   setTableColumnMaxPoints(toolId, columnId, value) {
     const cfg = this.getTableConfig(toolId);
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
@@ -383,12 +398,11 @@ const ScoringModule = {
     column.maxPoints = Math.max(0, Number(value) || 0);
   },
 
-  // ----- Table cell values -----
+  // ----- Progress Tracker cell values -----
   // Keyed by "lineId|columnId", where lineId is an identity row's key
   // directly — a student id, or a group number as a string (see
-  // getTableIdentityRows). The three "total_score_*" columns store
-  // nothing here; they're computed from the "score" columns on the
-  // same line.
+  // getTableIdentityRows). The Total Score column stores nothing
+  // here; it's computed from the other columns on the same line.
 
   getTableValue(toolId, lineId, columnId) {
     const cfg = this.getTableConfig(toolId);
@@ -396,29 +410,41 @@ const ScoringModule = {
     return cfg.values[`${lineId}|${columnId}`] || "";
   },
 
+  /** value: "" (blank) or a number. A "score_max" column also requires 0 up to its maximum (when a maximum is set). Throws on anything else. */
   setTableValue(toolId, lineId, columnId, value) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return;
+    const column = cfg.columns.find((c) => c.id === columnId);
     const key = `${lineId}|${columnId}`;
     const trimmed = value == null ? "" : String(value).trim();
-    if (trimmed === "") delete cfg.values[key];
-    else cfg.values[key] = trimmed;
+
+    if (trimmed === "") {
+      delete cfg.values[key];
+      return;
+    }
+    const num = Number(trimmed);
+    if (Number.isNaN(num)) throw new Error("Enter a number.");
+    if (column && column.type === "score_max") {
+      if (num < 0 || (column.maxPoints > 0 && num > column.maxPoints)) {
+        throw new Error(
+          column.maxPoints > 0 ? `Enter a number from 0 to ${column.maxPoints}.` : "Enter a number of 0 or more."
+        );
+      }
+    }
+    cfg.values[key] = String(num);
   },
 
-  /** Sum of every "score"-type column's value on this line, parsed as a number (blank/non-numeric entries count as 0 toward the sum). Returns null if the table has no score columns at all, so the caller can show "—" instead of a bare 0. Shared by all three "total_score_*" column types. */
+  /** The fixed Total Score for one line: the sum of every column's value on that line (blank/non-numeric entries count as 0). Returns null if the tracker has no columns at all, so the caller can show "—" instead of a bare 0. */
   computeTableScoreSum(toolId, lineId) {
     const cfg = this.getTableConfig(toolId);
-    if (!cfg) return null;
-    let hasScoreColumn = false;
+    if (!cfg || cfg.columns.length === 0) return null;
     let sum = 0;
     cfg.columns.forEach((col) => {
-      if (col.type !== "score") return;
-      hasScoreColumn = true;
       const raw = cfg.values[`${lineId}|${col.id}`];
       const num = Number(raw);
       if (raw !== undefined && !Number.isNaN(num)) sum += num;
     });
-    return hasScoreColumn ? sum : null;
+    return sum;
   },
 
   /** Deletes any stored cell values whose lineId is in `lineIds` and/or whose columnId is in `columnIds` — called when columns are removed so their old values don't linger as orphaned data. */
@@ -487,34 +513,21 @@ const ScoringModule = {
   },
 
   /**
-   * What one Scoring Tool contributes for one student, read from that
-   * tool's rightmost total_score_* column. The student's identity row
-   * is found directly — by their own id in "students" mode, or by
-   * their current Seating Chart group number in "groups" mode — since
-   * rows are always kept in sync with the roster/seating chart (see
-   * getTableIdentityRows), so there's no name-matching to go stale.
-   * Returns null if the tool isn't a table, has no total-score column,
-   * the student isn't seated/grouped (in "groups" mode), or nothing
-   * has been entered for their row yet. { raw: true, value } for a
-   * "total_score_raw" column means value is used as-is; { raw: false,
-   * value } for the points/percentage types means value is a 0-1
-   * decimal (sum ÷ that column's total possible score) for the caller
-   * to scale to the item's own points.
+   * What one Scoring Tool contributes for one student: that tracker's
+   * fixed Total Score. The student's identity row is found directly —
+   * by their own id in "students" mode, or by their current Seating
+   * Chart group number in "groups" mode — since rows are always kept
+   * in sync with the roster/seating chart (see getTableIdentityRows),
+   * so there's no name-matching to go stale. Returns null if the tool
+   * isn't a Progress Tracker, has no columns, or the student isn't
+   * seated/grouped (in "groups" mode). Otherwise { raw: true, value }
+   * — the sum is used as-is, on the assumption its scale already
+   * matches the item's own points.
    */
   _toolContributionForStudent(tool, studentId) {
     if (tool.type !== "table") return null;
     const cfg = this.getTableConfig(tool.id);
     if (!cfg) return null;
-
-    let scoreColumn = null;
-    for (let i = cfg.columns.length - 1; i >= 0; i--) {
-      const c = cfg.columns[i];
-      if (c.type === "total_score_raw" || c.type === "total_score_points" || c.type === "total_score_percentage") {
-        scoreColumn = c;
-        break;
-      }
-    }
-    if (!scoreColumn) return null;
 
     let rowKey;
     if (cfg.firstColumn.mode === "groups") {
@@ -527,24 +540,19 @@ const ScoringModule = {
 
     const sum = this.computeTableScoreSum(tool.id, rowKey);
     if (sum === null) return null;
-
-    if (scoreColumn.type === "total_score_raw") return { raw: true, value: sum };
-    if (!(scoreColumn.maxPoints > 0)) return null;
-    return { raw: false, value: sum / scoreColumn.maxPoints };
+    return { raw: true, value: sum };
   },
 
   /**
    * The score actually used for grading one student on one item — a
    * weighted blend of the manual entry and any Scoring Tools weighted
    * above 0 in that item's Score Sources, all expressed on the item's
-   * own 0-maxPoints scale (a tool's points/percentage contribution is
-   * scaled by maxPoints; a raw contribution is used as-is, on the
-   * assumption its scale already matches). With every tool at weight
-   * 0 (the default), this is exactly the manual entry — nothing
-   * changes unless Score Sources are actually set up. Returns null
-   * when nothing usable is available (same meaning as a blank manual
-   * entry). The caller is responsible for handling "E" (exempt)
-   * before reaching this — it isn't a Score Sources concept.
+   * own 0-maxPoints scale (a tool's Total Score is used as-is). With
+   * every tool at weight 0 (the default), this is exactly the manual
+   * entry — nothing changes unless Score Sources are actually set up.
+   * Returns null when nothing usable is available (same meaning as a
+   * blank manual entry). The caller is responsible for handling "E"
+   * (exempt) before reaching this — it isn't a Score Sources concept.
    */
   computeItemEffectiveScore(studentId, item) {
     const sourcesCfg = this.getItemScoreSources(item.id);
