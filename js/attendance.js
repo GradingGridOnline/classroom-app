@@ -234,7 +234,7 @@ const AttendanceModule = {
       });
       if (student) {
         const record = this.getRecord(student.id, sessionId);
-        newRow[tpl.valueColumn] = record.code || "";
+        newRow[tpl.valueColumn] = record.code ? (this.settings.points[record.code] ?? 0) : "";
       }
       return newRow;
     });
