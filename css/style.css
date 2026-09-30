@@ -1992,14 +1992,14 @@ textarea {
    cards, panels, tables, desks — uses --paper/--card, a very very
    dark blue. Text boxes are a grey of the same darkness. */
 [data-theme="tron-legacy"] {
-  --paper: #030a1a;
+  --paper: #1d2e33;
   --ink: #d9faff;
   --ink-soft: #5f8a95;
   --green: #00d9ff;
   --green-dark: #4de8ff;
   --marker: #ff7a1a;
   --line: #0f3e4a;
-  --card: #030a1a;
+  --card: #1d2e33;
   --font-heading: "Michroma", sans-serif;
   --font-body: "Chakra Petch", sans-serif;
   --radius: 0px;
@@ -2009,18 +2009,18 @@ textarea {
   --focus-glow: 0 0 0 2px rgba(0, 217, 255, 0.35), 0 0 12px rgba(0, 217, 255, 0.4);
 }
 
-/* Pure black page background (everything else is the dark blue above). */
+/* Page background (everything else uses --paper / --card above). */
 [data-theme="tron-legacy"] body {
-  background: #000000;
+  background: #0e1217;
 }
 
-/* Text boxes: dark grey with a yellow outline (the yellow used in the
-   film). Checkboxes are left alone. Change the two colors here to adjust. */
+/* Text boxes: teal-grey fill with a yellow outline. Checkboxes are left
+   alone. Change the two colors here to adjust. */
 [data-theme="tron-legacy"] input:not([type="checkbox"]),
 [data-theme="tron-legacy"] select,
 [data-theme="tron-legacy"] textarea {
-  background: #161616;
-  border: 1px solid #ffe23a;
+  background: #33595a;
+  border: 1px solid #ead55e;
 }
 
 /* Faint glowing floor-grid, in place of Cyberpunk's scanlines. */
