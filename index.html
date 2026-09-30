@@ -87,7 +87,6 @@
           <button id="tab-attendance-btn" class="tab-btn">Attendance</button>
           <button id="tab-scoring-btn" class="tab-btn">Scoring</button>
           <button id="tab-reportcard-btn" class="tab-btn">Report Card</button>
-          <button id="tab-presentationcalc-btn" class="tab-btn">Presentation Calc</button>
         </div>
 
         <!-- ----- Roster panel ----- -->
@@ -247,7 +246,7 @@
 
           <div class="tab-row reportcard-mode-row" id="scoring-mode-row">
             <button id="scoring-mode-entry-btn" class="tab-btn tab-btn-active" data-scoring-mode="entry">Main Scores</button>
-            <!-- future tool tabs get added here, one <button class="tab-btn" data-scoring-mode="..."> each -->
+            <!-- scoring tool tabs (Progress Tracker, Presentation Calc) get added here by app.js -->
           </div>
 
           <!-- ----- Scoring: score entry (formerly the whole panel) ----- -->
@@ -265,8 +264,7 @@
             </div>
           </div>
 
-          <!-- future tool views get added here, one
-               <div id="scoring-mode-<id>-view" class="scoring-mode-view" hidden>...</div> each -->
+          <!-- scoring tool views get added here by app.js -->
         </div>
 
         <!-- ----- Report Card panel ----- -->
@@ -309,119 +307,6 @@
             </div>
           </div>
         </div>
-
-        <!-- ----- Presentation Calculator panel ----- -->
-        <div id="presentationcalc-panel" class="tab-panel" hidden>
-          <div class="tab-row reportcard-mode-row">
-            <button id="pc-page-studentgroups-btn" class="tab-btn tab-btn-active">Student Groups</button>
-            <button id="pc-page-rubrics-btn" class="tab-btn">Rubrics</button>
-            <button id="pc-page-getscores-btn" class="tab-btn">Get Pres. Scores</button>
-          </div>
-
-          <!-- ----- Student Groups page ----- -->
-          <div id="studentgroups-view">
-            <div class="panel-toolbar">
-              <span id="presentationcalc-status" class="result"></span>
-              <div class="panel-toolbar-buttons">
-                <label for="presentationcalc-bank-select">Memory bank:</label>
-                <select id="presentationcalc-bank-select"></select>
-                <button id="import-presentationcalc-btn" class="btn btn-ghost">Import from Bank</button> <button id="save-presentationcalc-btn" class="btn btn-primary">Save Presentation Calc</button>
-              </div>
-            </div>
-            <p id="presentationcalc-source" class="hint"></p>
-            <table class="roster-table">
-              <thead>
-                <tr>
-                  <th>Class #</th>
-                  <th>Name</th>
-                  <th>Pronunciation</th>
-                  <th>School ID</th>
-                  <th>Group</th>
-                </tr>
-              </thead>
-              <tbody id="presentationcalc-tbody"></tbody>
-            </table>
-          </div>
-
-          <!-- ----- Rubrics page ----- -->
-          <div id="rubrics-view" hidden>
-            <div class="rubrics-top-row">
-              <div class="rubric-active-block">
-                <h5>Active Teacher Rubrics</h5>
-                <div class="rubric-active-grid-wrap">
-                  <table class="rubric-active-grid">
-                    <thead><tr><th>Rubric</th><th></th></tr></thead>
-                    <tbody id="teacher-rubrics-tbody"></tbody>
-                  </table>
-                  <table class="rubric-points-grid">
-                    <thead><tr><th>Points</th></tr></thead>
-                    <tbody id="teacher-rubrics-points-tbody"></tbody>
-                  </table>
-                </div>
-                <button id="add-teacher-rubric-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
-              </div>
-
-              <div class="rubric-active-block">
-                <h5>Active Audience Rubrics</h5>
-                <div class="rubric-active-grid-wrap">
-                  <table class="rubric-active-grid">
-                    <thead><tr><th>Rubric</th><th></th></tr></thead>
-                    <tbody id="audience-rubrics-tbody"></tbody>
-                  </table>
-                  <table class="rubric-points-grid">
-                    <thead><tr><th>Points</th></tr></thead>
-                    <tbody id="audience-rubrics-points-tbody"></tbody>
-                  </table>
-                </div>
-                <button id="add-audience-rubric-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
-              </div>
-            </div>
-
-            <div class="rubric-bank-block">
-              <h5>Rubric Bank</h5>
-              <table class="rubric-bank-grid">
-                <thead><tr><th>Rubric</th><th></th></tr></thead>
-                <tbody id="rubric-bank-tbody"></tbody>
-              </table>
-              <button id="add-rubric-bank-btn" class="btn btn-ghost btn-small">+ Add Rubric</button>
-            </div>
-          </div>
-
-          <!-- ----- Get Pres. Scores page ----- -->
-          <div id="getscores-view" hidden>
-            <div class="panel-toolbar">
-              <span id="getscores-status" class="result"></span>
-              <div class="panel-toolbar-buttons">
-                <button id="get-teacher-scores-btn" class="btn btn-ghost">Get Teacher Scores</button>
-                <button id="get-audience-scores-btn" class="btn btn-ghost">Get Audience Scores</button>
-              </div>
-            </div>
-
-            <div id="getscores-qr-block" class="getscores-qr-block" hidden>
-              <p id="getscores-qr-label" class="hint"></p>
-              <div id="getscores-qr-container"></div>
-            </div>
-
-            <h5>Archived Forms</h5>
-            <p class="hint">Forms here are never auto-deleted — recall their data any time, or delete them yourself when you're done.</p>
-            <table class="roster-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Created</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="score-forms-tbody"></tbody>
-            </table>
-
-            <div id="score-recall-block" class="score-recall-block" hidden>
-              <h5 id="score-recall-heading"></h5>
-              <div id="score-recall-content"></div>
-            </div>
-          </div>
-        </div>
       </section>
     </main>
   </div>
@@ -430,8 +315,6 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- SheetJS (reads .csv / .xlsx / .xls files) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- QRCode.js (renders the score-collection form links as scannable QR codes) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <script src="js/config.js"></script>
   <script src="js/storage/storage-provider.js"></script>
@@ -449,7 +332,6 @@
   <script src="js/scoring.js"></script>
   <script src="js/reportcard.js"></script>
   <script src="js/emailcollect.js"></script>
-  <script src="js/presentationcalc.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
