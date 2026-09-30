@@ -192,18 +192,36 @@ const AttendanceModule = {
   },
 
   // ----- LMS export template -----
-  // A CSV uploaded once per course, whose structure (headers + rows)
-  // is kept as-is. Exporting a session copies that template and fills
-  // in one column with each matched student's attendance code for
-  // that session, leaving everything else untouched.
+  // A CSV/Excel file uploaded once per course, whose structure
+  // (headers + rows) is kept as-is. Exporting a session copies that
+  // template and fills in one column with each matched student's
+  // attendance POINTS for that session (the point value of their
+  // attendance code, from Attendance Settings).
+
+  /** Best-effort guess at which template column identifies students and which receives the points, from header names. -1 means "no guess". */
+  _guessTemplateMapping(headers) {
+    const find = (re) => headers.findIndex((h) => re.test(String(h).trim()));
+    let identifier = find(/user[_\s-]?id|student[_\s-]?id|school[_\s-]?id|学籍|学生番号/i);
+    if (identifier < 0) identifier = find(/(^|[_\s-])id$/i);
+    const value = find(/point|score|grade|点/i);
+    return { identifier, value };
+  },
 
   setExportTemplate(headers, rows) {
     const existing = this.settings.exportTemplate;
+    // Keep the previous column choices only if the new template has
+    // exactly the same headers — otherwise the old column numbers
+    // could point at the wrong columns, so start from a fresh guess.
+    const sameShape =
+      existing &&
+      existing.headers.length === headers.length &&
+      existing.headers.every((h, i) => h === headers[i]);
+    const guess = this._guessTemplateMapping(headers);
     this.settings.exportTemplate = {
       headers,
       rows,
-      identifierColumn: existing ? existing.identifierColumn : -1,
-      valueColumn: existing ? existing.valueColumn : -1,
+      identifierColumn: sameShape ? existing.identifierColumn : guess.identifier,
+      valueColumn: sameShape ? existing.valueColumn : guess.value,
       identifierField: existing ? existing.identifierField : "schoolId",
     };
   },
@@ -217,30 +235,73 @@ const AttendanceModule = {
     this.settings.exportTemplate = null;
   },
 
-  /** Builds a CSV string for one session, using the uploaded template and current column mapping. */
+  /** Text used to compare a template cell against a roster student: full-width/half-width forms unified, spaces removed, case ignored — so "人26-0006" matches "人26‐0006", and "山田 太郎" matches "山田　太郎". */
+  _normalizeMatchKey(value) {
+    return String(value == null ? "" : value)
+      .normalize("NFKC")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  },
+
+  _studentMatchField(student, field) {
+    if (field === "name") return student.name;
+    if (field === "email") return student.email;
+    if (field === "classNumber") return student.classNumber;
+    return student.schoolId;
+  },
+
+  /**
+   * Builds the export for one session from the uploaded template and
+   * current column mapping. The chosen points column is cleared on
+   * every template row first, then filled in for each row matched to
+   * a student (left blank if that student has nothing recorded for
+   * the session) — so nothing left over in the template's own
+   * points column can be mistaken for a real value.
+   * Returns { csv, matchedRows, totalRows, unmatchedStudents } — the
+   * last is a list of roster names that weren't found in the template.
+   */
   buildExportCsv(sessionId, students) {
     const tpl = this.settings.exportTemplate;
     if (!tpl || !tpl.headers) throw new Error("No export template uploaded yet.");
     if (tpl.identifierColumn < 0 || tpl.valueColumn < 0) {
-      throw new Error("Choose both the identifier column and the attendance value column first.");
+      throw new Error("Choose both the identifier column and the points column first.");
     }
+    if (tpl.identifierColumn === tpl.valueColumn) {
+      throw new Error("The identifier column and the points column can't be the same column.");
+    }
+
+    const lookup = new Map();
+    students.forEach((s) => {
+      const key = this._normalizeMatchKey(this._studentMatchField(s, tpl.identifierField));
+      if (key && !lookup.has(key)) lookup.set(key, s);
+    });
+
+    const matchedIds = new Set();
+    let matchedRows = 0;
 
     const outRows = tpl.rows.map((row) => {
       const newRow = [...row];
-      const idValue = String(row[tpl.identifierColumn] ?? "").trim();
-      const student = students.find((s) => {
-        const field = tpl.identifierField === "name" ? s.name : s.schoolId;
-        return String(field || "").trim() === idValue && idValue !== "";
-      });
+      while (newRow.length < tpl.headers.length) newRow.push("");
+      newRow[tpl.valueColumn] = "";
+
+      const key = this._normalizeMatchKey(row[tpl.identifierColumn]);
+      const student = key ? lookup.get(key) : null;
       if (student) {
+        matchedIds.add(student.id);
+        matchedRows++;
         const record = this.getRecord(student.id, sessionId);
-        newRow[tpl.valueColumn] = record.code ? (this.settings.points[record.code] ?? 0) : "";
+        if (record.code) newRow[tpl.valueColumn] = this.settings.points[record.code] ?? 0;
       }
       return newRow;
     });
 
     const sheet = XLSX.utils.aoa_to_sheet([tpl.headers, ...outRows]);
-    return XLSX.utils.sheet_to_csv(sheet);
+    return {
+      csv: XLSX.utils.sheet_to_csv(sheet),
+      matchedRows,
+      totalRows: tpl.rows.length,
+      unmatchedStudents: students.filter((s) => !matchedIds.has(s.id)).map((s) => s.name || "(unnamed)"),
+    };
   },
 
   // ----- Summary stats, computed from recorded sessions only -----
