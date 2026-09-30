@@ -1986,16 +1986,20 @@ textarea {
    scanlines, and corner brackets/focus-glow/hover-glow all carry
    over, recolored. Headings use Michroma, body text uses Chakra
    Petch — both loaded via Google Fonts in index.html/popout.html,
-   alongside Cyberpunk's Orbitron/Share Tech Mono. */
+   alongside Cyberpunk's Orbitron/Share Tech Mono.
+   Surfaces: the page background itself stays pure black (set on
+   `body` at the bottom of this block), while every other surface —
+   cards, panels, tables, desks — uses --paper/--card, a very very
+   dark blue. Text boxes are a grey of the same darkness. */
 [data-theme="tron-legacy"] {
-  --paper: #000000;
+  --paper: #060e24;
   --ink: #d9faff;
   --ink-soft: #5f8a95;
   --green: #00d9ff;
   --green-dark: #4de8ff;
   --marker: #ff7a1a;
   --line: #0f3e4a;
-  --card: #050d12;
+  --card: #060e24;
   --font-heading: "Michroma", sans-serif;
   --font-body: "Chakra Petch", sans-serif;
   --radius: 0px;
@@ -2003,6 +2007,18 @@ textarea {
   --card-shadow: 0 0 0 1px rgba(0, 217, 255, 0.2), 0 0 30px rgba(0, 217, 255, 0.07);
   --glow: 0 0 10px rgba(0, 217, 255, 0.6);
   --focus-glow: 0 0 0 2px rgba(0, 217, 255, 0.35), 0 0 12px rgba(0, 217, 255, 0.4);
+}
+
+/* Pure black page background (everything else is the dark blue above). */
+[data-theme="tron-legacy"] body {
+  background: #000000;
+}
+
+/* Text boxes: grey, the same darkness as the dark blue. */
+[data-theme="tron-legacy"] input,
+[data-theme="tron-legacy"] select,
+[data-theme="tron-legacy"] textarea {
+  background: #0e0e0e;
 }
 
 /* Faint glowing floor-grid, in place of Cyberpunk's scanlines. */
