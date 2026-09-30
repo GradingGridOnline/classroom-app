@@ -1992,14 +1992,14 @@ textarea {
    cards, panels, tables, desks — uses --paper/--card, a very very
    dark blue. Text boxes are a grey of the same darkness. */
 [data-theme="tron-legacy"] {
-  --paper: #060e24;
+  --paper: #030a1a;
   --ink: #d9faff;
   --ink-soft: #5f8a95;
   --green: #00d9ff;
   --green-dark: #4de8ff;
   --marker: #ff7a1a;
   --line: #0f3e4a;
-  --card: #060e24;
+  --card: #030a1a;
   --font-heading: "Michroma", sans-serif;
   --font-body: "Chakra Petch", sans-serif;
   --radius: 0px;
@@ -2019,7 +2019,7 @@ textarea {
 [data-theme="tron-legacy"] input:not([type="checkbox"]),
 [data-theme="tron-legacy"] select,
 [data-theme="tron-legacy"] textarea {
-  background: #262626;
+  background: #161616;
   border: 1px solid #ffe23a;
 }
 
