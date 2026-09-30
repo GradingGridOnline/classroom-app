@@ -1919,8 +1919,8 @@ function buildExportTemplateBlock() {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent = tpl
-    ? `Template loaded: ${tpl.headers.length} columns, ${tpl.rows.length} rows.`
-    : "Upload a CSV template from your LMS. After uploading, choose which column identifies each student and which column receives their attendance points.";
+    ? `Template loaded: ${tpl.headers.length} columns. Choose what goes in each one below.`
+    : "Upload a CSV/Excel file whose first row has your LMS's column headings (any student rows in it are ignored). Then choose what goes in each column.";
   wrap.appendChild(hint);
 
   const fileInput = document.createElement("input");
@@ -1966,71 +1966,31 @@ function buildExportTemplateBlock() {
   });
   wrap.appendChild(clearBtn);
 
-  const buildColumnSelect = (selectedIdx, onChange) => {
+  AttendanceModule._ensureExportMapping(tpl);
+
+  tpl.headers.forEach((header, idx) => {
+    const row = document.createElement("div");
+    row.className = "mapping-row";
+
+    const label = document.createElement("label");
+    label.textContent = header || `Column ${idx + 1}`;
+
     const select = document.createElement("select");
-    if (selectedIdx < 0) {
-      const placeholder = document.createElement("option");
-      placeholder.value = "-1";
-      placeholder.textContent = "(choose a column)";
-      placeholder.selected = true;
-      select.appendChild(placeholder);
-    }
-    tpl.headers.forEach((h, idx) => {
+    EXPORT_FIELD_OPTIONS.forEach(([val, text]) => {
       const opt = document.createElement("option");
-      opt.value = String(idx);
-      opt.textContent = h || `Column ${idx + 1}`;
-      if (idx === selectedIdx) opt.selected = true;
+      opt.value = val;
+      opt.textContent = text;
+      if (val === (tpl.columnFields[idx] || "")) opt.selected = true;
       select.appendChild(opt);
     });
-    select.addEventListener("change", onChange);
-    return select;
-  };
+    select.addEventListener("change", async () => {
+      AttendanceModule.setExportColumnField(idx, select.value);
+      await saveAttendanceThen();
+    });
 
-  const idRow = document.createElement("div");
-  idRow.className = "mapping-row";
-  const idLabel = document.createElement("label");
-  idLabel.textContent = "Identifier column (in template)";
-  const idSelect = buildColumnSelect(tpl.identifierColumn, async () => {
-    AttendanceModule.updateExportMapping({ identifierColumn: Number(idSelect.value) });
-    await saveAttendanceThen();
+    row.append(label, select);
+    wrap.appendChild(row);
   });
-  idRow.append(idLabel, idSelect);
-  wrap.appendChild(idRow);
-
-  const fieldRow = document.createElement("div");
-  fieldRow.className = "mapping-row";
-  const fieldLabel = document.createElement("label");
-  fieldLabel.textContent = "…matches the roster's";
-  const fieldSelect = document.createElement("select");
-  [
-    ["schoolId", "School ID"],
-    ["name", "Name"],
-    ["email", "Email Address"],
-    ["classNumber", "Class #"],
-  ].forEach(([val, label]) => {
-    const opt = document.createElement("option");
-    opt.value = val;
-    opt.textContent = label;
-    if (val === tpl.identifierField) opt.selected = true;
-    fieldSelect.appendChild(opt);
-  });
-  fieldSelect.addEventListener("change", async () => {
-    AttendanceModule.updateExportMapping({ identifierField: fieldSelect.value });
-    await saveAttendanceThen();
-  });
-  fieldRow.append(fieldLabel, fieldSelect);
-  wrap.appendChild(fieldRow);
-
-  const valueRow = document.createElement("div");
-  valueRow.className = "mapping-row";
-  const valueLabel = document.createElement("label");
-  valueLabel.textContent = "Points column";
-  const valueSelect = buildColumnSelect(tpl.valueColumn, async () => {
-    AttendanceModule.updateExportMapping({ valueColumn: Number(valueSelect.value) });
-    await saveAttendanceThen();
-  });
-  valueRow.append(valueLabel, valueSelect);
-  wrap.appendChild(valueRow);
 
   return wrap;
 }
@@ -2065,15 +2025,8 @@ function buildAttendanceFooterRow() {
     exportBtn.textContent = "Export";
     exportBtn.addEventListener("click", () => {
       try {
-        const result = AttendanceModule.buildExportCsv(session.id, RosterModule.students);
-        downloadCsv(result.csv, `class-${session.number}-attendance.csv`);
-        if (result.unmatchedStudents.length > 0 || result.matchedRows < result.totalRows) {
-          const lines = [`Exported. Matched ${result.matchedRows} of ${result.totalRows} template rows.`];
-          if (result.unmatchedStudents.length > 0) {
-            lines.push(`Roster students not found in the template: ${result.unmatchedStudents.join(", ")}`);
-          }
-          alert(lines.join("\n"));
-        }
+        const csv = AttendanceModule.buildExportCsv(session.id, RosterModule.students);
+        downloadCsv(csv, `class-${session.number}-attendance.csv`);
       } catch (err) {
         alert(err.message);
       }
