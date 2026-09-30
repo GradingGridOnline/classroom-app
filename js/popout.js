@@ -14,6 +14,10 @@
 //     right is on the students' left, same as "stage right" being the
 //     audience's left in a theater.
 
+// How big names are drawn, as a fraction of a desk's height. Raise this
+// for bigger names (long names wrap onto a second line inside the desk).
+const NAME_SIZE_RATIO = 0.26;
+
 function render() {
   const statusEl = document.getElementById("popout-status");
   const opener = window.opener;
@@ -65,7 +69,7 @@ function render() {
 
   grid.style.gridTemplateColumns = `repeat(${seating.cols}, ${deskWidth}px)`;
   grid.style.gridTemplateRows = `repeat(${seating.rows}, ${deskHeight}px)`;
-  grid.style.setProperty("--popout-name-size", `${Math.max(10, Math.round(deskHeight * 0.16))}px`);
+  grid.style.setProperty("--popout-name-size", `${Math.max(12, Math.round(deskHeight * NAME_SIZE_RATIO))}px`);
   grid.style.setProperty("--popout-badge-size", `${Math.max(14, Math.round(deskHeight * 0.3))}px`);
 
   // Reversed row order AND mirrored column order — see comment above.
