@@ -61,7 +61,11 @@
       <section id="course-section" class="app-section" hidden>
         <div class="section-header">
           <h2>Your courses</h2>
-          <span id="course-count" class="count-badge"></span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <label for="course-sort-select" class="hint" style="margin:0;">Order:</label>
+            <select id="course-sort-select"></select>
+            <span id="course-count" class="count-badge"></span>
+          </div>
         </div>
 
         <ul id="course-list" class="course-list"></ul>
@@ -71,6 +75,28 @@
           <button id="add-course-btn" class="btn btn-primary">+ Add Course</button> <button id="save-courses-btn" class="btn btn-primary">Save Courses &amp; Periods</button>
         </div>
         <p id="course-status" class="result"></p>
+
+        <!-- ----- Course templates ----- -->
+        <div class="app-section">
+          <div class="section-header">
+            <h2>Course templates</h2>
+            <span id="template-count" class="count-badge"></span>
+          </div>
+          <p class="hint">A template keeps a course's setup — attendance settings, scoring categories and tools, seating layout, report card choices — without any students or scores. Use "Save as Template" on a course above, then "Create Course" to start a new one from it.</p>
+          <ul id="template-list" class="course-list"></ul>
+        </div>
+
+        <!-- ----- Archived courses ----- -->
+        <details class="app-section">
+          <summary style="cursor:pointer;">
+            <span class="section-header" style="display:inline-flex;gap:10px;margin:0;">
+              <h2 style="display:inline;">Archived courses</h2>
+              <span id="archived-count" class="count-badge"></span>
+            </span>
+          </summary>
+          <p class="hint" style="margin-top:12px;">Archived courses are kept but hidden from the main list. Click a name to open one, or Restore it.</p>
+          <ul id="archived-list" class="course-list"></ul>
+        </details>
       </section>
 
       <!-- ===== Course detail (one course): Roster + Seating Chart tabs ===== -->
@@ -325,6 +351,7 @@
 
   <script src="js/periods.js"></script>
   <script src="js/courses.js"></script>
+  <script src="js/templates.js"></script>
   <script src="js/roster.js"></script>
   <script src="js/roster-import.js"></script>
   <script src="js/seating.js"></script>

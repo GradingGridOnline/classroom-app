@@ -14,6 +14,11 @@ const el = {
   newCourseName: document.getElementById("new-course-name"),
   addCourseBtn: document.getElementById("add-course-btn"), saveCoursesBtn: document.getElementById("save-courses-btn"),
   courseStatus: document.getElementById("course-status"),
+  courseSortSelect: document.getElementById("course-sort-select"),
+  archivedList: document.getElementById("archived-list"),
+  archivedCount: document.getElementById("archived-count"),
+  templateList: document.getElementById("template-list"),
+  templateCount: document.getElementById("template-count"),
 
   courseDetailSection: document.getElementById("course-detail-section"),
   courseDetailTitle: document.getElementById("course-detail-title"),
@@ -304,6 +309,7 @@ async function showCourses() {
   try {
     await PeriodsModule.load();
     await CoursesModule.load();
+    await TemplatesModule.load();
     renderCourseList();
     renderPeriodsList();
     el.courseStatus.textContent = "";
@@ -312,11 +318,58 @@ async function showCourses() {
   }
 }
 
-function renderCourseList() {
-  el.courseCount.textContent = `${CoursesModule.courses.length} / ${MAX_COURSES}`;
-  el.courseList.innerHTML = "";
+function makeSmallButton(label, title, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn-ghost btn-small";
+  btn.textContent = label;
+  if (title) btn.title = title;
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return btn;
+}
 
-  CoursesModule.courses.forEach((course) => {
+/** Runs one of the actions that writes to Google Drive right away (duplicate, create from template, save as template), showing progress in the course status line. */
+async function runCourseAction(workingMessage, action, doneMessage) {
+  el.courseStatus.textContent = workingMessage;
+  try {
+    await action();
+    renderCourseList();
+    el.courseStatus.textContent = doneMessage;
+  } catch (err) {
+    el.courseStatus.textContent = `Failed: ${err.message}`;
+  }
+}
+
+function renderCourseList() {
+  const active = CoursesModule.activeCourses();
+  const archived = CoursesModule.archivedCourses();
+  const manual = CoursesModule.sortMode === "manual";
+
+  el.courseCount.textContent = `${CoursesModule.courses.length} / ${MAX_COURSES}`;
+
+  // ----- Sort mode dropdown -----
+  if (el.courseSortSelect.options.length === 0) {
+    Object.entries(COURSE_SORT_MODES).forEach(([value, label]) => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      el.courseSortSelect.appendChild(opt);
+    });
+  }
+  el.courseSortSelect.value = CoursesModule.sortMode;
+
+  // ----- Active courses -----
+  el.courseList.innerHTML = "";
+  if (active.length === 0) {
+    const li = document.createElement("li");
+    li.className = "course-item hint";
+    li.textContent = "No courses yet — add one below, or create one from a template.";
+    el.courseList.appendChild(li);
+  }
+  active.forEach((course, index) => {
     const li = document.createElement("li");
     li.className = "course-item";
 
@@ -324,6 +377,7 @@ function renderCourseList() {
     nameSpan.className = "course-name";
     nameSpan.textContent = course.name;
     nameSpan.addEventListener("click", () => openCourseDetail(course));
+    li.appendChild(nameSpan);
 
     const periodSelect = document.createElement("select");
     periodSelect.className = "course-period-select";
@@ -341,37 +395,184 @@ function renderCourseList() {
     periodSelect.addEventListener("click", (e) => e.stopPropagation());
     periodSelect.addEventListener("change", () => {
       CoursesModule.setPeriod(course.id, periodSelect.value);
+      if (CoursesModule.sortMode === "period") renderCourseList(); // the order depends on it
     });
+    li.appendChild(periodSelect);
 
-    const renameBtn = document.createElement("button");
-    renameBtn.className = "btn btn-ghost btn-small";
-    renameBtn.textContent = "Rename";
-    renameBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const newName = prompt("Rename course:", course.name);
-      if (newName === null) return;
-      try {
-        CoursesModule.rename(course.id, newName);
+    if (manual) {
+      const upBtn = makeSmallButton("↑", "Move up", () => {
+        CoursesModule.move(course.id, -1);
         renderCourseList();
-      } catch (err) {
-        alert(err.message);
-      }
-    });
+      });
+      upBtn.disabled = index === 0;
+      const downBtn = makeSmallButton("↓", "Move down", () => {
+        CoursesModule.move(course.id, 1);
+        renderCourseList();
+      });
+      downBtn.disabled = index === active.length - 1;
+      li.append(upBtn, downBtn);
+    }
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "btn btn-ghost btn-small";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
-      CoursesModule.remove(course.id);
-      renderCourseList();
-    });
+    li.appendChild(
+      makeSmallButton("Rename", "", () => {
+        const newName = prompt("Rename course:", course.name);
+        if (newName === null) return;
+        try {
+          CoursesModule.rename(course.id, newName);
+          renderCourseList();
+        } catch (err) {
+          alert(err.message);
+        }
+      })
+    );
 
-    li.append(nameSpan, periodSelect, renameBtn, deleteBtn);
+    li.appendChild(
+      makeSmallButton("Duplicate", "Copy this course and everything saved in it (saved to Google Drive right away)", () => {
+        runCourseAction(
+          "Duplicating…",
+          () => CoursesModule.duplicate(course.id),
+          "Course duplicated and saved ✓"
+        );
+      })
+    );
+
+    li.appendChild(
+      makeSmallButton("Save as Template", "Save this course's structure (no students or scores) as a reusable template", () => {
+        const name = prompt("Template name:", course.name);
+        if (name === null) return;
+        runCourseAction(
+          "Saving template…",
+          () => TemplatesModule.saveFromCourse(course.id, name),
+          "Template saved ✓"
+        );
+      })
+    );
+
+    li.appendChild(
+      makeSmallButton("Archive", "Move this course to Archived Courses", () => {
+        CoursesModule.setArchived(course.id, true);
+        renderCourseList();
+      })
+    );
+
+    li.appendChild(
+      makeSmallButton("Delete", "", () => {
+        if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
+        CoursesModule.remove(course.id);
+        renderCourseList();
+      })
+    );
+
     el.courseList.appendChild(li);
   });
+
+  // ----- Archived courses -----
+  el.archivedCount.textContent = String(archived.length);
+  el.archivedList.innerHTML = "";
+  if (archived.length === 0) {
+    const li = document.createElement("li");
+    li.className = "course-item hint";
+    li.textContent = "Nothing archived. Use a course's Archive button to move it here.";
+    el.archivedList.appendChild(li);
+  }
+  archived.forEach((course) => {
+    const li = document.createElement("li");
+    li.className = "course-item";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "course-name";
+    nameSpan.textContent = course.name;
+    nameSpan.addEventListener("click", () => openCourseDetail(course));
+    li.appendChild(nameSpan);
+
+    li.appendChild(
+      makeSmallButton("Restore", "Move this course back to the main list", () => {
+        CoursesModule.setArchived(course.id, false);
+        renderCourseList();
+      })
+    );
+    li.appendChild(
+      makeSmallButton("Delete", "", () => {
+        if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
+        CoursesModule.remove(course.id);
+        renderCourseList();
+      })
+    );
+    el.archivedList.appendChild(li);
+  });
+
+  renderTemplateList();
 }
+
+function renderTemplateList() {
+  el.templateCount.textContent = String(TemplatesModule.templates.length);
+  el.templateList.innerHTML = "";
+
+  if (TemplatesModule.templates.length === 0) {
+    const li = document.createElement("li");
+    li.className = "course-item hint";
+    li.textContent = 'No templates yet — use a course\'s "Save as Template" button.';
+    el.templateList.appendChild(li);
+    return;
+  }
+
+  TemplatesModule.templates.forEach((template) => {
+    const li = document.createElement("li");
+    li.className = "course-item";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "course-name";
+    nameSpan.style.cursor = "default";
+    nameSpan.textContent = template.name;
+    if (template.sourceCourseName) {
+      const from = document.createElement("span");
+      from.className = "hint";
+      from.textContent = ` — from ${template.sourceCourseName}`;
+      nameSpan.appendChild(from);
+    }
+    li.appendChild(nameSpan);
+
+    li.appendChild(
+      makeSmallButton("Create Course", "Make a new course from this template (saved to Google Drive right away)", () => {
+        const name = prompt("Name for the new course:", template.name);
+        if (name === null) return;
+        runCourseAction(
+          "Creating course…",
+          () => TemplatesModule.createCourse(template.id, name),
+          "Course created and saved ✓"
+        );
+      })
+    );
+
+    li.appendChild(
+      makeSmallButton("Rename", "", () => {
+        const newName = prompt("Rename template:", template.name);
+        if (newName === null) return;
+        try {
+          TemplatesModule.rename(template.id, newName);
+          renderCourseList();
+        } catch (err) {
+          alert(err.message);
+        }
+      })
+    );
+
+    li.appendChild(
+      makeSmallButton("Delete", "", () => {
+        if (!confirm(`Delete the template "${template.name}"? Courses already made from it are not affected.`)) return;
+        TemplatesModule.remove(template.id);
+        renderCourseList();
+      })
+    );
+
+    el.templateList.appendChild(li);
+  });
+}
+
+el.courseSortSelect.addEventListener("change", () => {
+  CoursesModule.setSortMode(el.courseSortSelect.value);
+  renderCourseList();
+});
 
 el.addCourseBtn.addEventListener("click", () => {
   try {
@@ -389,6 +590,7 @@ el.saveCoursesBtn.addEventListener("click", async () => {
   try {
     await CoursesModule.save();
     await PeriodsModule.save();
+    await TemplatesModule.save();
     el.courseStatus.textContent = "Saved to Google Drive ✓";
   } catch (err) {
     el.courseStatus.textContent = `Save failed: ${err.message}`;
