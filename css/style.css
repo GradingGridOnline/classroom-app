@@ -2014,11 +2014,13 @@ textarea {
   background: #000000;
 }
 
-/* Text boxes: grey, the same darkness as the dark blue. */
-[data-theme="tron-legacy"] input,
+/* Text boxes: dark grey with a yellow outline (the yellow used in the
+   film). Checkboxes are left alone. Change the two colors here to adjust. */
+[data-theme="tron-legacy"] input:not([type="checkbox"]),
 [data-theme="tron-legacy"] select,
 [data-theme="tron-legacy"] textarea {
-  background: #0e0e0e;
+  background: #262626;
+  border: 1px solid #ffe23a;
 }
 
 /* Faint glowing floor-grid, in place of Cyberpunk's scanlines. */
