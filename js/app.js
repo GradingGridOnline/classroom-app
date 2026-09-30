@@ -2798,6 +2798,7 @@ function renderScoringToolTableView(tool, container) {
     settingsWrap.appendChild(buildTableFirstColumnBlock(tool, cfg, container));
     settingsWrap.appendChild(buildTableRowsBlock(tool, cfg, container));
     settingsWrap.appendChild(buildTableColumnsBlock(tool, cfg, container));
+    settingsWrap.appendChild(buildTableTotalColumnBlock(tool, cfg, container));
   }
 
   container.appendChild(settingsWrap);
@@ -2826,7 +2827,10 @@ function buildTablePreview(tool, cfg, container) {
     headRow.appendChild(th);
   });
   const totalTh = document.createElement("th");
-  totalTh.textContent = "Total Score";
+  totalTh.textContent =
+    cfg.totalColumn.mode === "max" && cfg.totalColumn.maxPoints > 0
+      ? `Total Score (/${cfg.totalColumn.maxPoints})`
+      : "Total Score";
   headRow.appendChild(totalTh);
   thead.appendChild(headRow);
   table.appendChild(thead);
@@ -2889,7 +2893,13 @@ function buildTablePreviewRow(tool, cfg, container, lineId, label) {
   const totalTd = document.createElement("td");
   totalTd.className = "attendance-stat-cell";
   const sum = ScoringModule.computeTableScoreSum(tool.id, lineId);
-  totalTd.textContent = sum === null ? "—" : String(Math.round(sum * 100) / 100);
+  if (sum === null) {
+    totalTd.textContent = "—";
+  } else {
+    const shown = Math.round(sum * 100) / 100;
+    totalTd.textContent =
+      cfg.totalColumn.mode === "max" && cfg.totalColumn.maxPoints > 0 ? `${shown}/${cfg.totalColumn.maxPoints}` : String(shown);
+  }
   tr.appendChild(totalTd);
 
   return tr;
@@ -3038,6 +3048,61 @@ function buildTableColumnsBlock(tool, cfg, container) {
     list.appendChild(li);
   });
   wrap.appendChild(list);
+
+  return wrap;
+}
+
+/** Settings for the fixed Total Score column: plain sum, or the sum out of a maximum (which Main Scores receives as a percentage × 100). */
+function buildTableTotalColumnBlock(tool, cfg, container) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Total Score column";
+  wrap.appendChild(heading);
+
+  const row = document.createElement("div");
+  row.className = "mapping-row";
+
+  const modeSelect = document.createElement("select");
+  [
+    ["raw", "Raw points"],
+    ["max", "Out of a maximum"],
+  ].forEach(([val, label]) => {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    if (val === cfg.totalColumn.mode) opt.selected = true;
+    modeSelect.appendChild(opt);
+  });
+  modeSelect.addEventListener("change", async () => {
+    ScoringModule.setTableTotalMode(tool.id, modeSelect.value);
+    await saveScoringToolThen(tool, container);
+  });
+  row.appendChild(modeSelect);
+
+  if (cfg.totalColumn.mode === "max") {
+    const maxInput = document.createElement("input");
+    maxInput.type = "text";
+    maxInput.inputMode = "decimal";
+    maxInput.className = "point-value-input";
+    maxInput.title = "Maximum total score";
+    maxInput.placeholder = "Max";
+    maxInput.value = cfg.totalColumn.maxPoints || "";
+    maxInput.addEventListener("change", async () => {
+      ScoringModule.setTableTotalMaxPoints(tool.id, maxInput.value);
+      await saveScoringToolThen(tool, container);
+    });
+    row.appendChild(maxInput);
+  }
+  wrap.appendChild(row);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    cfg.totalColumn.mode === "max"
+      ? "Main Scores receives this as a percentage × 100 (e.g. 17 out of 20 → 85), then blends it by the item's Sources weights."
+      : "Main Scores receives the plain sum, then blends it by the item's Sources weights.";
+  wrap.appendChild(hint);
 
   return wrap;
 }

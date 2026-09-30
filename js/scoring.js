@@ -297,6 +297,13 @@ const ScoringModule = {
     if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
     if (!Array.isArray(cfg.columns)) cfg.columns = [];
 
+    // The fixed Total Score column's own setting: "raw" (the plain sum)
+    // or "max" (the sum shown out of totalColumn.maxPoints, and sent to
+    // Main Scores as a percentage × 100 — see _toolContributionForStudent).
+    if (!cfg.totalColumn || typeof cfg.totalColumn !== "object") cfg.totalColumn = {};
+    if (cfg.totalColumn.mode !== "max") cfg.totalColumn.mode = "raw";
+    if (typeof cfg.totalColumn.maxPoints !== "number") cfg.totalColumn.maxPoints = 0;
+
     // Migration from the old Table tool: its computed "total score"
     // columns are gone (the fixed Total Score column replaces them),
     // and its "description" columns become plain score columns.
@@ -396,6 +403,18 @@ const ScoringModule = {
     const column = cfg && cfg.columns.find((c) => c.id === columnId);
     if (!column) return;
     column.maxPoints = Math.max(0, Number(value) || 0);
+  },
+
+  /** "raw" (plain sum) or "max" (sum out of a set maximum) for the fixed Total Score column. */
+  setTableTotalMode(toolId, mode) {
+    const cfg = this.getTableConfig(toolId);
+    if (cfg) cfg.totalColumn.mode = mode === "max" ? "max" : "raw";
+  },
+
+  /** The maximum for the Total Score column when its mode is "max". */
+  setTableTotalMaxPoints(toolId, value) {
+    const cfg = this.getTableConfig(toolId);
+    if (cfg) cfg.totalColumn.maxPoints = Math.max(0, Number(value) || 0);
   },
 
   // ----- Progress Tracker cell values -----
@@ -519,10 +538,11 @@ const ScoringModule = {
    * Chart group number in "groups" mode — since rows are always kept
    * in sync with the roster/seating chart (see getTableIdentityRows),
    * so there's no name-matching to go stale. Returns null if the tool
-   * isn't a Progress Tracker, has no columns, or the student isn't
-   * seated/grouped (in "groups" mode). Otherwise { raw: true, value }
-   * — the sum is used as-is, on the assumption its scale already
-   * matches the item's own points.
+   * isn't a Progress Tracker, has no columns, the Total Score is in
+   * "max" mode with no maximum set, or the student isn't seated/grouped
+   * (in "groups" mode). Otherwise { raw: true, value } — the plain sum
+   * in "raw" mode, or the percentage × 100 in "max" mode — used as-is
+   * (so an item fed this way should have a max of 100 to line up).
    */
   _toolContributionForStudent(tool, studentId) {
     if (tool.type !== "table") return null;
@@ -540,6 +560,14 @@ const ScoringModule = {
 
     const sum = this.computeTableScoreSum(tool.id, rowKey);
     if (sum === null) return null;
+
+    // "Out of a max" mode sends the percentage × 100 (e.g. 17 out of 20
+    // → 85), which then goes through the item's Score Sources weights
+    // like any other contribution. Raw mode sends the plain sum.
+    if (cfg.totalColumn.mode === "max") {
+      if (!(cfg.totalColumn.maxPoints > 0)) return null;
+      return { raw: true, value: (sum / cfg.totalColumn.maxPoints) * 100 };
+    }
     return { raw: true, value: sum };
   },
 
