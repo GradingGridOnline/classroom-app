@@ -4224,8 +4224,17 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
   const addSection = (title, hintText) => {
     const block = document.createElement("div");
     block.className = "attendance-settings-block";
-    const heading = document.createElement("h4");
+    block.style.borderTop = "2px solid var(--line)";
+    block.style.paddingTop = "18px";
+    block.style.marginTop = "22px";
+    const heading = document.createElement("h3");
     heading.textContent = title;
+    heading.style.fontFamily = "var(--font-heading)";
+    heading.style.fontSize = "1.9rem";
+    heading.style.fontWeight = "700";
+    heading.style.lineHeight = "1.2";
+    heading.style.color = "var(--green-dark)";
+    heading.style.margin = "0 0 10px";
     block.appendChild(heading);
     if (hintText) {
       const hint = document.createElement("p");

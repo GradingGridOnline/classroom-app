@@ -26,7 +26,7 @@ const MAX_TABLE_COLUMNS = 20;
 const MAX_TESTS_PER_BANK = 60;
 const MAX_RUBRIC_BANK = 30;
 const MAX_ACTIVE_RUBRICS = 10;
-const MAX_RUBRIC_POINTS = 20; // ceiling for the selectable point-value dropdown
+const MAX_RUBRIC_POINTS = 10; // ceiling for the selectable point-value dropdown
 
 // A Progress Tracker column's type. "score" is a plain enterable
 // number; "score_max" is also an enterable number but out of a set
@@ -601,6 +601,11 @@ const ScoringModule = {
     if (typeof cfg.sourceBankName !== "string") cfg.sourceBankName = "";
     ["rubricBank", "teacherRubrics", "audienceRubrics"].forEach((key) => {
       if (!Array.isArray(cfg[key])) cfg[key] = [];
+    });
+    [cfg.teacherRubrics, cfg.audienceRubrics].forEach((list) => {
+      list.forEach((entry) => {
+        if (typeof entry.points === "number" && entry.points > MAX_RUBRIC_POINTS) entry.points = MAX_RUBRIC_POINTS;
+      });
     });
     if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
     if (!cfg.totalColumn || typeof cfg.totalColumn !== "object") cfg.totalColumn = {};
