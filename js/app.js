@@ -2387,6 +2387,26 @@ function buildItemScoreSourcesPanel(item) {
           await saveScoringThen(renderScoring);
         });
         panel.appendChild(testSelect);
+      } else if (tool.type === "presentation") {
+        const projectSelect = document.createElement("select");
+        projectSelect.style.width = "100%";
+        projectSelect.style.marginBottom = "6px";
+        const blankProject = document.createElement("option");
+        blankProject.value = "";
+        blankProject.textContent = "— choose a project —";
+        projectSelect.appendChild(blankProject);
+        ScoringModule.presentationProjects(tool.id).forEach((project) => {
+          const opt = document.createElement("option");
+          opt.value = project.id;
+          opt.textContent = project.name;
+          if (sources.projectSelections[tool.id] === project.id) opt.selected = true;
+          projectSelect.appendChild(opt);
+        });
+        projectSelect.addEventListener("change", async () => {
+          ScoringModule.setItemProjectSelection(item.id, tool.id, projectSelect.value);
+          await saveScoringThen(renderScoring);
+        });
+        panel.appendChild(projectSelect);
       }
     });
   }
@@ -3255,7 +3275,7 @@ function buildTableColumnsBlock(tool, cfg, container) {
 }
 
 /** Settings for the fixed Total Score column: plain sum, or the sum out of a maximum (which Main Scores receives as a percentage × 100). */
-function buildTableTotalColumnBlock(tool, cfg, container) {
+function buildTableTotalColumnBlock(tool, cfg, container, projectId) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
   const heading = document.createElement("h4");
@@ -3277,7 +3297,7 @@ function buildTableTotalColumnBlock(tool, cfg, container) {
     modeSelect.appendChild(opt);
   });
   modeSelect.addEventListener("change", async () => {
-    ScoringModule.setTableTotalMode(tool.id, modeSelect.value);
+    ScoringModule.setTableTotalMode(tool.id, modeSelect.value, projectId);
     await saveScoringToolThen(tool, container);
   });
   row.appendChild(modeSelect);
@@ -3291,7 +3311,7 @@ function buildTableTotalColumnBlock(tool, cfg, container) {
     maxInput.placeholder = "Max";
     maxInput.value = cfg.totalColumn.maxPoints || "";
     maxInput.addEventListener("change", async () => {
-      ScoringModule.setTableTotalMaxPoints(tool.id, maxInput.value);
+      ScoringModule.setTableTotalMaxPoints(tool.id, maxInput.value, projectId);
       await saveScoringToolThen(tool, container);
     });
     row.appendChild(maxInput);
@@ -3320,13 +3340,103 @@ function buildTableTotalColumnBlock(tool, cfg, container) {
 // Teacher / Audience rubrics that become the score columns). Everything
 // is stored inside the tool's config and saved with "Save Scoring".
 
-const presentationToolPage = new Map(); // toolId -> "scores" | "groups" | "rubrics" | "templates"
+const presentationToolPage = new Map(); // toolId -> subtab showing: "scores" | "groups" | "rubrics" | "templates"
+const presentationToolProject = new Map(); // toolId -> id of the project tab showing
 
 function renderScoringToolPresentationView(tool, container) {
-  const cfg = ScoringModule.getPresentationConfig(tool.id);
+  const toolCfg = ScoringModule.getPresentationConfig(tool.id);
   container.innerHTML = "";
-  const page = presentationToolPage.get(tool.id) || "scores";
+  const rerender = () => renderScoringToolView(tool, container);
 
+  // Which project is showing (the first one if the remembered one is gone).
+  let projectId = presentationToolProject.get(tool.id);
+  if (!toolCfg.projects.some((p) => p.id === projectId)) {
+    projectId = toolCfg.projects.length > 0 ? toolCfg.projects[0].id : null;
+  }
+  presentationToolProject.set(tool.id, projectId);
+
+  const addProject = () => {
+    const name = prompt("Name for the new project:", `Project ${toolCfg.projects.length + 1}`);
+    if (name === null) return;
+    try {
+      const project = ScoringModule.addPresentationProject(tool.id, name);
+      presentationToolProject.set(tool.id, project.id);
+      presentationToolPage.set(tool.id, "groups"); // a new project starts at the first thing to set up
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    rerender();
+  };
+
+  // ----- Project tabs (one per project) + "+ New Project" -----
+  const projectRow = document.createElement("div");
+  projectRow.className = "tab-row";
+  toolCfg.projects.forEach((project) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab-btn" + (project.id === projectId ? " tab-btn-active" : "");
+    btn.textContent = project.name;
+    btn.addEventListener("click", () => {
+      presentationToolProject.set(tool.id, project.id);
+      rerender();
+    });
+    projectRow.appendChild(btn);
+  });
+  const newBtn = document.createElement("button");
+  newBtn.type = "button";
+  newBtn.className = "btn btn-ghost btn-small";
+  newBtn.textContent = "+ New Project";
+  newBtn.style.alignSelf = "center";
+  newBtn.addEventListener("click", addProject);
+  projectRow.appendChild(newBtn);
+  container.appendChild(projectRow);
+
+  if (!projectId) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent =
+      'A Presentation Calc is organized into projects (for example "Midterm Presentations"). Click "+ New Project", give it a name, then set up its Student Groups, Rubrics, Scores, and Templates.';
+    container.appendChild(hint);
+    return;
+  }
+
+  const project = toolCfg.projects.find((p) => p.id === projectId);
+
+  // ----- Project name + rename / delete -----
+  const header = document.createElement("div");
+  header.className = "panel-toolbar";
+  const title = document.createElement("span");
+  title.className = "hint";
+  title.textContent = `Project: ${project.name}`;
+  header.appendChild(title);
+  const headerButtons = document.createElement("div");
+  headerButtons.className = "panel-toolbar-buttons";
+  const renameBtn = document.createElement("button");
+  renameBtn.type = "button";
+  renameBtn.className = "btn btn-ghost btn-small";
+  renameBtn.textContent = "Rename Project";
+  renameBtn.addEventListener("click", () => {
+    const name = prompt("Rename project:", project.name);
+    if (name === null) return;
+    ScoringModule.renamePresentationProject(tool.id, project.id, name);
+    rerender();
+  });
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "btn btn-ghost btn-small";
+  deleteBtn.textContent = "Delete Project";
+  deleteBtn.addEventListener("click", () => {
+    if (!confirm(`Delete the project "${project.name}"? Its groups, rubrics, and scores are removed, and Main Scores items pulling from it lose those scores.`)) return;
+    ScoringModule.removePresentationProject(tool.id, project.id);
+    rerender();
+  });
+  headerButtons.append(renameBtn, deleteBtn);
+  header.appendChild(headerButtons);
+  container.appendChild(header);
+
+  // ----- The project's four subtabs -----
+  const page = presentationToolPage.get(tool.id) || "scores";
   const tabRow = document.createElement("div");
   tabRow.className = "tab-row reportcard-mode-row";
   [
@@ -3341,24 +3451,24 @@ function renderScoringToolPresentationView(tool, container) {
     btn.textContent = label;
     btn.addEventListener("click", () => {
       presentationToolPage.set(tool.id, id);
-      renderScoringToolView(tool, container);
+      rerender();
     });
     tabRow.appendChild(btn);
   });
   container.appendChild(tabRow);
 
-  if (page === "groups") container.appendChild(buildPresentationGroupsPage(tool, cfg, container));
-  else if (page === "rubrics") container.appendChild(buildPresentationRubricsPage(tool, cfg, container));
-  else if (page === "templates") container.appendChild(buildPresentationTemplatesPage(tool, cfg, container));
-  else container.appendChild(buildPresentationScoresPage(tool, cfg, container));
+  if (page === "groups") container.appendChild(buildPresentationGroupsPage(tool, project, container));
+  else if (page === "rubrics") container.appendChild(buildPresentationRubricsPage(tool, project, container));
+  else if (page === "templates") container.appendChild(buildPresentationTemplatesPage(tool, project, container));
+  else container.appendChild(buildPresentationScoresPage(tool, project, container));
 }
 
 // ----- Scores page -----
 
 function buildPresentationScoresPage(tool, cfg, container) {
   const page = document.createElement("div");
-  const columns = ScoringModule.presentationColumns(tool.id);
-  const groups = ScoringModule.presentationGroups(tool.id);
+  const columns = ScoringModule.presentationColumns(tool.id, cfg.id);
+  const groups = ScoringModule.presentationGroups(tool.id, cfg.id);
 
   const hint = document.createElement("p");
   hint.className = "hint";
@@ -3368,7 +3478,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row, and every student in a group shares their group's total. To use it in Main Scores, give this tool a weight in an item's Sources panel.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row, and every student in a group shares their group's total. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
   page.appendChild(hint);
 
@@ -3418,17 +3528,17 @@ function buildPresentationScoresPage(tool, cfg, container) {
         input.type = "text";
         input.inputMode = "decimal";
         input.className = "scoring-score-input";
-        input.value = ScoringModule.getPresentationValue(tool.id, group, col.entryId);
+        input.value = ScoringModule.getPresentationValue(tool.id, cfg.id, group, col.entryId);
         if (col.points > 0) {
           input.placeholder = `/${col.points}`;
           input.title = `Out of ${col.points}`;
         }
         input.addEventListener("change", () => {
           try {
-            ScoringModule.setPresentationValue(tool.id, group, col.entryId, input.value);
+            ScoringModule.setPresentationValue(tool.id, cfg.id, group, col.entryId, input.value);
           } catch (err) {
             alert(err.message);
-            input.value = ScoringModule.getPresentationValue(tool.id, group, col.entryId);
+            input.value = ScoringModule.getPresentationValue(tool.id, cfg.id, group, col.entryId);
             return;
           }
           renderScoringToolView(tool, container);
@@ -3439,7 +3549,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
 
       const totalTd = document.createElement("td");
       totalTd.className = "attendance-stat-cell";
-      const sum = ScoringModule.computePresentationSum(tool.id, group);
+      const sum = ScoringModule.computePresentationSum(tool.id, cfg.id, group);
       if (sum === null) {
         totalTd.textContent = "—";
       } else {
@@ -3459,7 +3569,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
   }
 
   // Same raw / out-of-max setting as the Progress Tracker's Total Score column.
-  page.appendChild(buildTableTotalColumnBlock(tool, cfg, container));
+  page.appendChild(buildTableTotalColumnBlock(tool, cfg, container, cfg.id));
   return page;
 }
 
@@ -3493,7 +3603,7 @@ function buildPresentationGroupsPage(tool, cfg, container) {
   importBtn.addEventListener("click", () => {
     const bank = SeatingModule.banks[Number(bankSelect.value)];
     try {
-      ScoringModule.importPresentationRoster(tool.id, bank, RosterModule);
+      ScoringModule.importPresentationRoster(tool.id, cfg.id, bank, RosterModule);
     } catch (err) {
       status.textContent = `Couldn't import: ${err.message}`;
       return;
@@ -3626,7 +3736,7 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
       select.appendChild(opt);
     });
     select.addEventListener("change", () => {
-      ScoringModule.presSetActiveSelection(tool.id, kind, entry.id, select.value);
+      ScoringModule.presSetActiveSelection(tool.id, cfg.id, kind, entry.id, select.value);
     });
     selectTd.appendChild(select);
     tr.appendChild(selectTd);
@@ -3638,7 +3748,7 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
     removeBtn.textContent = "×";
     removeBtn.title = "Remove this active rubric";
     removeBtn.addEventListener("click", () => {
-      ScoringModule.presRemoveActiveRubric(tool.id, kind, entry.id);
+      ScoringModule.presRemoveActiveRubric(tool.id, cfg.id, kind, entry.id);
       rerender();
     });
     removeTd.appendChild(removeBtn);
@@ -3656,7 +3766,7 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
       pointsSelect.appendChild(opt);
     }
     pointsSelect.addEventListener("change", () => {
-      ScoringModule.presSetActivePoints(tool.id, kind, entry.id, pointsSelect.value);
+      ScoringModule.presSetActivePoints(tool.id, cfg.id, kind, entry.id, pointsSelect.value);
     });
     pointsTd.appendChild(pointsSelect);
     pointsTr.appendChild(pointsTd);
@@ -3672,7 +3782,7 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
   addBtn.textContent = "+ Add Rubric";
   addBtn.addEventListener("click", () => {
     try {
-      ScoringModule.presAddActiveRubric(tool.id, kind);
+      ScoringModule.presAddActiveRubric(tool.id, cfg.id, kind);
     } catch (err) {
       status.textContent = err.message;
       return;
@@ -3716,7 +3826,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
     input.value = rubric.text;
     input.placeholder = "Describe the rubric…";
     input.addEventListener("change", () => {
-      ScoringModule.presSetRubricText(tool.id, rubric.id, input.value);
+      ScoringModule.presSetRubricText(tool.id, cfg.id, rubric.id, input.value);
       rerender(); // the text may be shown in an active rubric's dropdown
     });
     textTd.appendChild(input);
@@ -3729,7 +3839,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
     removeBtn.textContent = "×";
     removeBtn.title = "Remove this rubric";
     removeBtn.addEventListener("click", () => {
-      ScoringModule.presRemoveRubricBankRow(tool.id, rubric.id);
+      ScoringModule.presRemoveRubricBankRow(tool.id, cfg.id, rubric.id);
       rerender();
     });
     removeTd.appendChild(removeBtn);
@@ -3746,7 +3856,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
   addBtn.textContent = "+ Add Rubric";
   addBtn.addEventListener("click", () => {
     try {
-      ScoringModule.presAddRubricBankRow(tool.id);
+      ScoringModule.presAddRubricBankRow(tool.id, cfg.id);
     } catch (err) {
       status.textContent = err.message;
       return;
@@ -4200,13 +4310,14 @@ function buildTestSourceSelect(selected, onChange) {
 const DEFAULT_AUDIENCE_INSTRUCTIONS =
   "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer.";
 
-function downloadPresentationTemplate(tool, kind, label, status) {
+function downloadPresentationTemplate(tool, project, kind, label, status) {
   try {
-    const rows = ScoringModule.buildPresentationTemplateRows(tool.id, kind);
+    const rows = ScoringModule.buildPresentationTemplateRows(tool.id, project.id, kind);
     const csv = XLSX.utils.sheet_to_csv(XLSX.utils.aoa_to_sheet(rows));
     const course = CoursesModule.find(RosterModule.currentCourseId);
     const safeName = (course ? course.name : "Course").replace(/[\\/:*?"<>|]/g, "").trim() || "Course";
-    downloadCsv(csv, `${safeName} ${label}.csv`);
+    const safeProject = project.name.replace(/[\\/:*?"<>|]/g, "").trim();
+    downloadCsv(csv, `${[safeName, safeProject, label].filter(Boolean).join(" ")}.csv`);
     status.textContent = `Downloaded "${label}".`;
   } catch (err) {
     status.textContent = err.message;
@@ -4261,7 +4372,7 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     btn.className = "btn btn-primary";
     btn.textContent = label;
     btn.style.marginTop = "10px";
-    btn.addEventListener("click", () => downloadPresentationTemplate(tool, kind, label, status));
+    btn.addEventListener("click", () => downloadPresentationTemplate(tool, cfg, kind, label, status));
     return btn;
   };
 

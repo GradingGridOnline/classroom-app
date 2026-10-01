@@ -91,8 +91,14 @@ const TemplatesModule = {
         if (tool.config && typeof tool.config === "object") {
           tool.config.values = {}; // entered scores
           if (tool.type === "presentation") {
-            tool.config.roster = []; // imported students + groups
-            tool.config.sourceBankName = "";
+            // Keep each project's rubrics and settings; drop its imported students + groups and entered scores.
+            const clearProject = (project) => {
+              project.roster = [];
+              project.sourceBankName = "";
+              project.values = {};
+            };
+            if (Array.isArray(tool.config.projects)) tool.config.projects.forEach(clearProject);
+            else clearProject(tool.config); // saved before projects existed
           }
           if (tool.type === "testbank") {
             tool.config.tests = []; // uploaded tests/quizzes and their scores
@@ -108,7 +114,10 @@ const TemplatesModule = {
       const categories = this._clone(scoring.categories || []);
       categories.forEach((category) =>
         (category.items || []).forEach((item) => {
-          if (item.scoreSources) item.scoreSources.testSelections = {}; // the tests themselves aren't kept
+          if (item.scoreSources) {
+            item.scoreSources.testSelections = {}; // the tests themselves aren't kept
+            item.scoreSources.projectSelections = {}; // neither are the imported groups
+          }
         })
       );
       data.scoring = {

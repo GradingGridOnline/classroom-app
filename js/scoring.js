@@ -24,6 +24,7 @@ const MAX_ITEMS_PER_CATEGORY = 50;
 const MAX_SCORING_TOOLS = 10;
 const MAX_TABLE_COLUMNS = 20;
 const MAX_TESTS_PER_BANK = 60;
+const MAX_PRES_PROJECTS = 20;
 const MAX_RUBRIC_BANK = 30;
 const MAX_ACTIVE_RUBRICS = 10;
 const MAX_RUBRIC_POINTS = 10; // ceiling for the selectable point-value dropdown
@@ -99,12 +100,12 @@ const ScoringModule = {
       );
       if (!hasContent || this.tools.length >= MAX_SCORING_TOOLS) return;
       const tool = this.addTool("presentation");
-      const cfg = this.getPresentationConfig(tool.id);
-      cfg.roster = Array.isArray(legacy.roster) ? legacy.roster : [];
-      cfg.sourceBankName = legacy.sourceBankName || "";
-      cfg.rubricBank = Array.isArray(legacy.rubricBank) ? legacy.rubricBank : [];
-      cfg.teacherRubrics = Array.isArray(legacy.teacherRubrics) ? legacy.teacherRubrics : [];
-      cfg.audienceRubrics = Array.isArray(legacy.audienceRubrics) ? legacy.audienceRubrics : [];
+      const project = this.addPresentationProject(tool.id, "Project 1");
+      project.roster = Array.isArray(legacy.roster) ? legacy.roster : [];
+      project.sourceBankName = legacy.sourceBankName || "";
+      project.rubricBank = Array.isArray(legacy.rubricBank) ? legacy.rubricBank : [];
+      project.teacherRubrics = Array.isArray(legacy.teacherRubrics) ? legacy.teacherRubrics : [];
+      project.audienceRubrics = Array.isArray(legacy.audienceRubrics) ? legacy.audienceRubrics : [];
     } catch (e) {
       // Non-fatal — the scoring data itself has already loaded.
     }
@@ -287,6 +288,9 @@ const ScoringModule = {
         if (item.scoreSources && item.scoreSources.testSelections) {
           delete item.scoreSources.testSelections[toolId];
         }
+        if (item.scoreSources && item.scoreSources.projectSelections) {
+          delete item.scoreSources.projectSelections[toolId];
+        }
       });
     });
   },
@@ -468,22 +472,22 @@ const ScoringModule = {
   },
 
   /** "raw" (plain sum) or "max" (sum out of a set maximum) for the fixed Total Score column. */
-  setTableTotalMode(toolId, mode) {
-    const cfg = this._configForTool(toolId);
+  setTableTotalMode(toolId, mode, projectId) {
+    const cfg = this._configForTool(toolId, projectId);
     if (cfg) cfg.totalColumn.mode = mode === "max" ? "max" : "raw";
   },
 
   /** The maximum for the Total Score column when its mode is "max". */
-  setTableTotalMaxPoints(toolId, value) {
-    const cfg = this._configForTool(toolId);
+  setTableTotalMaxPoints(toolId, value, projectId) {
+    const cfg = this._configForTool(toolId, projectId);
     if (cfg) cfg.totalColumn.maxPoints = Math.max(0, Number(value) || 0);
   },
 
-  /** The normalized config for whichever kind of tool this is (both kinds carry a totalColumn). */
-  _configForTool(toolId) {
+  /** The object that carries the totalColumn setting: a Progress Tracker's config, or — for a Presentation Calc — the given project. */
+  _configForTool(toolId, projectId) {
     const tool = this.findTool(toolId);
     if (!tool) return null;
-    return tool.type === "presentation" ? this.getPresentationConfig(toolId) : this.getTableConfig(toolId);
+    return tool.type === "presentation" ? this.getPresentationProject(toolId, projectId) : this.getTableConfig(toolId);
   },
 
   /** What a tool sends to Main Scores for a row total: the plain sum in "raw" mode, or percentage × 100 in "max" mode (null if "max" has no maximum set). Used as-is by the Score Sources blend. */
@@ -572,60 +576,140 @@ const ScoringModule = {
   },
 
   // ----- Presentation Calc tool (type "presentation") -----
-  // tool.config: {
-  //   roster: [{ studentId, classNumber, name, pronunciation, schoolId, group }]
-  //     — a snapshot of one Seating Chart memory bank (seated students
-  //     only, with that desk's Group Number). An explicit IMPORT, not a
-  //     live link, so it stays a fixed presentation-order roster even
-  //     if seats get rearranged afterward.
-  //   sourceBankName,
-  //   rubricBank: [{ id, text }] — manually-entered rubric descriptions,
-  //   teacherRubrics / audienceRubrics: [{ id, rubricId, points }] —
-  //     the active rubrics; each becomes one score column, worth up to
-  //     `points`,
-  //   values: "group|entryId" -> score entered for that group,
-  //   totalColumn: { mode, maxPoints } — same raw / out-of-max setting
-  //     as the Progress Tracker's Total Score column.
-  // }
+  // tool.config: { projects: [project, ...] }. A Presentation Calc holds
+  // any number of PROJECTS (one per presentation assignment); each has
+  // its own groups, rubrics, scores and templates:
+  //   project: {
+  //     id, name,
+  //     roster: [{ studentId, classNumber, name, pronunciation, schoolId, group }]
+  //       — a snapshot of one Seating Chart memory bank (seated students
+  //       only, with that desk's Group Number). An explicit IMPORT, not a
+  //       live link, so it stays a fixed presentation-order roster even
+  //       if seats get rearranged afterward.
+  //     sourceBankName,
+  //     rubricBank: [{ id, text }] — manually-entered rubric descriptions,
+  //     teacherRubrics / audienceRubrics: [{ id, rubricId, points }] —
+  //       the active rubrics; each becomes one score column, worth up to
+  //       `points` (at most MAX_RUBRIC_POINTS),
+  //     values: "group|entryId" -> score entered for that group,
+  //     totalColumn: { mode, maxPoints } — same raw / out-of-max setting
+  //       as the Progress Tracker's Total Score column,
+  //     templateSettings: instructions etc. for the score-sheet CSVs
+  //   }
   // Scores are entered per GROUP (each presentation group gets one
   // score per active rubric); every student in a group shares their
-  // group's Total Score.
+  // group's Total Score. Which project a Main Scores item pulls from is
+  // stored on the item (scoreSources.projectSelections[toolId]).
 
-  /** Returns tool.config for a Presentation Calc tool, creating/normalizing it in place first. Null if the tool doesn't exist. */
+  /** Fills in any missing pieces of one project, in place. */
+  _normalizeProject(project) {
+    if (!project.id) project.id = `project-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    if (typeof project.name !== "string" || !project.name.trim()) project.name = "Project";
+    if (!Array.isArray(project.roster)) project.roster = [];
+    if (typeof project.sourceBankName !== "string") project.sourceBankName = "";
+    ["rubricBank", "teacherRubrics", "audienceRubrics"].forEach((key) => {
+      if (!Array.isArray(project[key])) project[key] = [];
+    });
+    [project.teacherRubrics, project.audienceRubrics].forEach((list) => {
+      list.forEach((entry) => {
+        if (typeof entry.points === "number" && entry.points > MAX_RUBRIC_POINTS) entry.points = MAX_RUBRIC_POINTS;
+      });
+    });
+    if (!project.values || typeof project.values !== "object") project.values = {};
+    if (!project.totalColumn || typeof project.totalColumn !== "object") project.totalColumn = {};
+    if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
+    if (typeof project.totalColumn.maxPoints !== "number") project.totalColumn.maxPoints = 0;
+
+    // Settings for the Templates page (score-sheet CSVs).
+    if (!project.templateSettings || typeof project.templateSettings !== "object") project.templateSettings = {};
+    const ts = project.templateSettings;
+    if (typeof ts.audienceInstructions !== "string") ts.audienceInstructions = "";
+    if (typeof ts.audienceComments !== "boolean") ts.audienceComments = true;
+    if (typeof ts.peerInstructions !== "string") ts.peerInstructions = "";
+    ts.peerHighestScore = Math.max(1, Math.min(10, Math.round(Number(ts.peerHighestScore) || 10)));
+    return project;
+  },
+
+  /** Returns tool.config for a Presentation Calc ({ projects }), creating/normalizing it in place first. A Presentation Calc saved before projects existed (its roster/rubrics/scores sat directly in the config) is converted into one project called "Project 1", and any Main Scores item already pulling from the tool is pointed at it. Null if the tool doesn't exist. */
   getPresentationConfig(toolId) {
     const tool = this.findTool(toolId);
     if (!tool) return null;
     if (!tool.config || typeof tool.config !== "object") tool.config = {};
     const cfg = tool.config;
-    if (!Array.isArray(cfg.roster)) cfg.roster = [];
-    if (typeof cfg.sourceBankName !== "string") cfg.sourceBankName = "";
-    ["rubricBank", "teacherRubrics", "audienceRubrics"].forEach((key) => {
-      if (!Array.isArray(cfg[key])) cfg[key] = [];
-    });
-    [cfg.teacherRubrics, cfg.audienceRubrics].forEach((list) => {
-      list.forEach((entry) => {
-        if (typeof entry.points === "number" && entry.points > MAX_RUBRIC_POINTS) entry.points = MAX_RUBRIC_POINTS;
-      });
-    });
-    if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
-    if (!cfg.totalColumn || typeof cfg.totalColumn !== "object") cfg.totalColumn = {};
-    if (cfg.totalColumn.mode !== "max") cfg.totalColumn.mode = "raw";
-    if (typeof cfg.totalColumn.maxPoints !== "number") cfg.totalColumn.maxPoints = 0;
 
-    // Settings for the Templates page (score-sheet CSVs).
-    if (!cfg.templateSettings || typeof cfg.templateSettings !== "object") cfg.templateSettings = {};
-    const ts = cfg.templateSettings;
-    if (typeof ts.audienceInstructions !== "string") ts.audienceInstructions = "";
-    if (typeof ts.audienceComments !== "boolean") ts.audienceComments = true;
-    if (typeof ts.peerInstructions !== "string") ts.peerInstructions = "";
-    ts.peerHighestScore = Math.max(1, Math.min(10, Math.round(Number(ts.peerHighestScore) || 10)));
+    if (!Array.isArray(cfg.projects)) {
+      cfg.projects = [];
+      const flatKeys = ["roster", "sourceBankName", "rubricBank", "teacherRubrics", "audienceRubrics", "values", "totalColumn", "templateSettings"];
+      const hasContent =
+        ["roster", "rubricBank", "teacherRubrics", "audienceRubrics"].some((key) => Array.isArray(cfg[key]) && cfg[key].length > 0) ||
+        (cfg.values && typeof cfg.values === "object" && Object.keys(cfg.values).length > 0);
+      if (hasContent) {
+        const project = { name: "Project 1" };
+        flatKeys.forEach((key) => {
+          if (key in cfg) project[key] = cfg[key];
+        });
+        this._normalizeProject(project);
+        cfg.projects.push(project);
+        this.categories.forEach((category) => {
+          category.items.forEach((item) => {
+            const sources = item.scoreSources;
+            if (sources && sources.toolWeights && sources.toolWeights[toolId] > 0) {
+              if (!sources.projectSelections || typeof sources.projectSelections !== "object") sources.projectSelections = {};
+              sources.projectSelections[toolId] = project.id;
+            }
+          });
+        });
+      }
+      flatKeys.forEach((key) => delete cfg[key]);
+    }
+
+    cfg.projects.forEach((project) => this._normalizeProject(project));
     return cfg;
   },
 
-  /** Replaces the roster snapshot with the seated students of one Seating Chart memory bank (active + occupied desks only), ordered by group then Class Number. */
-  importPresentationRoster(toolId, bank, rosterModule) {
+  presentationProjects(toolId) {
+    const cfg = this.getPresentationConfig(toolId);
+    return cfg ? cfg.projects : [];
+  },
+
+  getPresentationProject(toolId, projectId) {
+    return this.presentationProjects(toolId).find((p) => p.id === projectId) || null;
+  },
+
+  /** Adds a new, empty project (named `name`, or "Project N" if blank) and returns it. */
+  addPresentationProject(toolId, name) {
+    const cfg = this.getPresentationConfig(toolId);
+    if (!cfg) throw new Error("That Presentation Calc no longer exists.");
+    if (cfg.projects.length >= MAX_PRES_PROJECTS) {
+      throw new Error(`You've reached the limit of ${MAX_PRES_PROJECTS} projects.`);
+    }
+    const project = this._normalizeProject({ name: (name || "").trim() || `Project ${cfg.projects.length + 1}` });
+    cfg.projects.push(project);
+    return project;
+  },
+
+  renamePresentationProject(toolId, projectId, name) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (project) project.name = (name || "").trim() || project.name;
+  },
+
+  /** Removes a project, and clears it from any Main Scores item that was pulling from it. */
+  removePresentationProject(toolId, projectId) {
     const cfg = this.getPresentationConfig(toolId);
     if (!cfg) return;
+    cfg.projects = cfg.projects.filter((p) => p.id !== projectId);
+    this.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const selections = item.scoreSources && item.scoreSources.projectSelections;
+        if (selections && selections[toolId] === projectId) delete selections[toolId];
+      });
+    });
+  },
+
+  /** Replaces a project's roster snapshot with the seated students of one Seating Chart memory bank (active + occupied desks only), ordered by group then Class Number. */
+  importPresentationRoster(toolId, projectId, bank, rosterModule) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
     if (!bank || !bank.snapshot) {
       throw new Error("That memory bank is empty — save a seating arrangement into it first.");
     }
@@ -656,16 +740,16 @@ const ScoringModule = {
       if (groupA !== groupB) return groupA - groupB;
       return (a.classNumber || 0) - (b.classNumber || 0);
     });
-    cfg.roster = entries;
-    cfg.sourceBankName = bank.name;
+    project.roster = entries;
+    project.sourceBankName = bank.name;
   },
 
-  /** Distinct Group Numbers in the roster snapshot (ungrouped excluded), ascending. */
-  presentationGroups(toolId) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return [];
+  /** Distinct Group Numbers in a project's roster snapshot (ungrouped excluded), ascending. */
+  presentationGroups(toolId, projectId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return [];
     const groups = new Set();
-    cfg.roster.forEach((entry) => {
+    project.roster.forEach((entry) => {
       if (entry.group) groups.add(entry.group);
     });
     return Array.from(groups).sort((a, b) => a - b);
@@ -673,84 +757,84 @@ const ScoringModule = {
 
   // Rubric bank
 
-  presAddRubricBankRow(toolId) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return;
-    if (cfg.rubricBank.length >= MAX_RUBRIC_BANK) {
+  presAddRubricBankRow(toolId, projectId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
+    if (project.rubricBank.length >= MAX_RUBRIC_BANK) {
       throw new Error(`You've reached the limit of ${MAX_RUBRIC_BANK} rubrics.`);
     }
-    cfg.rubricBank.push({ id: `rubric-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text: "" });
+    project.rubricBank.push({ id: `rubric-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text: "" });
   },
 
   /** Removing a rubric also clears it from any active row that had it selected. */
-  presRemoveRubricBankRow(toolId, rubricId) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return;
-    cfg.rubricBank = cfg.rubricBank.filter((r) => r.id !== rubricId);
-    [cfg.teacherRubrics, cfg.audienceRubrics].forEach((list) => {
+  presRemoveRubricBankRow(toolId, projectId, rubricId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
+    project.rubricBank = project.rubricBank.filter((r) => r.id !== rubricId);
+    [project.teacherRubrics, project.audienceRubrics].forEach((list) => {
       list.forEach((entry) => {
         if (entry.rubricId === rubricId) entry.rubricId = null;
       });
     });
   },
 
-  presSetRubricText(toolId, rubricId, text) {
-    const cfg = this.getPresentationConfig(toolId);
-    const rubric = cfg && cfg.rubricBank.find((r) => r.id === rubricId);
+  presSetRubricText(toolId, projectId, rubricId, text) {
+    const project = this.getPresentationProject(toolId, projectId);
+    const rubric = project && project.rubricBank.find((r) => r.id === rubricId);
     if (rubric) rubric.text = text;
   },
 
   // Active rubrics (each one is a score column)
 
-  _presActiveList(cfg, kind) {
-    return kind === "audience" ? cfg.audienceRubrics : cfg.teacherRubrics;
+  _presActiveList(project, kind) {
+    return kind === "audience" ? project.audienceRubrics : project.teacherRubrics;
   },
 
-  presAddActiveRubric(toolId, kind) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return;
-    const list = this._presActiveList(cfg, kind);
+  presAddActiveRubric(toolId, projectId, kind) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
+    const list = this._presActiveList(project, kind);
     if (list.length >= MAX_ACTIVE_RUBRICS) {
       throw new Error(`You've reached the limit of ${MAX_ACTIVE_RUBRICS} active rubrics.`);
     }
     list.push({ id: `active-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, rubricId: null, points: 0 });
   },
 
-  presRemoveActiveRubric(toolId, kind, entryId) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return;
-    if (kind === "audience") cfg.audienceRubrics = cfg.audienceRubrics.filter((e) => e.id !== entryId);
-    else cfg.teacherRubrics = cfg.teacherRubrics.filter((e) => e.id !== entryId);
-    Object.keys(cfg.values).forEach((key) => {
-      if (key.endsWith(`|${entryId}`)) delete cfg.values[key];
+  presRemoveActiveRubric(toolId, projectId, kind, entryId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
+    if (kind === "audience") project.audienceRubrics = project.audienceRubrics.filter((e) => e.id !== entryId);
+    else project.teacherRubrics = project.teacherRubrics.filter((e) => e.id !== entryId);
+    Object.keys(project.values).forEach((key) => {
+      if (key.endsWith(`|${entryId}`)) delete project.values[key];
     });
   },
 
-  presSetActiveSelection(toolId, kind, entryId, rubricId) {
-    const cfg = this.getPresentationConfig(toolId);
-    const entry = cfg && this._presActiveList(cfg, kind).find((e) => e.id === entryId);
+  presSetActiveSelection(toolId, projectId, kind, entryId, rubricId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    const entry = project && this._presActiveList(project, kind).find((e) => e.id === entryId);
     if (entry) entry.rubricId = rubricId || null;
   },
 
-  presSetActivePoints(toolId, kind, entryId, points) {
-    const cfg = this.getPresentationConfig(toolId);
-    const entry = cfg && this._presActiveList(cfg, kind).find((e) => e.id === entryId);
+  presSetActivePoints(toolId, projectId, kind, entryId, points) {
+    const project = this.getPresentationProject(toolId, projectId);
+    const entry = project && this._presActiveList(project, kind).find((e) => e.id === entryId);
     if (entry) entry.points = Math.max(0, Math.min(MAX_RUBRIC_POINTS, Math.round(Number(points) || 0)));
   },
 
   // Score columns + entered values
 
-  /** The score columns: every active rubric that has a rubric chosen (Teacher ones first, then Audience), as { entryId, kind, label, points }. */
-  presentationColumns(toolId) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return [];
+  /** A project's score columns: every active rubric that has a rubric chosen (Teacher ones first, then Audience), as { entryId, kind, text, label, points }. */
+  presentationColumns(toolId, projectId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return [];
     const columns = [];
     [
-      ["teacher", cfg.teacherRubrics],
-      ["audience", cfg.audienceRubrics],
+      ["teacher", project.teacherRubrics],
+      ["audience", project.audienceRubrics],
     ].forEach(([kind, list]) => {
       list.forEach((entry) => {
-        const rubric = cfg.rubricBank.find((r) => r.id === entry.rubricId);
+        const rubric = project.rubricBank.find((r) => r.id === entry.rubricId);
         if (!rubric) return;
         columns.push({
           entryId: entry.id,
@@ -764,39 +848,39 @@ const ScoringModule = {
     return columns;
   },
 
-  getPresentationValue(toolId, group, entryId) {
-    const cfg = this.getPresentationConfig(toolId);
-    return cfg ? cfg.values[`${group}|${entryId}`] || "" : "";
+  getPresentationValue(toolId, projectId, group, entryId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    return project ? project.values[`${group}|${entryId}`] || "" : "";
   },
 
   /** value: "" (blank) or a number from 0 up to that rubric's points. Throws on anything else. */
-  setPresentationValue(toolId, group, entryId, value) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return;
+  setPresentationValue(toolId, projectId, group, entryId, value) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
     const key = `${group}|${entryId}`;
     const trimmed = value == null ? "" : String(value).trim();
     if (trimmed === "") {
-      delete cfg.values[key];
+      delete project.values[key];
       return;
     }
     const num = Number(trimmed);
-    const column = this.presentationColumns(toolId).find((c) => c.entryId === entryId);
+    const column = this.presentationColumns(toolId, projectId).find((c) => c.entryId === entryId);
     const max = column ? column.points : 0;
     if (Number.isNaN(num) || num < 0 || (max > 0 && num > max)) {
       throw new Error(max > 0 ? `Enter a number from 0 to ${max}.` : "Enter a number of 0 or more.");
     }
-    cfg.values[key] = String(num);
+    project.values[key] = String(num);
   },
 
   /** Total Score for one group: the sum of its entered scores across every score column (blank counts as 0). Null if there are no score columns yet. */
-  computePresentationSum(toolId, group) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) return null;
-    const columns = this.presentationColumns(toolId);
+  computePresentationSum(toolId, projectId, group) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return null;
+    const columns = this.presentationColumns(toolId, projectId);
     if (columns.length === 0) return null;
     let sum = 0;
     columns.forEach((col) => {
-      const raw = cfg.values[`${group}|${col.entryId}`];
+      const raw = project.values[`${group}|${col.entryId}`];
       const num = Number(raw);
       if (raw !== undefined && !Number.isNaN(num)) sum += num;
     });
@@ -807,9 +891,9 @@ const ScoringModule = {
 
   /**
    * Builds the rows (arrays of three cells: columns A, B, C) of one of
-   * three score-sheet CSV templates: kind "teacher", "audience", or
-   * "peer". Row/column positions follow the layout described for the
-   * Templates page:
+   * three score-sheet CSV templates for a project: kind "teacher",
+   * "audience", or "peer". Row/column positions follow the layout
+   * described for the Templates page:
    *
    * Teacher / Audience — per group: "Group N" in A (first group at A3),
    *   a 0 in B on the next row, then each active rubric of that kind: its
@@ -827,12 +911,12 @@ const ScoringModule = {
    * Each element after the first starts 4 rows after the previous one's
    * last row. Throws a readable Error if there's nothing to build from.
    */
-  buildPresentationTemplateRows(toolId, kind) {
-    const cfg = this.getPresentationConfig(toolId);
-    if (!cfg) throw new Error("That Presentation Calc no longer exists.");
-    const settings = cfg.templateSettings;
+  buildPresentationTemplateRows(toolId, projectId, kind) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) throw new Error("That project no longer exists.");
+    const settings = project.templateSettings;
 
-    const groups = this.presentationGroups(toolId);
+    const groups = this.presentationGroups(toolId, projectId);
     if (groups.length === 0) {
       throw new Error('No groups yet — open "Student Groups" and import a seating arrangement that has Group Numbers set.');
     }
@@ -856,7 +940,7 @@ const ScoringModule = {
       let row = 3;
       groups.forEach((group) => {
         put(row, 0, `Group ${group}`);
-        const members = cfg.roster
+        const members = project.roster
           .filter((entry) => entry.group === group)
           .sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
         let studentRow = row + 1;
@@ -871,7 +955,9 @@ const ScoringModule = {
     }
 
     const isAudience = kind === "audience";
-    const columns = this.presentationColumns(toolId).filter((c) => c.kind === (isAudience ? "audience" : "teacher"));
+    const columns = this.presentationColumns(toolId, projectId).filter(
+      (c) => c.kind === (isAudience ? "audience" : "teacher")
+    );
     if (columns.length === 0) {
       throw new Error(
         `No active ${isAudience ? "Audience" : "Teacher"} rubrics yet — open "Rubrics" and activate at least one with a rubric chosen.`
@@ -913,15 +999,15 @@ const ScoringModule = {
     return rows;
   },
 
-  /** A student's contribution: their group's Total Score (group taken from the imported roster snapshot). Null if they aren't in the snapshot or have no group. */
-  _presentationContribution(tool, studentId) {
-    const cfg = this.getPresentationConfig(tool.id);
-    if (!cfg) return null;
-    const entry = cfg.roster.find((e) => e.studentId === studentId);
+  /** A student's contribution from one project: their group's Total Score (group taken from that project's imported roster snapshot). Null if they aren't in the snapshot or have no group. */
+  _presentationContribution(tool, studentId, projectId) {
+    const project = this.getPresentationProject(tool.id, projectId);
+    if (!project) return null;
+    const entry = project.roster.find((e) => e.studentId === studentId);
     if (!entry || !entry.group) return null;
-    const sum = this.computePresentationSum(tool.id, entry.group);
+    const sum = this.computePresentationSum(tool.id, projectId, entry.group);
     if (sum === null) return null;
-    return this._totalContribution(cfg, sum);
+    return this._totalContribution(project, sum);
   },
 
   // ----- Test & Quiz Bank tool (type "testbank") -----
@@ -1066,6 +1152,13 @@ const ScoringModule = {
     else delete sources.testSelections[toolId];
   },
 
+  /** Sets which project an item pulls from for a Presentation Calc ("" clears it). */
+  setItemProjectSelection(itemId, toolId, projectId) {
+    const sources = this.getItemScoreSources(itemId);
+    if (projectId) sources.projectSelections[toolId] = projectId;
+    else delete sources.projectSelections[toolId];
+  },
+
   /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
   attendanceScore(studentId) {
     if (!window.AttendanceModule) return { earned: 0, possible: 0, percent: null, points: null };
@@ -1085,13 +1178,17 @@ const ScoringModule = {
   /** Returns item.scoreSources, creating/normalizing it in place first. */
   getItemScoreSources(itemId) {
     const item = this.findItem(itemId);
-    if (!item) return { manualWeight: 100, toolWeights: {}, testSelections: {} };
+    if (!item) return { manualWeight: 100, toolWeights: {}, testSelections: {}, projectSelections: {} };
     if (!item.scoreSources || typeof item.scoreSources !== "object") {
       item.scoreSources = {};
     }
     if (typeof item.scoreSources.manualWeight !== "number") item.scoreSources.manualWeight = 100;
     if (!item.scoreSources.toolWeights || typeof item.scoreSources.toolWeights !== "object") {
       item.scoreSources.toolWeights = {};
+    }
+    // Which project to pull from, for each Presentation Calc tool: { toolId: projectId }.
+    if (!item.scoreSources.projectSelections || typeof item.scoreSources.projectSelections !== "object") {
+      item.scoreSources.projectSelections = {};
     }
     // Which test/quiz to pull from, for each Test & Quiz Bank tool: { toolId: testId }.
     if (!item.scoreSources.testSelections || typeof item.scoreSources.testSelections !== "object") {
@@ -1136,7 +1233,7 @@ const ScoringModule = {
    * (so an item fed this way should have a max of 100 to line up).
    */
   _toolContributionForStudent(tool, studentId) {
-    if (tool.type === "presentation") return this._presentationContribution(tool, studentId);
+    if (tool.type === "presentation") return null; // handled in computeItemEffectiveScore (needs the chosen project)
     if (tool.type !== "table") return null;
     const cfg = this.getTableConfig(tool.id);
     if (!cfg) return null;
@@ -1195,6 +1292,13 @@ const ScoringModule = {
         if (value === null) return;
         const testPoints = test.maxPoints > 0 ? (value / test.maxPoints) * item.maxPoints : value;
         sources.push({ weight, points: testPoints });
+        return;
+      }
+      if (tool.type === "presentation") {
+        const projectId = sourcesCfg.projectSelections[toolId];
+        const presContribution = projectId ? this._presentationContribution(tool, studentId, projectId) : null;
+        if (!presContribution) return;
+        sources.push({ weight, points: presContribution.value });
         return;
       }
       const contribution = this._toolContributionForStudent(tool, studentId);
