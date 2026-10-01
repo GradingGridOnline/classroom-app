@@ -7,10 +7,11 @@
 //                                  infractions, term class count,
 //                                  absence limit, LMS export columns
 //   scoring:    { categories, weights, tools } — categories/items/weights
-//                                  and scoring tools (Progress Tracker
-//                                  and Presentation Calc setups), with
-//                                  all entered scores, rosters and
-//                                  imported groups left out
+//                                  and scoring tools (Progress Tracker,
+//                                  Presentation Calc and Test & Quiz Bank
+//                                  setups), with all entered scores,
+//                                  rosters, imported groups and uploaded
+//                                  tests left out
 //   seating:    { rows, cols, active, groups, labels, showGroupsInPopout }
 //                                — the desk layout, with nobody seated
 //   reportcard: { selectedItemIds }
@@ -93,11 +94,25 @@ const TemplatesModule = {
             tool.config.roster = []; // imported students + groups
             tool.config.sourceBankName = "";
           }
+          if (tool.type === "testbank") {
+            tool.config.tests = []; // uploaded tests/quizzes and their scores
+          }
+          if (tool.type === "table" && Array.isArray(tool.config.columns)) {
+            tool.config.columns.forEach((column) => {
+              if (column.testSource) column.testSource = { toolId: "", testId: "" }; // the tests aren't kept
+            });
+          }
         }
         return tool;
       });
+      const categories = this._clone(scoring.categories || []);
+      categories.forEach((category) =>
+        (category.items || []).forEach((item) => {
+          if (item.scoreSources) item.scoreSources.testSelections = {}; // the tests themselves aren't kept
+        })
+      );
       data.scoring = {
-        categories: this._clone(scoring.categories || []),
+        categories,
         weights: this._clone(scoring.weights || {}),
         tools,
       };

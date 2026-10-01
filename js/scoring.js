@@ -23,6 +23,7 @@ const MAX_CATEGORIES = 10; // a cap, not a fixed starting count — add categori
 const MAX_ITEMS_PER_CATEGORY = 50;
 const MAX_SCORING_TOOLS = 10;
 const MAX_TABLE_COLUMNS = 20;
+const MAX_TESTS_PER_BANK = 60;
 const MAX_RUBRIC_BANK = 30;
 const MAX_ACTIVE_RUBRICS = 10;
 const MAX_RUBRIC_POINTS = 20; // ceiling for the selectable point-value dropdown
@@ -30,10 +31,12 @@ const MAX_RUBRIC_POINTS = 20; // ceiling for the selectable point-value dropdown
 // A Progress Tracker column's type. "score" is a plain enterable
 // number; "score_max" is also an enterable number but out of a set
 // maximum (column.maxPoints), so it's limited to 0-max and shown as
-// "/max" in its header. The last column of every Progress Tracker is
+// "/max" in its header; "test" is read-only and pulls each student's
+// score from a test/quiz in a Test & Quiz Bank (column.testSource =
+// { toolId, testId }) — students-mode trackers only. The last column of every Progress Tracker is
 // always a fixed, read-only "Total Score" (the sum of that row's
 // entries) — it isn't stored as a column, it's added automatically.
-const TABLE_COLUMN_TYPES = ["score", "score_max"];
+const TABLE_COLUMN_TYPES = ["score", "score_max", "test"];
 
 // The set of scoring tool types that can be added from Main Scores'
 // Settings. Add a new entry here (and a matching renderer in app.js)
@@ -43,6 +46,7 @@ const TABLE_COLUMN_TYPES = ["score", "score_max"];
 const SCORING_TOOL_TYPES = {
   table: "Progress Tracker",
   presentation: "Presentation Calc",
+  testbank: "Test & Quiz Bank",
 };
 
 function defaultScoringWeights(categories) {
@@ -274,10 +278,27 @@ const ScoringModule = {
 
   removeTool(toolId) {
     this.tools = this.tools.filter((t) => t.id !== toolId);
+    this._clearTableTestSources(toolId);
     this.categories.forEach((category) => {
       category.items.forEach((item) => {
         if (item.scoreSources && item.scoreSources.toolWeights) {
           delete item.scoreSources.toolWeights[toolId];
+        }
+        if (item.scoreSources && item.scoreSources.testSelections) {
+          delete item.scoreSources.testSelections[toolId];
+        }
+      });
+    });
+  },
+
+  /** Clears any Progress Tracker column that pulls from the given Test & Quiz Bank (and, if testId is given, only that test). */
+  _clearTableTestSources(sourceToolId, testId) {
+    this.tools.forEach((tool) => {
+      if (tool.type !== "table" || !tool.config || !Array.isArray(tool.config.columns)) return;
+      tool.config.columns.forEach((column) => {
+        const source = column.testSource;
+        if (source && source.toolId === sourceToolId && (!testId || source.testId === testId)) {
+          column.testSource = { toolId: "", testId: "" };
         }
       });
     });
@@ -350,6 +371,9 @@ const ScoringModule = {
     cfg.columns.forEach((column) => {
       if (!TABLE_COLUMN_TYPES.includes(column.type)) column.type = "score";
       if (typeof column.maxPoints !== "number") column.maxPoints = 0;
+      if (column.type === "test" && (!column.testSource || typeof column.testSource !== "object")) {
+        column.testSource = { toolId: "", testId: "" };
+      }
     });
     if (droppedIds.size > 0) this._purgeTableValues(cfg, { columnIds: droppedIds });
 
@@ -427,6 +451,14 @@ const ScoringModule = {
     column.type = TABLE_COLUMN_TYPES.includes(type) ? type : "score";
   },
 
+  /** Which test/quiz a "test" column pulls from (pass "" for both to clear it). */
+  setTableColumnTestSource(toolId, columnId, sourceToolId, testId) {
+    const cfg = this.getTableConfig(toolId);
+    const column = cfg && cfg.columns.find((c) => c.id === columnId);
+    if (!column) return;
+    column.testSource = { toolId: sourceToolId || "", testId: testId || "" };
+  },
+
   /** The maximum for a "score_max" column — unused by "score" columns. */
   setTableColumnMaxPoints(toolId, columnId, value) {
     const cfg = this.getTableConfig(toolId);
@@ -499,15 +531,29 @@ const ScoringModule = {
     cfg.values[key] = String(num);
   },
 
+  /** One cell's value as a number, or null if blank/non-numeric. For a "test" column that's the student's score on the chosen test/quiz (students-mode trackers only); for the others it's the number typed into the cell. */
+  tableCellNumber(toolId, lineId, column) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return null;
+    if (column.type === "test") {
+      if (cfg.firstColumn.mode !== "students") return null;
+      const source = column.testSource || {};
+      return source.toolId && source.testId ? this.testScore(source.toolId, source.testId, lineId) : null;
+    }
+    const raw = cfg.values[`${lineId}|${column.id}`];
+    if (raw === undefined) return null;
+    const num = Number(raw);
+    return Number.isNaN(num) ? null : num;
+  },
+
   /** The fixed Total Score for one line: the sum of every column's value on that line (blank/non-numeric entries count as 0). Returns null if the tracker has no columns at all, so the caller can show "—" instead of a bare 0. */
   computeTableScoreSum(toolId, lineId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg || cfg.columns.length === 0) return null;
     let sum = 0;
     cfg.columns.forEach((col) => {
-      const raw = cfg.values[`${lineId}|${col.id}`];
-      const num = Number(raw);
-      if (raw !== undefined && !Number.isNaN(num)) sum += num;
+      const num = this.tableCellNumber(toolId, lineId, col);
+      if (num !== null) sum += num;
     });
     return sum;
   },
@@ -754,6 +800,148 @@ const ScoringModule = {
     return this._totalContribution(cfg, sum);
   },
 
+  // ----- Test & Quiz Bank tool (type "testbank") -----
+  // tool.config: { tests: [{ id, name, maxPoints, sourceFile, rows,
+  // scores, unmatched }] }.
+  //   rows: what was read from the uploaded file — [{ name, schoolId,
+  //     score }], kept so students can be re-matched later (e.g. after
+  //     the roster changes).
+  //   scores: studentId -> score (numeric string), built by matching
+  //     rows to the current roster — School ID first, then name.
+  //   unmatched: rows that matched no one on the roster.
+  //   maxPoints: optional. When set, a score pulled into a Main Scores
+  //     item is scaled to that item's own points (score ÷ maxPoints ×
+  //     item max); when 0/blank, the score is used as-is.
+  // Which test an item pulls from is stored on the item itself
+  // (scoreSources.testSelections[toolId]) — see getItemScoreSources.
+
+  getTestBankConfig(toolId) {
+    const tool = this.findTool(toolId);
+    if (!tool) return null;
+    if (!tool.config || typeof tool.config !== "object") tool.config = {};
+    const cfg = tool.config;
+    if (!Array.isArray(cfg.tests)) cfg.tests = [];
+    cfg.tests.forEach((test) => {
+      if (!Array.isArray(test.rows)) test.rows = [];
+      if (!test.scores || typeof test.scores !== "object") test.scores = {};
+      if (!Array.isArray(test.unmatched)) test.unmatched = [];
+      if (typeof test.maxPoints !== "number") test.maxPoints = 0;
+      if (typeof test.sourceFile !== "string") test.sourceFile = "";
+    });
+    return cfg;
+  },
+
+  testBankTests(toolId) {
+    const cfg = this.getTestBankConfig(toolId);
+    return cfg ? cfg.tests : [];
+  },
+
+  findTest(toolId, testId) {
+    return this.testBankTests(toolId).find((t) => t.id === testId) || null;
+  },
+
+  /** Text used to compare a file's name/ID against the roster: full-width/half-width forms unified, spaces removed, case ignored. */
+  _matchKey(value) {
+    return String(value == null ? "" : value)
+      .normalize("NFKC")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+  },
+
+  /** Rebuilds test.scores / test.unmatched from test.rows against the current roster. School ID is tried first (when the row has one), then name. */
+  _matchTestRows(test) {
+    const students = (window.RosterModule && window.RosterModule.students) || [];
+    const byId = new Map();
+    const byName = new Map();
+    students.forEach((s) => {
+      const idKey = this._matchKey(s.schoolId);
+      if (idKey && !byId.has(idKey)) byId.set(idKey, s);
+      const nameKey = this._matchKey(s.name);
+      if (nameKey && !byName.has(nameKey)) byName.set(nameKey, s);
+    });
+
+    test.scores = {};
+    test.unmatched = [];
+    test.rows.forEach((row) => {
+      let student = null;
+      const idKey = this._matchKey(row.schoolId);
+      if (idKey) student = byId.get(idKey) || null;
+      if (!student) {
+        const nameKey = this._matchKey(row.name);
+        if (nameKey) student = byName.get(nameKey) || null;
+      }
+      if (student) test.scores[student.id] = row.score;
+      else test.unmatched.push({ name: row.name, schoolId: row.schoolId, score: row.score });
+    });
+  },
+
+  /** Adds a test/quiz built from rows [{ name, schoolId, score }] and matches it to the roster. */
+  addTest(toolId, { name, maxPoints, rows, sourceFile }) {
+    const cfg = this.getTestBankConfig(toolId);
+    if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
+    if (cfg.tests.length >= MAX_TESTS_PER_BANK) {
+      throw new Error(`This bank is at its limit of ${MAX_TESTS_PER_BANK} tests/quizzes.`);
+    }
+    const test = {
+      id: `test-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: (name || "").trim() || "Untitled test",
+      maxPoints: Math.max(0, Number(maxPoints) || 0),
+      sourceFile: sourceFile || "",
+      rows,
+      scores: {},
+      unmatched: [],
+    };
+    this._matchTestRows(test);
+    cfg.tests.push(test);
+    return test;
+  },
+
+  renameTest(toolId, testId, name) {
+    const test = this.findTest(toolId, testId);
+    if (test) test.name = (name || "").trim() || test.name;
+  },
+
+  setTestMaxPoints(toolId, testId, value) {
+    const test = this.findTest(toolId, testId);
+    if (test) test.maxPoints = Math.max(0, Number(value) || 0);
+  },
+
+  rematchTest(toolId, testId) {
+    const test = this.findTest(toolId, testId);
+    if (test) this._matchTestRows(test);
+  },
+
+  /** Removes a test/quiz, and clears it from any item that was pulling from it. */
+  removeTest(toolId, testId) {
+    const cfg = this.getTestBankConfig(toolId);
+    if (!cfg) return;
+    cfg.tests = cfg.tests.filter((t) => t.id !== testId);
+    this._clearTableTestSources(toolId, testId);
+    this.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const selections = item.scoreSources && item.scoreSources.testSelections;
+        if (selections && selections[toolId] === testId) delete selections[toolId];
+      });
+    });
+  },
+
+  /** One student's score on one test/quiz as a number, or null if they have none. */
+  testScore(toolId, testId, studentId) {
+    const test = this.findTest(toolId, testId);
+    if (!test) return null;
+    const raw = test.scores[studentId];
+    if (raw === undefined || raw === "") return null;
+    const num = Number(raw);
+    return Number.isNaN(num) ? null : num;
+  },
+
+  /** Sets which test/quiz an item pulls from for a Test & Quiz Bank ("" clears it). */
+  setItemTestSelection(itemId, toolId, testId) {
+    const sources = this.getItemScoreSources(itemId);
+    if (testId) sources.testSelections[toolId] = testId;
+    else delete sources.testSelections[toolId];
+  },
+
   /** Attendance's contribution, in the same { earned, possible, percent } shape as categoryScore, so it can be rendered as a column alongside the other categories. Points mode uses AttendanceModule's raw points instead of possible/earned. */
   attendanceScore(studentId) {
     if (!window.AttendanceModule) return { earned: 0, possible: 0, percent: null, points: null };
@@ -773,13 +961,17 @@ const ScoringModule = {
   /** Returns item.scoreSources, creating/normalizing it in place first. */
   getItemScoreSources(itemId) {
     const item = this.findItem(itemId);
-    if (!item) return { manualWeight: 100, toolWeights: {} };
+    if (!item) return { manualWeight: 100, toolWeights: {}, testSelections: {} };
     if (!item.scoreSources || typeof item.scoreSources !== "object") {
       item.scoreSources = {};
     }
     if (typeof item.scoreSources.manualWeight !== "number") item.scoreSources.manualWeight = 100;
     if (!item.scoreSources.toolWeights || typeof item.scoreSources.toolWeights !== "object") {
       item.scoreSources.toolWeights = {};
+    }
+    // Which test/quiz to pull from, for each Test & Quiz Bank tool: { toolId: testId }.
+    if (!item.scoreSources.testSelections || typeof item.scoreSources.testSelections !== "object") {
+      item.scoreSources.testSelections = {};
     }
     return item.scoreSources;
   },
@@ -869,6 +1061,18 @@ const ScoringModule = {
       if (!(weight > 0)) return;
       const tool = this.findTool(toolId);
       if (!tool) return;
+      if (tool.type === "testbank") {
+        // A Test & Quiz Bank contributes one chosen test/quiz's score. If
+        // the test has a maximum, the score is scaled to this item's own
+        // points; otherwise it's used as-is.
+        const testId = sourcesCfg.testSelections[toolId];
+        const test = testId ? this.findTest(toolId, testId) : null;
+        const value = test ? this.testScore(toolId, testId, studentId) : null;
+        if (value === null) return;
+        const testPoints = test.maxPoints > 0 ? (value / test.maxPoints) * item.maxPoints : value;
+        sources.push({ weight, points: testPoints });
+        return;
+      }
       const contribution = this._toolContributionForStudent(tool, studentId);
       if (!contribution) return;
       const points = contribution.raw ? contribution.value : contribution.value * item.maxPoints;

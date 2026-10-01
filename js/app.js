@@ -2363,6 +2363,28 @@ function buildItemScoreSourcesPanel(item) {
       });
       row.append(label, input);
       panel.appendChild(row);
+
+      if (tool.type === "testbank") {
+        const testSelect = document.createElement("select");
+        testSelect.style.width = "100%";
+        testSelect.style.marginBottom = "6px";
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = "— choose a test/quiz —";
+        testSelect.appendChild(blank);
+        ScoringModule.testBankTests(tool.id).forEach((test) => {
+          const opt = document.createElement("option");
+          opt.value = test.id;
+          opt.textContent = test.name;
+          if (sources.testSelections[tool.id] === test.id) opt.selected = true;
+          testSelect.appendChild(opt);
+        });
+        testSelect.addEventListener("change", async () => {
+          ScoringModule.setItemTestSelection(item.id, tool.id, testSelect.value);
+          await saveScoringThen(renderScoring);
+        });
+        panel.appendChild(testSelect);
+      }
     });
   }
 
@@ -2843,6 +2865,7 @@ const SCORING_MODE_RENDERERS = {
 const SCORING_TOOL_RENDERERS = {
   table: renderScoringToolTableView,
   presentation: renderScoringToolPresentationView,
+  testbank: renderScoringToolTestBankView,
 };
 
 function showScoringMode(mode) {
@@ -3020,6 +3043,13 @@ function buildTablePreviewRow(tool, cfg, container, lineId, label) {
 
   cfg.columns.forEach((col) => {
     const td = document.createElement("td");
+    if (col.type === "test") {
+      const num = ScoringModule.tableCellNumber(tool.id, lineId, col);
+      td.className = "hint";
+      td.textContent = num === null ? "—" : String(Math.round(num * 100) / 100);
+      tr.appendChild(td);
+      return;
+    }
     const input = document.createElement("input");
     input.type = "text";
     input.inputMode = "decimal";
@@ -3170,6 +3200,7 @@ function buildTableColumnsBlock(tool, cfg, container) {
     [
       ["score", "Score"],
       ["score_max", "Score (with max)"],
+      ["test", "Test / quiz score"],
     ].forEach(([val, label]) => {
       const opt = document.createElement("option");
       opt.value = val;
@@ -3196,6 +3227,21 @@ function buildTableColumnsBlock(tool, cfg, container) {
         await saveScoringToolThen(tool, container);
       });
       li.appendChild(maxInput);
+    }
+
+    if (column.type === "test") {
+      li.appendChild(
+        buildTestSourceSelect(column.testSource, async (sourceToolId, testId) => {
+          ScoringModule.setTableColumnTestSource(tool.id, column.id, sourceToolId, testId);
+          await saveScoringToolThen(tool, container);
+        })
+      );
+      if (cfg.firstColumn.mode === "groups") {
+        const note = document.createElement("span");
+        note.className = "hint";
+        note.textContent = "Only works when rows are Students.";
+        li.appendChild(note);
+      }
     }
 
     list.appendChild(li);
@@ -3705,6 +3751,439 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
   block.appendChild(addBtn);
 
   return block;
+}
+
+// ----- Test & Quiz Bank scoring tool -----
+//
+// A scoring tool that holds any number of tests/quizzes. Upload a CSV
+// or Excel file of scores, say which row is the header, and which
+// columns hold the student names and/or School IDs and the scores;
+// each student is then matched to the roster (School ID first, then
+// name). Items in Main Scores (via their Sources panel) and Progress
+// Tracker columns can then pull from any test/quiz in the bank.
+// Everything is stored inside the tool's config and saved with
+// "Save Scoring".
+
+const testBankImports = new Map(); // toolId -> the upload currently being mapped
+const testBankStatus = new Map(); // toolId -> last status message
+const testBankExpanded = new Map(); // toolId -> Set of test ids whose details are open
+
+function testBankHeaderIndex(state) {
+  return Math.max(0, Math.min(state.rawRows.length - 1, (Number(state.headerRow) || 1) - 1));
+}
+
+function testBankHeaders(state) {
+  return state.rawRows[testBankHeaderIndex(state)].map((cell) => String(cell).trim());
+}
+
+/** Every non-blank row below the chosen header row. */
+function testBankDataRows(state) {
+  return state.rawRows
+    .slice(testBankHeaderIndex(state) + 1)
+    .filter((row) => row.some((cell) => String(cell).trim() !== ""));
+}
+
+/** Best-effort guess at which columns hold the School ID, name, and score, from the header text. */
+function applyTestBankGuess(state) {
+  const headers = testBankHeaders(state);
+  state.idCol = headers.findIndex((h) => /id|学籍|学生番号|番号/i.test(h));
+  state.nameCol = headers.findIndex((h, i) => i !== state.idCol && /name|氏名|名前/i.test(h));
+  state.scoreCol = headers.findIndex(
+    (h, i) => i !== state.idCol && i !== state.nameCol && /score|point|total|mark|得点|点数|合計|点/i.test(h)
+  );
+}
+
+function renderScoringToolTestBankView(tool, container) {
+  ScoringModule.getTestBankConfig(tool.id);
+  container.innerHTML = "";
+  const rerender = () => renderScoringToolView(tool, container);
+  const state = testBankImports.get(tool.id);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "Upload a CSV or Excel file of scores for one test or quiz at a time. Then, in Main Scores, open an item's Sources panel, give this bank a weight, and choose which test/quiz it pulls from. Progress Tracker columns can also pull from a test/quiz.";
+  container.appendChild(hint);
+
+  // ----- Upload toolbar -----
+  const toolbar = document.createElement("div");
+  toolbar.className = "panel-toolbar";
+  const status = document.createElement("span");
+  status.className = "result";
+  status.textContent = testBankStatus.get(tool.id) || "";
+  toolbar.appendChild(status);
+
+  const buttons = document.createElement("div");
+  buttons.className = "panel-toolbar-buttons";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".csv,.xlsx,.xls";
+  fileInput.hidden = true;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    fileInput.value = "";
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (rawRows.length < 2) throw new Error("The file needs a header row and at least one row of scores.");
+      const fresh = {
+        fileName: file.name,
+        rawRows,
+        headerRow: 1,
+        name: file.name.replace(/\.[^.]+$/, ""),
+        maxPoints: "",
+        nameCol: -1,
+        idCol: -1,
+        scoreCol: -1,
+      };
+      applyTestBankGuess(fresh);
+      testBankImports.set(tool.id, fresh);
+      testBankStatus.delete(tool.id);
+    } catch (err) {
+      testBankStatus.set(tool.id, `Couldn't read that file: ${err.message}`);
+    }
+    rerender();
+  });
+  const uploadBtn = document.createElement("button");
+  uploadBtn.type = "button";
+  uploadBtn.className = "btn btn-ghost";
+  uploadBtn.textContent = "Upload CSV / Excel";
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  buttons.append(fileInput, uploadBtn);
+  toolbar.appendChild(buttons);
+  container.appendChild(toolbar);
+
+  if (state) container.appendChild(buildTestBankImportPanel(tool, state, rerender));
+  container.appendChild(buildTestBankTable(tool, rerender));
+}
+
+/** The "match your file's columns" step shown right after a file is chosen. */
+function buildTestBankImportPanel(tool, state, rerender) {
+  const headers = testBankHeaders(state);
+  const dataRows = testBankDataRows(state);
+
+  const panel = document.createElement("div");
+  panel.className = "mapping-panel";
+  const heading = document.createElement("h3");
+  heading.textContent = "Match your file's columns";
+  panel.appendChild(heading);
+  const info = document.createElement("p");
+  info.className = "hint";
+  info.textContent = `${state.fileName} — ${dataRows.length} row(s) below the header row. Choose which column holds each thing below.`;
+  panel.appendChild(info);
+
+  const addRow = (labelText, control) => {
+    const row = document.createElement("div");
+    row.className = "mapping-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    row.append(label, control);
+    panel.appendChild(row);
+  };
+
+  const nameInput = document.createElement("input");
+  nameInput.type = "text";
+  nameInput.value = state.name;
+  nameInput.addEventListener("input", () => {
+    state.name = nameInput.value;
+  });
+  addRow("Test / quiz name", nameInput);
+
+  const maxInput = document.createElement("input");
+  maxInput.type = "text";
+  maxInput.inputMode = "decimal";
+  maxInput.className = "point-value-input";
+  maxInput.placeholder = "Optional";
+  maxInput.title = "The highest possible score. Leave blank if you don't want scores scaled.";
+  maxInput.value = state.maxPoints;
+  maxInput.addEventListener("input", () => {
+    state.maxPoints = maxInput.value;
+  });
+  addRow("Maximum score", maxInput);
+
+  const headerRowInput = document.createElement("input");
+  headerRowInput.type = "text";
+  headerRowInput.inputMode = "numeric";
+  headerRowInput.className = "point-value-input";
+  headerRowInput.value = state.headerRow;
+  headerRowInput.title = "The row number that holds the column headings; rows above it are ignored";
+  headerRowInput.addEventListener("change", () => {
+    state.headerRow = Math.max(1, Math.min(state.rawRows.length - 1, Math.round(Number(headerRowInput.value) || 1)));
+    applyTestBankGuess(state);
+    rerender();
+  });
+  addRow("Header row number", headerRowInput);
+
+  const makeSelect = (selected, noneLabel, onChange) => {
+    const select = document.createElement("select");
+    const none = document.createElement("option");
+    none.value = "-1";
+    none.textContent = noneLabel;
+    select.appendChild(none);
+    headers.forEach((header, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = header || `Column ${idx + 1}`;
+      select.appendChild(opt);
+    });
+    select.value = String(selected);
+    select.addEventListener("change", () => onChange(Number(select.value)));
+    return select;
+  };
+  addRow("Student name column", makeSelect(state.nameCol, "(not in this file)", (v) => (state.nameCol = v)));
+  addRow("School ID column", makeSelect(state.idCol, "(not in this file)", (v) => (state.idCol = v)));
+  addRow("Score column", makeSelect(state.scoreCol, "(choose a column)", (v) => (state.scoreCol = v)));
+
+  const buttons = document.createElement("div");
+  buttons.className = "mapping-buttons";
+
+  const importBtn = document.createElement("button");
+  importBtn.type = "button";
+  importBtn.className = "btn btn-primary";
+  importBtn.textContent = "Import & Match";
+  importBtn.addEventListener("click", () => {
+    if (state.scoreCol < 0) {
+      alert("Choose which column holds the scores.");
+      return;
+    }
+    if (state.nameCol < 0 && state.idCol < 0) {
+      alert("Choose a student name column, a School ID column, or both, so students can be matched.");
+      return;
+    }
+
+    const rows = [];
+    let skipped = 0;
+    dataRows.forEach((row) => {
+      const name = state.nameCol >= 0 ? String(row[state.nameCol] ?? "").trim() : "";
+      const schoolId = state.idCol >= 0 ? String(row[state.idCol] ?? "").trim() : "";
+      const rawScore = String(row[state.scoreCol] ?? "").trim();
+      const score = Number(rawScore);
+      if ((!name && !schoolId) || rawScore === "" || Number.isNaN(score)) {
+        skipped++;
+        return;
+      }
+      rows.push({ name, schoolId, score: String(score) });
+    });
+    if (rows.length === 0) {
+      alert("No usable rows were found — check the header row number and the column choices.");
+      return;
+    }
+
+    try {
+      const test = ScoringModule.addTest(tool.id, {
+        name: state.name,
+        maxPoints: state.maxPoints,
+        rows,
+        sourceFile: state.fileName,
+      });
+      const matched = Object.keys(test.scores).length;
+      testBankStatus.set(
+        tool.id,
+        `Imported "${test.name}": ${matched} matched, ${test.unmatched.length} not matched` +
+          (skipped > 0 ? `, ${skipped} skipped (blank or non-numeric score)` : "") +
+          ". Click Save Scoring to store it."
+      );
+      testBankImports.delete(tool.id);
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    rerender();
+  });
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "btn btn-ghost";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => {
+    testBankImports.delete(tool.id);
+    rerender();
+  });
+
+  buttons.append(importBtn, cancelBtn);
+  panel.appendChild(buttons);
+  return panel;
+}
+
+/** The list of tests/quizzes in this bank, each with rename, maximum, match counts, and details/re-match/delete. */
+function buildTestBankTable(tool, rerender) {
+  const tests = ScoringModule.testBankTests(tool.id);
+  const expanded = testBankExpanded.get(tool.id) || new Set();
+  testBankExpanded.set(tool.id, expanded);
+
+  const table = document.createElement("table");
+  table.className = "roster-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Test / Quiz", "Max score", "Matched", "Not matched", "File", ""].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  if (tests.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "hint";
+    td.textContent = 'No tests or quizzes yet — click "Upload CSV / Excel" above.';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  tests.forEach((test) => {
+    const tr = document.createElement("tr");
+
+    const nameTd = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = test.name;
+    nameInput.addEventListener("change", () => {
+      ScoringModule.renameTest(tool.id, test.id, nameInput.value);
+      rerender();
+    });
+    nameTd.appendChild(nameInput);
+    tr.appendChild(nameTd);
+
+    const maxTd = document.createElement("td");
+    const maxInput = document.createElement("input");
+    maxInput.type = "text";
+    maxInput.inputMode = "decimal";
+    maxInput.placeholder = "—";
+    maxInput.title = "Highest possible score. When set, scores pulled into an item are scaled to that item's own points.";
+    maxInput.value = test.maxPoints || "";
+    maxInput.addEventListener("change", () => {
+      ScoringModule.setTestMaxPoints(tool.id, test.id, maxInput.value);
+      rerender();
+    });
+    maxTd.appendChild(maxInput);
+    tr.appendChild(maxTd);
+
+    const matchedTd = document.createElement("td");
+    matchedTd.textContent = `${Object.keys(test.scores).length} / ${RosterModule.students.length}`;
+    tr.appendChild(matchedTd);
+
+    const unmatchedTd = document.createElement("td");
+    unmatchedTd.textContent = String(test.unmatched.length);
+    tr.appendChild(unmatchedTd);
+
+    const fileTd = document.createElement("td");
+    fileTd.className = "hint";
+    fileTd.textContent = test.sourceFile;
+    tr.appendChild(fileTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "panel-toolbar-buttons";
+
+    const detailsBtn = document.createElement("button");
+    detailsBtn.type = "button";
+    detailsBtn.className = "btn btn-ghost btn-small";
+    detailsBtn.textContent = expanded.has(test.id) ? "Hide" : "Details";
+    detailsBtn.addEventListener("click", () => {
+      if (expanded.has(test.id)) expanded.delete(test.id);
+      else expanded.add(test.id);
+      rerender();
+    });
+    actionsTd.appendChild(detailsBtn);
+
+    const rematchBtn = document.createElement("button");
+    rematchBtn.type = "button";
+    rematchBtn.className = "btn btn-ghost btn-small";
+    rematchBtn.textContent = "Re-match";
+    rematchBtn.title = "Match the file's rows to the roster again (e.g. after adding students or fixing IDs)";
+    rematchBtn.addEventListener("click", () => {
+      ScoringModule.rematchTest(tool.id, test.id);
+      rerender();
+    });
+    actionsTd.appendChild(rematchBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-ghost btn-small";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => {
+      if (!confirm(`Delete "${test.name}"? Items and Progress Tracker columns pulling from it will lose those scores.`)) return;
+      ScoringModule.removeTest(tool.id, test.id);
+      expanded.delete(test.id);
+      rerender();
+    });
+    actionsTd.appendChild(deleteBtn);
+
+    tr.appendChild(actionsTd);
+    tbody.appendChild(tr);
+
+    if (expanded.has(test.id)) {
+      const detailTr = document.createElement("tr");
+      const detailTd = document.createElement("td");
+      detailTd.colSpan = 6;
+
+      const scoreHeading = document.createElement("p");
+      scoreHeading.innerHTML = "<strong>Matched students</strong>";
+      detailTd.appendChild(scoreHeading);
+      const scoreList = document.createElement("ul");
+      scoreList.className = "consultation-item-list";
+      RosterModule.students.forEach((student) => {
+        const li = document.createElement("li");
+        const raw = test.scores[student.id];
+        li.textContent = `#${student.classNumber || "—"} ${student.name || "(unnamed)"}: ${raw === undefined ? "—" : raw}`;
+        scoreList.appendChild(li);
+      });
+      detailTd.appendChild(scoreList);
+
+      if (test.unmatched.length > 0) {
+        const unmatchedHeading = document.createElement("p");
+        unmatchedHeading.innerHTML = "<strong>Rows that matched no one on the roster</strong>";
+        detailTd.appendChild(unmatchedHeading);
+        const unmatchedList = document.createElement("ul");
+        unmatchedList.className = "consultation-item-list";
+        test.unmatched.forEach((row) => {
+          const li = document.createElement("li");
+          li.className = "recall-unknown-id";
+          li.textContent = `${[row.name, row.schoolId].filter(Boolean).join(" · ") || "(no name or ID)"}: ${row.score}`;
+          unmatchedList.appendChild(li);
+        });
+        detailTd.appendChild(unmatchedList);
+      }
+
+      detailTr.appendChild(detailTd);
+      tbody.appendChild(detailTr);
+    }
+  });
+
+  table.appendChild(tbody);
+  return table;
+}
+
+/** A dropdown listing every test/quiz in every Test & Quiz Bank (value "bankToolId|testId"); `selected` is { toolId, testId }. Used by Progress Tracker columns. */
+function buildTestSourceSelect(selected, onChange) {
+  const select = document.createElement("select");
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "— choose a test/quiz —";
+  select.appendChild(blank);
+
+  const banks = ScoringModule.tools.filter((t) => t.type === "testbank");
+  banks.forEach((bank) => {
+    ScoringModule.testBankTests(bank.id).forEach((test) => {
+      const opt = document.createElement("option");
+      opt.value = `${bank.id}|${test.id}`;
+      opt.textContent = banks.length > 1 ? `${bank.name}: ${test.name}` : test.name;
+      if (selected && selected.toolId === bank.id && selected.testId === test.id) opt.selected = true;
+      select.appendChild(opt);
+    });
+  });
+
+  select.addEventListener("change", () => {
+    const [toolId, testId] = select.value ? select.value.split("|") : ["", ""];
+    onChange(toolId, testId);
+  });
+  return select;
 }
 
 // ===== Report Card =====
