@@ -606,6 +606,14 @@ const ScoringModule = {
     if (!cfg.totalColumn || typeof cfg.totalColumn !== "object") cfg.totalColumn = {};
     if (cfg.totalColumn.mode !== "max") cfg.totalColumn.mode = "raw";
     if (typeof cfg.totalColumn.maxPoints !== "number") cfg.totalColumn.maxPoints = 0;
+
+    // Settings for the Templates page (score-sheet CSVs).
+    if (!cfg.templateSettings || typeof cfg.templateSettings !== "object") cfg.templateSettings = {};
+    const ts = cfg.templateSettings;
+    if (typeof ts.audienceInstructions !== "string") ts.audienceInstructions = "";
+    if (typeof ts.audienceComments !== "boolean") ts.audienceComments = true;
+    if (typeof ts.peerInstructions !== "string") ts.peerInstructions = "";
+    ts.peerHighestScore = Math.max(1, Math.min(10, Math.round(Number(ts.peerHighestScore) || 10)));
     return cfg;
   },
 
@@ -742,6 +750,7 @@ const ScoringModule = {
         columns.push({
           entryId: entry.id,
           kind,
+          text: rubric.text || "(untitled rubric)",
           label: `${kind === "teacher" ? "Teacher" : "Audience"}: ${rubric.text || "(untitled rubric)"}`,
           points: entry.points || 0,
         });
@@ -787,6 +796,116 @@ const ScoringModule = {
       if (raw !== undefined && !Number.isNaN(num)) sum += num;
     });
     return sum;
+  },
+
+  // ----- Presentation Calc: score-sheet templates (CSV) -----
+
+  /**
+   * Builds the rows (arrays of three cells: columns A, B, C) of one of
+   * three score-sheet CSV templates: kind "teacher", "audience", or
+   * "peer". Row/column positions follow the layout described for the
+   * Templates page:
+   *
+   * Teacher / Audience — per group: "Group N" in A (first group at A3),
+   *   a 0 in B on the next row, then each active rubric of that kind: its
+   *   text in A and its scores, highest to 0, down column B (the first
+   *   rubric's scores begin two rows below it, later ones one row below
+   *   — e.g. A5 with B7:B17, then A21 with B22:B32). Next comes
+   *   "Comments" in A with "short" in C, and the next group follows.
+   *   After the last group: "Global Comments" / "short". (Audience: A1
+   *   holds the instructions, and turning Comments off simply leaves out
+   *   every "Comments"/"Global Comments" and its "short".)
+   * Peer — A1 holds the instructions; per group: "Group N" in A (first
+   *   at A3), then each student in the group (by class number) in A with
+   *   scores from the highest allowed score down to 0 in B starting one
+   *   row below the name.
+   * Each element after the first starts 4 rows after the previous one's
+   * last row. Throws a readable Error if there's nothing to build from.
+   */
+  buildPresentationTemplateRows(toolId, kind) {
+    const cfg = this.getPresentationConfig(toolId);
+    if (!cfg) throw new Error("That Presentation Calc no longer exists.");
+    const settings = cfg.templateSettings;
+
+    const groups = this.presentationGroups(toolId);
+    if (groups.length === 0) {
+      throw new Error('No groups yet — open "Student Groups" and import a seating arrangement that has Group Numbers set.');
+    }
+
+    const rows = [];
+    const put = (row, col, value) => {
+      while (rows.length < row) rows.push(["", "", ""]);
+      rows[row - 1][col] = value; // col 0 = A, 1 = B, 2 = C
+    };
+
+    if (kind === "peer") {
+      const highest = settings.peerHighestScore;
+      const custom = settings.peerInstructions.trim();
+      put(
+        1,
+        0,
+        custom ||
+          `Rate each member in your group, including yourself. If a member did a good job and worked hard, rate them a ${highest}. If they didn't work hard, give them a 0. Only the teacher can see your answer.`
+      );
+
+      let row = 3;
+      groups.forEach((group) => {
+        put(row, 0, `Group ${group}`);
+        const members = cfg.roster
+          .filter((entry) => entry.group === group)
+          .sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
+        let studentRow = row + 1;
+        members.forEach((entry) => {
+          put(studentRow, 0, entry.name || (entry.classNumber ? `#${entry.classNumber}` : "(unnamed)"));
+          for (let i = 0; i <= highest; i++) put(studentRow + 1 + i, 1, highest - i);
+          studentRow = studentRow + 1 + highest + 4; // last score row + 4
+        });
+        row = studentRow;
+      });
+      return rows;
+    }
+
+    const isAudience = kind === "audience";
+    const columns = this.presentationColumns(toolId).filter((c) => c.kind === (isAudience ? "audience" : "teacher"));
+    if (columns.length === 0) {
+      throw new Error(
+        `No active ${isAudience ? "Audience" : "Teacher"} rubrics yet — open "Rubrics" and activate at least one with a rubric chosen.`
+      );
+    }
+    const commentsOn = isAudience ? settings.audienceComments : true;
+
+    if (isAudience) {
+      const custom = settings.audienceInstructions.trim();
+      put(
+        1,
+        0,
+        custom ||
+          "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer."
+      );
+    }
+
+    let row = 3;
+    groups.forEach((group) => {
+      put(row, 0, `Group ${group}`);
+      put(row + 1, 1, 0);
+      let elementRow = row + 2; // where the next rubric (or Comments) goes
+      columns.forEach((col, index) => {
+        put(elementRow, 0, col.text);
+        const scoreStart = index === 0 ? elementRow + 2 : elementRow + 1;
+        for (let i = 0; i <= col.points; i++) put(scoreStart + i, 1, col.points - i);
+        elementRow = scoreStart + col.points + 4; // last score row + 4
+      });
+      if (commentsOn) {
+        put(elementRow, 0, "Comments");
+        put(elementRow, 2, "short");
+      }
+      row = elementRow + 4;
+    });
+    if (commentsOn) {
+      put(row, 0, "Global Comments");
+      put(row, 2, "short");
+    }
+    return rows;
   },
 
   /** A student's contribution: their group's Total Score (group taken from the imported roster snapshot). Null if they aren't in the snapshot or have no group. */

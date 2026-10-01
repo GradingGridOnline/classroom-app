@@ -3320,7 +3320,7 @@ function buildTableTotalColumnBlock(tool, cfg, container) {
 // Teacher / Audience rubrics that become the score columns). Everything
 // is stored inside the tool's config and saved with "Save Scoring".
 
-const presentationToolPage = new Map(); // toolId -> "scores" | "groups" | "rubrics"
+const presentationToolPage = new Map(); // toolId -> "scores" | "groups" | "rubrics" | "templates"
 
 function renderScoringToolPresentationView(tool, container) {
   const cfg = ScoringModule.getPresentationConfig(tool.id);
@@ -3333,6 +3333,7 @@ function renderScoringToolPresentationView(tool, container) {
     ["scores", "Scores"],
     ["groups", "Student Groups"],
     ["rubrics", "Rubrics"],
+    ["templates", "Templates"],
   ].forEach(([id, label]) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -3348,6 +3349,7 @@ function renderScoringToolPresentationView(tool, container) {
 
   if (page === "groups") container.appendChild(buildPresentationGroupsPage(tool, cfg, container));
   else if (page === "rubrics") container.appendChild(buildPresentationRubricsPage(tool, cfg, container));
+  else if (page === "templates") container.appendChild(buildPresentationTemplatesPage(tool, cfg, container));
   else container.appendChild(buildPresentationScoresPage(tool, cfg, container));
 }
 
@@ -4187,6 +4189,136 @@ function buildTestSourceSelect(selected, onChange) {
     onChange(toolId, testId);
   });
   return select;
+}
+
+// ----- Templates page (Presentation Calc) -----
+// Three buttons that each download a CSV score sheet built from this
+// tool's groups, active rubrics, and the settings below. The settings
+// (instructions, comments on/off, highest peer score) are saved with
+// "Save Scoring".
+
+const DEFAULT_AUDIENCE_INSTRUCTIONS =
+  "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer.";
+
+function downloadPresentationTemplate(tool, kind, label, status) {
+  try {
+    const rows = ScoringModule.buildPresentationTemplateRows(tool.id, kind);
+    const csv = XLSX.utils.sheet_to_csv(XLSX.utils.aoa_to_sheet(rows));
+    const course = CoursesModule.find(RosterModule.currentCourseId);
+    const safeName = (course ? course.name : "Course").replace(/[\\/:*?"<>|]/g, "").trim() || "Course";
+    downloadCsv(csv, `${safeName} ${label}.csv`);
+    status.textContent = `Downloaded "${label}".`;
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+function buildPresentationTemplatesPage(tool, cfg, container) {
+  const page = document.createElement("div");
+  const settings = cfg.templateSettings;
+
+  const status = document.createElement("p");
+  status.className = "result";
+  page.appendChild(status);
+
+  const addSection = (title, hintText) => {
+    const block = document.createElement("div");
+    block.className = "attendance-settings-block";
+    const heading = document.createElement("h4");
+    heading.textContent = title;
+    block.appendChild(heading);
+    if (hintText) {
+      const hint = document.createElement("p");
+      hint.className = "hint";
+      hint.textContent = hintText;
+      block.appendChild(hint);
+    }
+    page.appendChild(block);
+    return block;
+  };
+
+  const makeTextarea = (value, placeholder, onInput) => {
+    const textarea = document.createElement("textarea");
+    textarea.rows = 3;
+    textarea.placeholder = placeholder;
+    textarea.value = value;
+    textarea.addEventListener("input", () => onInput(textarea.value));
+    return textarea;
+  };
+
+  const makeDownloadButton = (label, kind) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-primary";
+    btn.textContent = label;
+    btn.style.marginTop = "10px";
+    btn.addEventListener("click", () => downloadPresentationTemplate(tool, kind, label, status));
+    return btn;
+  };
+
+  // ----- Teacher Score Sheet -----
+  const teacher = addSection(
+    "Teacher Score Sheet",
+    "One section per group, with each Active Teacher Rubric and its possible scores, then Comments. Global Comments at the end."
+  );
+  teacher.appendChild(makeDownloadButton("Teacher Score Sheet", "teacher"));
+
+  // ----- Audience Score Sheet -----
+  const audience = addSection(
+    "Audience Score Sheet",
+    "Same layout, using the Active Audience Rubrics, with instructions in A1."
+  );
+  audience.appendChild(
+    makeTextarea(settings.audienceInstructions, `Instructions (leave blank for: "${DEFAULT_AUDIENCE_INSTRUCTIONS}")`, (value) => {
+      settings.audienceInstructions = value;
+    })
+  );
+  const commentsToggle = document.createElement("button");
+  commentsToggle.type = "button";
+  commentsToggle.className = "btn btn-ghost btn-small";
+  commentsToggle.style.marginTop = "8px";
+  commentsToggle.textContent = settings.audienceComments ? "Comments On" : "Comments Off";
+  commentsToggle.title = "Whether audience members can leave comments (turning this off leaves out the Comments and Global Comments rows)";
+  commentsToggle.addEventListener("click", () => {
+    settings.audienceComments = !settings.audienceComments;
+    renderScoringToolView(tool, container);
+  });
+  audience.appendChild(commentsToggle);
+  audience.appendChild(document.createElement("br"));
+  audience.appendChild(makeDownloadButton("Audience Score Sheet", "audience"));
+
+  // ----- Peer Evaluation Score Sheet -----
+  const peer = addSection(
+    "Peer Evaluation Score Sheet",
+    "One section per group, listing each student (by class number) with scores from the highest score down to 0."
+  );
+  const peerRow = document.createElement("div");
+  peerRow.className = "mapping-row";
+  const peerInstructions = makeTextarea(
+    settings.peerInstructions,
+    "Instructions (leave blank for the standard instructions, which use the highest score below)",
+    (value) => {
+      settings.peerInstructions = value;
+    }
+  );
+  peerRow.appendChild(peerInstructions);
+  const highestLabel = document.createElement("label");
+  highestLabel.textContent = "Highest score (1–10)";
+  highestLabel.style.width = "auto";
+  const highestInput = document.createElement("input");
+  highestInput.type = "text";
+  highestInput.inputMode = "numeric";
+  highestInput.className = "point-value-input";
+  highestInput.value = settings.peerHighestScore;
+  highestInput.addEventListener("change", () => {
+    settings.peerHighestScore = highestInput.value;
+    renderScoringToolView(tool, container); // re-normalizes to 1-10
+  });
+  peerRow.append(highestLabel, highestInput);
+  peer.appendChild(peerRow);
+  peer.appendChild(makeDownloadButton("Peer Evaluation Score Sheet", "peer"));
+
+  return page;
 }
 
 // ===== Report Card =====
