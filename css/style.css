@@ -598,6 +598,30 @@ textarea {
   text-shadow: 0 0 6px rgba(255, 46, 196, 0.5);
 }
 
+/* ----- Main course tabs (Roster, Seating Chart, Scoring, ...) -----
+   Bigger tabs on a full-width band of their own: the band is the page
+   tone (--paper) darkened a little, so it reads as separate from both the
+   heading above and the content below in every theme, and it bleeds out
+   to the edges of the card (the card has 28px of padding). A thick
+   accent line underneath marks the divide. Sub-tab rows elsewhere keep
+   the plain .tab-row look. */
+.main-tab-row {
+  gap: 4px;
+  margin: 0 -28px 26px;
+  padding: 0 28px;
+  background: linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.1)), var(--paper);
+  border-top: 1px solid var(--line);
+  border-bottom: 3px solid var(--green);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+}
+
+.main-tab-row .tab-btn {
+  font-size: 1.2rem;
+  padding: 18px 4px 14px;
+  margin-right: 28px;
+  border-bottom-width: 4px;
+}
+
 .panel-toolbar {
   display: flex;
   flex-wrap: wrap;
