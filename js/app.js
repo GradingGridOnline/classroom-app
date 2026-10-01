@@ -2178,7 +2178,10 @@ function buildAttendanceFooterRow() {
     exportBtn.addEventListener("click", () => {
       try {
         const csv = AttendanceModule.buildExportCsv(session.id, RosterModule.students);
-        downloadCsv(csv, `class-${session.number}-attendance.csv`);
+        const course = CoursesModule.find(RosterModule.currentCourseId);
+        // Course name + "Attendance" + class number, with characters that aren't allowed in file names removed.
+        const safeName = (course ? course.name : "Course").replace(/[\\/:*?"<>|]/g, "").trim() || "Course";
+        downloadCsv(csv, `${safeName} Attendance ${session.number}.csv`);
       } catch (err) {
         alert(err.message);
       }
