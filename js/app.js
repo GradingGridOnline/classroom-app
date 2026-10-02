@@ -1274,6 +1274,12 @@ function buildDeskElement(r, c) {
       numEl.textContent = `#${student.classNumber}`;
       nameEl.appendChild(numEl);
     }
+    if (student.pronunciation) {
+      const pronEl = document.createElement("span");
+      pronEl.className = "desk-pronunciation-tag";
+      pronEl.textContent = student.pronunciation;
+      nameEl.appendChild(pronEl);
+    }
     const textEl = document.createElement("span");
     textEl.textContent = student.name || "(unnamed)";
     nameEl.appendChild(textEl);
