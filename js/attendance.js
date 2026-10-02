@@ -17,6 +17,12 @@
 //   - infractionOptions: a freely editable list.
 //   - points / infractionPoints: the point value each participation
 //     type / infraction contributes toward the computed score.
+//   - participationCounts / absenceCounts: how much of a class each
+//     participation type counts as, toward the "Attended" and
+//     "Absences" totals. Stored as the text the user typed (so "1/3"
+//     stays "1/3") — whole numbers, decimals, and fractions all work.
+//     e.g. P = 1 attended / 0 absent; Late = 1/2 attended; a custom
+//     "Very late" = 0 attended / 1/3 absent.
 //   - termClassCount: how many session columns exist.
 
 const FIXED_PARTICIPATION_TYPES = ["P", "A"];
@@ -37,6 +43,8 @@ function defaultAttendanceSettings() {
     participationTypes: ["P", "A", "L", "E"],
     infractionOptions: ["Sleeping", "Phone use", "Talking too much"],
     points: { P: 1, A: 0, L: 0.5, E: 1 },
+    participationCounts: { P: "1", A: "0", L: "1", E: "1" },
+    absenceCounts: { P: "0", A: "1", L: "0", E: "0" },
     infractionPoints: { Sleeping: -0.2, "Phone use": -0.2, "Talking too much": -0.2 },
     termClassCount: 0,
     absenceLimit: null,
@@ -69,6 +77,8 @@ const AttendanceModule = {
         participationTypes: this._withFixedTypes(saved.participationTypes || defaults.participationTypes),
         infractionOptions: saved.infractionOptions || defaults.infractionOptions,
         points: { ...defaults.points, ...saved.points },
+        participationCounts: { ...defaults.participationCounts, ...saved.participationCounts },
+        absenceCounts: { ...defaults.absenceCounts, ...saved.absenceCounts },
         infractionPoints: { ...defaults.infractionPoints, ...saved.infractionPoints },
         termClassCount:
           typeof saved.termClassCount === "number" ? saved.termClassCount : this.sessions.length,
@@ -170,15 +180,62 @@ const AttendanceModule = {
     const custom = list.map((s) => s.trim()).filter((s) => s && !FIXED_PARTICIPATION_TYPES.includes(s));
     const cleaned = this._withFixedTypes(custom);
     const newPoints = {};
+    const newAttended = {};
+    const newAbsent = {};
     cleaned.forEach((t) => {
       newPoints[t] = this.settings.points[t] ?? 1;
+      newAttended[t] = this.settings.participationCounts[t] ?? "1"; // a new type counts as a full class...
+      newAbsent[t] = this.settings.absenceCounts[t] ?? "0"; // ...and no absence, until changed
     });
     this.settings.participationTypes = cleaned;
     this.settings.points = newPoints;
+    this.settings.participationCounts = newAttended;
+    this.settings.absenceCounts = newAbsent;
   },
 
   setPointValue(type, value) {
     this.settings.points[type] = Number(value) || 0;
+  },
+
+  /**
+   * Turns text like "1", "0.5", ".5", or "1/3" into a number (0 or
+   * more), or null if it isn't one. Blank counts as 0.
+   */
+  parseCount(text) {
+    const trimmed = String(text == null ? "" : text).trim();
+    if (trimmed === "") return 0;
+    const fraction = /^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/.exec(trimmed);
+    if (fraction) {
+      const denominator = Number(fraction[2]);
+      return denominator > 0 ? Number(fraction[1]) / denominator : null;
+    }
+    const num = Number(trimmed);
+    return Number.isNaN(num) || num < 0 ? null : num;
+  },
+
+  /** How much of a class a code counts as: which is "participation" (toward Attended) or "absence" (toward Absences). */
+  countFor(code, which) {
+    const map = which === "absence" ? this.settings.absenceCounts : this.settings.participationCounts;
+    const fallback = which === "absence" ? 0 : 1;
+    const parsed = this.parseCount(map[code]);
+    return parsed === null ? fallback : parsed;
+  },
+
+  _setCount(map, type, value) {
+    if (this.parseCount(value) === null) {
+      throw new Error('Enter a number, a decimal, or a fraction like 1/3 (0 or more).');
+    }
+    map[type] = String(value == null ? "" : value).trim() || "0";
+  },
+
+  /** How much of a class this type counts toward "Attended" (e.g. "1", "0.5", "1/2"). */
+  setParticipationCount(type, value) {
+    this._setCount(this.settings.participationCounts, type, value);
+  },
+
+  /** How much of an absence this type counts toward "Absences" (e.g. "0", "1", "1/3"). */
+  setAbsenceCount(type, value) {
+    this._setCount(this.settings.absenceCounts, type, value);
   },
 
   // ----- Settings: infractions -----
@@ -318,8 +375,8 @@ const AttendanceModule = {
     this.sessions.forEach((s) => {
       const rec = this.getRecord(studentId, s.id);
       if (!rec.code) return; // not yet recorded — excluded from the average
-      if (rec.code === "A") absences++;
-      else attended++;
+      attended += this.countFor(rec.code, "participation");
+      absences += this.countFor(rec.code, "absence");
 
       // "E" (Exempt) is excluded entirely from the points calculation —
       // same convention as Scoring's "E" — so it neither helps nor hurts
@@ -342,8 +399,8 @@ const AttendanceModule = {
     return {
       percent: possiblePoints > 0 ? Math.round((totalPoints / possiblePoints) * 100) : null,
       points: counted > 0 ? Math.round(totalPoints * 10) / 10 : null,
-      attended,
-      absences,
+      attended: Math.round(attended * 100) / 100,
+      absences: Math.round(absences * 100) / 100,
     };
   },
 };

@@ -1850,8 +1850,11 @@ function renderAttendanceSettings() {
   if (!attendanceSettingsEditing) {
     const lines = [
       `Classes in term: ${AttendanceModule.settings.termClassCount}`,
-      `Participation types: ${AttendanceModule.settings.participationTypes
-        .map((t) => `${t} (${AttendanceModule.settings.points[t]})`)
+      `Participation types (points · attended · absent): ${AttendanceModule.settings.participationTypes
+        .map(
+          (t) =>
+            `${t} (${AttendanceModule.settings.points[t]} · ${AttendanceModule.settings.participationCounts[t] ?? "1"} · ${AttendanceModule.settings.absenceCounts[t] ?? "0"})`
+        )
         .join(", ")}`,
       `Infractions: ${AttendanceModule.settings.infractionOptions
         .map((o) => `${o} (${AttendanceModule.settings.infractionPoints[o]})`)
@@ -1917,8 +1920,37 @@ function renderAttendanceSettings() {
   el.attendanceSettingsBody.appendChild(
     buildEditableTypeList({
       title: "Participation types",
+      hint: 'Points count toward the attendance score. "Attended" and "Absent" say how much of a class (or absence) each type counts as in the Attended and Absences totals — whole numbers, decimals, or fractions all work (e.g. Late: attended 1/2; Very late: absent 1/3).',
       items: AttendanceModule.settings.participationTypes,
       points: AttendanceModule.settings.points,
+      extraColumns: [
+        {
+          label: "Attended",
+          title: "How much of a class this counts as toward Attended (e.g. 1, 0.5, 1/2)",
+          getValue: (item) => AttendanceModule.settings.participationCounts[item] ?? "1",
+          onChange: async (item, value) => {
+            try {
+              AttendanceModule.setParticipationCount(item, value);
+            } catch (err) {
+              alert(err.message);
+            }
+            await saveAttendanceThen(renderAttendance);
+          },
+        },
+        {
+          label: "Absent",
+          title: "How much of an absence this counts as toward Absences (e.g. 0, 1, 1/3)",
+          getValue: (item) => AttendanceModule.settings.absenceCounts[item] ?? "0",
+          onChange: async (item, value) => {
+            try {
+              AttendanceModule.setAbsenceCount(item, value);
+            } catch (err) {
+              alert(err.message);
+            }
+            await saveAttendanceThen(renderAttendance);
+          },
+        },
+      ],
       fixedItems: ["P", "A"],
       addPlaceholder: "New participation type (e.g. Sick)",
       onRename: async (list) => {
@@ -1989,8 +2021,35 @@ function buildEditableTypeList(config) {
   heading.textContent = config.title;
   wrap.appendChild(heading);
 
+  if (config.hint) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = config.hint;
+    wrap.appendChild(hint);
+  }
+
   const list = document.createElement("ul");
   list.className = "infraction-edit-list";
+
+  // Column headings, shown only when there are extra columns to label.
+  if (config.extraColumns && config.extraColumns.length > 0) {
+    const headerLi = document.createElement("li");
+    headerLi.className = "hint";
+    const spacer = document.createElement("span");
+    spacer.style.flex = "1";
+    spacer.style.maxWidth = "260px";
+    spacer.textContent = "Type";
+    headerLi.appendChild(spacer);
+    [{ label: "Points" }, ...config.extraColumns].forEach((col) => {
+      const span = document.createElement("span");
+      span.style.flex = "0 0 70px";
+      span.style.fontSize = "0.75rem";
+      span.textContent = col.label;
+      if (col.title) span.title = col.title;
+      headerLi.appendChild(span);
+    });
+    list.appendChild(headerLi);
+  }
 
   config.items.forEach((item) => {
     const li = document.createElement("li");
@@ -2022,6 +2081,19 @@ function buildEditableTypeList(config) {
       await config.onPointChange(item, pointInput.value);
     });
     li.appendChild(pointInput);
+
+    (config.extraColumns || []).forEach((col) => {
+      const extraInput = document.createElement("input");
+      extraInput.type = "text";
+      extraInput.inputMode = "decimal";
+      extraInput.className = "point-value-input";
+      extraInput.value = col.getValue(item);
+      extraInput.title = col.title || "";
+      extraInput.addEventListener("change", async () => {
+        await col.onChange(item, extraInput.value);
+      });
+      li.appendChild(extraInput);
+    });
 
     if (!isFixed) {
       const removeBtn = document.createElement("button");
@@ -2162,11 +2234,18 @@ function downloadCsv(content, filename) {
 function buildAttendanceFooterRow() {
   const tr = document.createElement("tr");
 
+  // The label sits under the (frozen) names column only. The columns
+  // between it and the class sessions — Notes, Score, Attended, Absences —
+  // get a plain filler cell that scrolls away with them, so the frozen
+  // label never covers the Export buttons as they slide left.
   const labelTd = document.createElement("td");
-  labelTd.colSpan = 5;
   labelTd.className = "attendance-footer-label";
   labelTd.textContent = "Export to LMS:";
   tr.appendChild(labelTd);
+
+  const fillerTd = document.createElement("td");
+  fillerTd.colSpan = 4;
+  tr.appendChild(fillerTd);
 
   AttendanceModule.sessions.forEach((session) => {
     const td = document.createElement("td");
