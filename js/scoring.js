@@ -1016,10 +1016,16 @@ const ScoringModule = {
   //                                                         group on one active rubric
   //     comments: [[respondentKey, group, text]],           teacher/audience; group 0 = global comment
   //     ratings:  [[raterKey, studentId, value]] }          peer: one student's rating of another
-  // respondentKey is the respondent's School ID from the file (or a
-  // unique "#..." key when the file has no ID column). If the same
-  // respondent appears more than once for the same thing, the latest
-  // upload/row wins when scores are combined.
+  // respondentKey is the value in the file's "name" column: a student's
+  // School ID, or an actual name (a teacher or other non-student), or a
+  // unique "#..." key when that cell is blank. If the same respondent
+  // appears more than once for the same thing, the latest upload/row
+  // wins when scores are combined.
+  // Own-group / self rating rule: when a respondent's value is the School
+  // ID of a student, that student's scores for THEIR OWN group, and their
+  // rating of THEMSELVES in a peer evaluation, are not counted (see
+  // presentationCountedScores / presentationCountedRatings). Other
+  // respondents (a teacher's name, etc.) count for every group.
 
   addPresentationUpload(toolId, projectId, upload) {
     const project = this.getPresentationProject(toolId, projectId);
@@ -1049,11 +1055,48 @@ const ScoringModule = {
     return project.scoreUploads.filter((u) => !kind || u.kind === kind);
   },
 
+  /** The course-roster student whose School ID matches `value` (spacing/full-width differences ignored), or null — which is also how an actual name (a teacher, say) is told apart from a student's ID. */
+  studentBySchoolId(value) {
+    const key = this._matchKey(value);
+    if (!key || String(value).startsWith("#")) return null;
+    const students = (window.RosterModule && window.RosterModule.students) || [];
+    return students.find((s) => this._matchKey(s.schoolId) === key) || null;
+  },
+
+  /** An upload's scores with the ones that must not count taken out: a student's score for their own group (group taken from the project's roster snapshot). Returns { counted, excluded } (excluded is how many were left out). Teacher/audience uploads. */
+  presentationCountedScores(toolId, projectId, upload) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return { counted: [], excluded: 0 };
+    const groupOf = new Map(project.roster.map((e) => [e.studentId, e.group]));
+    const counted = [];
+    let excluded = 0;
+    upload.scores.forEach((record) => {
+      const [respondentKey, group] = record;
+      const student = this.studentBySchoolId(respondentKey);
+      if (student && groupOf.get(student.id) === group) excluded++;
+      else counted.push(record);
+    });
+    return { counted, excluded };
+  },
+
+  /** A peer upload's ratings with self-ratings taken out (a student's rating of themselves). Returns { counted, excluded }. */
+  presentationCountedRatings(upload) {
+    const counted = [];
+    let excluded = 0;
+    upload.ratings.forEach((record) => {
+      const [raterKey, studentId] = record;
+      const rater = this.studentBySchoolId(raterKey);
+      if (rater && rater.id === studentId) excluded++;
+      else counted.push(record);
+    });
+    return { counted, excluded };
+  },
+
   /** Average of uploaded scores per "group|entryId" across every upload of one kind (teacher/audience), as { key: { group, entryId, avg, count } }. */
   presentationSheetAverages(toolId, projectId, kind) {
     const latest = new Map();
     this.presentationUploads(toolId, projectId, kind).forEach((upload) => {
-      upload.scores.forEach(([respondentKey, group, entryId, value]) => {
+      this.presentationCountedScores(toolId, projectId, upload).counted.forEach(([respondentKey, group, entryId, value]) => {
         latest.set(`${respondentKey}|${group}|${entryId}`, { group, entryId, value });
       });
     });
@@ -1097,7 +1140,7 @@ const ScoringModule = {
   presentationPeerAverages(toolId, projectId) {
     const latest = new Map();
     this.presentationUploads(toolId, projectId, "peer").forEach((upload) => {
-      upload.ratings.forEach(([raterKey, studentId, value]) => {
+      this.presentationCountedRatings(upload).counted.forEach(([raterKey, studentId, value]) => {
         latest.set(`${raterKey}|${studentId}`, { studentId, value });
       });
     });

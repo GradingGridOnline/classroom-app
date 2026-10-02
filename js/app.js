@@ -4531,15 +4531,22 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
 //
 // On a project's Scores page, the three score sheets (Teacher, Audience,
 // Peer Evaluation) can be uploaded back as CSV/Excel files once
-// participants have filled them in. Each upload is mapped column by
-// column — which column is the respondent's School ID, which columns are
-// scores (and for which group and rubric), which are comments (for a
-// group, or global), or, for peer evaluations, which column rates which
-// student. Columns are matched automatically from their headings
-// (rubric text, "Group N", "Comment", student names) and can be
-// corrected in the mapping table before importing. The data is stored in
-// the project (saved with "Save Scoring"), can be viewed, and the
-// Teacher/Audience averages can be applied to the Scores grid.
+// participants have filled them in. Nothing needs to be mapped by hand —
+// the file is read automatically:
+//
+//  * The "name" column holds each respondent: a student's School ID, or
+//    an actual name (a teacher, say). Students are matched by School ID.
+//  * Teacher / Audience sheets: the first column whose heading matches
+//    one of the project's active rubrics starts the scores (and, in the
+//    columns after it, the comments) for Group 1. Every time the first
+//    active rubric shows up again, the next group begins (Group 2, ...).
+//    A "Global Comments" column belongs to no group.
+//  * Peer sheets: the rating columns are the ones headed with a student's
+//    name.
+//  * A student's score for their OWN group, and a student's rating of
+//    THEMSELVES, are stored but never counted. Other respondents (such as
+//    a teacher's name) count for every group.
+// Everything is stored in the project and saved with "Save Scoring".
 
 const SCORE_SHEET_LABELS = {
   teacher: "Teacher Scores",
@@ -4547,7 +4554,6 @@ const SCORE_SHEET_LABELS = {
   peer: "Peer Evaluation Scores",
 };
 
-const scoreSheetImports = new Map(); // "toolId|projectId" -> the upload currently being mapped
 const scoreSheetStatus = new Map(); // "toolId|projectId" -> last status message
 const scoreSheetExpanded = new Map(); // "toolId|projectId" -> Set of upload ids whose details are open
 
@@ -4558,45 +4564,64 @@ async function readSpreadsheetRows(file) {
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 }
 
-/** The group number named in a column heading ("Group 3", "グループ3", "3班"), or 0 if none. */
-function groupFromScoreSheetHeader(header) {
-  const text = String(header).normalize("NFKC");
-  const match = /(?:group|グループ|班)\s*(\d+)/i.exec(text) || /(\d+)\s*(?:班|グループ)/.exec(text);
-  return match ? Number(match[1]) : 0;
-}
-
 /**
- * Works out what each column of an uploaded score sheet is, from its
- * heading. Teacher/Audience: School ID, comment (for a group, or
- * global), or score (matched to an active rubric by its text; the group
- * comes from "Group N" in the heading, or — when the headings don't say
- * — from position: the group number advances each time a rubric repeats
- * or a comment column ends a block). Peer: School ID, or a rating
- * column matched to a student by name. Anything else is ignored.
+ * Reads an uploaded score sheet (rows from readSpreadsheetRows) for one
+ * kind — "teacher", "audience" or "peer" — and returns what it holds:
+ * { scores, comments, ratings, respondentCount, blocks, notes }.
+ * Throws a readable Error if the file doesn't look like that kind of
+ * sheet. See the comment at the top of this section for the rules.
  */
-function autoMapScoreSheet(state, tool, project) {
-  const headers = testBankHeaders(state);
+function parseScoreSheet(kind, rawRows, tool, project, uploadId) {
   const norm = (text) => ScoringModule._matchKey(text);
-  const isIdHeader = (h) => /school.?id|student.?id|user.?id|学籍|学生番号|(^|[^a-z])id($|[^a-z])/i.test(h);
+  const isPeer = kind === "peer";
+  const rubrics = isPeer
+    ? []
+    : ScoringModule.presentationColumns(tool.id, project.id).filter((c) => c.kind === kind);
+  const groups = ScoringModule.presentationGroups(tool.id, project.id);
+  const notes = [];
 
-  state.columns = headers.map((header, index) => ({
-    index,
-    header,
-    role: "ignore",
-    group: 0,
-    entryId: "",
-    studentId: "",
-  }));
-  let idFound = false;
+  // ----- Which row holds the headings: the first of the top rows that mentions a rubric / a student -----
+  const wantedKeys = (isPeer ? project.roster.map((e) => norm(e.name)) : rubrics.map((r) => norm(r.text))).filter(Boolean);
+  let headerIndex = 0;
+  for (let i = 0; i < Math.min(10, rawRows.length - 1); i++) {
+    const cells = rawRows[i].map(norm);
+    if (cells.some((cell) => cell && wantedKeys.some((key) => cell.includes(key)))) {
+      headerIndex = i;
+      break;
+    }
+  }
+  const headers = rawRows[headerIndex].map((cell) => String(cell).trim());
+  const dataRows = rawRows
+    .slice(headerIndex + 1)
+    .filter((row) => row.some((cell) => String(cell).trim() !== ""));
 
-  if (state.kind === "peer") {
-    state.columns.forEach((col) => {
-      if (!idFound && isIdHeader(col.header)) {
-        col.role = "id";
-        idFound = true;
-        return;
-      }
-      const headerKey = norm(col.header);
+  // ----- The "name" column (School IDs, or an actual name for a teacher) -----
+  const findHeader = (...patterns) => {
+    for (const pattern of patterns) {
+      const index = headers.findIndex((h) => pattern.test(h.normalize("NFKC")));
+      if (index !== -1) return index;
+    }
+    return -1;
+  };
+  const nameCol = findHeader(
+    /^\s*name\s*$/i,
+    /^\s*(user\s*)?name\b/i,
+    /氏名|名前/,
+    /school\s*id|student\s*id|学籍|学生番号/i,
+    /(^|[^a-z])id($|[^a-z])/i
+  );
+  if (nameCol === -1) {
+    throw new Error('Couldn\'t find the "name" column (the one holding School IDs or names). Its heading should be "name".');
+  }
+
+  // ----- Which columns are scores / comments / ratings -----
+  const columns = [];
+  let blocks = 0;
+
+  if (isPeer) {
+    headers.forEach((header, index) => {
+      if (index === nameCol) return;
+      const headerKey = norm(header);
       let best = null;
       project.roster.forEach((entry) => {
         const key = norm(entry.name);
@@ -4604,74 +4629,93 @@ function autoMapScoreSheet(state, tool, project) {
           best = { key, studentId: entry.studentId };
         }
       });
-      if (best) {
-        col.role = "rating";
-        col.studentId = best.studentId;
-      }
+      if (best) columns.push({ index, role: "rating", studentId: best.studentId });
     });
-    return;
-  }
-
-  const rubrics = ScoringModule.presentationColumns(tool.id, project.id).filter((c) => c.kind === state.kind);
-  const groups = ScoringModule.presentationGroups(tool.id, project.id);
-  const knownGroup = (n) => (groups.includes(n) ? n : 0);
-  let groupIndex = 0;
-  let seen = new Set();
-  const positionalGroup = () => groups[Math.min(groupIndex, groups.length - 1)];
-
-  state.columns.forEach((col) => {
-    const header = col.header;
-    if (!idFound && isIdHeader(header)) {
-      col.role = "id";
-      idFound = true;
-      return;
+    if (columns.length === 0) {
+      throw new Error("No column headings matched the names of students in this project's groups.");
     }
+  } else {
+    const firstEntryId = rubrics[0].entryId;
+    let groupIndex = -1; // which group's block we're in (an index into `groups`)
+    let blockHasFirst = false; // has this block's first-rubric column been seen?
 
-    if (/comment|コメント|感想|意見/i.test(header)) {
-      if (/global|overall|全体|総合/i.test(header)) {
-        col.role = "global";
+    headers.forEach((header, index) => {
+      if (index === nameCol) return;
+      const text = header.normalize("NFKC");
+
+      if (/comment|コメント|感想|意見/i.test(text)) {
+        if (/global|overall|全体|総合/i.test(text)) {
+          columns.push({ index, role: "global", group: 0 });
+        } else if (groupIndex >= 0 && groupIndex < groups.length) {
+          columns.push({ index, role: "comment", group: groups[groupIndex] });
+        }
         return;
       }
-      const named = knownGroup(groupFromScoreSheetHeader(header));
-      col.role = "comment";
-      col.group = named || positionalGroup();
-      if (!named) {
-        groupIndex++; // a comment ends a group's block
-        seen = new Set();
-      }
-      return;
-    }
 
-    const headerKey = norm(header);
-    let best = null;
-    rubrics.forEach((rubric) => {
-      const key = norm(rubric.text);
-      if (key && headerKey.includes(key) && (!best || key.length > best.key.length)) {
-        best = { key, entryId: rubric.entryId };
+      const headerKey = norm(header);
+      let best = null;
+      rubrics.forEach((rubric) => {
+        const key = norm(rubric.text);
+        if (key && headerKey.includes(key) && (!best || key.length > best.key.length)) {
+          best = { key, entryId: rubric.entryId };
+        }
+      });
+      if (!best) return;
+
+      const isFirst = best.entryId === firstEntryId;
+      if (groupIndex === -1) {
+        groupIndex = 0; // the first matching column starts Group 1
+        blockHasFirst = isFirst;
+      } else if (isFirst) {
+        if (blockHasFirst) groupIndex++; // the first rubric again: the next group begins
+        blockHasFirst = true;
+      }
+      blocks = groupIndex + 1;
+      if (groupIndex < groups.length) {
+        columns.push({ index, role: "score", group: groups[groupIndex], entryId: best.entryId });
       }
     });
-    if (!best) return;
 
-    const named = knownGroup(groupFromScoreSheetHeader(header));
-    if (named) {
-      col.group = named;
-    } else {
-      if (seen.has(best.entryId)) {
-        groupIndex++; // the rubric came round again: next group
-        seen = new Set();
-      }
-      col.group = positionalGroup();
-      seen.add(best.entryId);
+    if (!columns.some((c) => c.role === "score")) {
+      throw new Error(
+        `No column headings matched this project's active ${kind === "teacher" ? "Teacher" : "Audience"} rubrics. The headings need to contain the rubric text.`
+      );
     }
-    col.role = "score";
-    col.entryId = best.entryId;
+    if (blocks > groups.length) {
+      notes.push(`the file has ${blocks} group sections but the project has ${groups.length} group(s), so the extra ones were skipped`);
+    } else if (blocks < groups.length) {
+      notes.push(`the file only has ${blocks} group section(s) for ${groups.length} group(s)`);
+    }
+  }
+
+  // ----- Read every response row -----
+  const scores = [];
+  const comments = [];
+  const ratings = [];
+  const cell = (row, index) => String(row[index] ?? "").trim();
+
+  dataRows.forEach((row, i) => {
+    const respondentKey = cell(row, nameCol) || `#${uploadId}-${i}`;
+    columns.forEach((col) => {
+      const raw = cell(row, col.index);
+      if (raw === "") return;
+      if (col.role === "comment" || col.role === "global") {
+        comments.push([respondentKey, col.group, raw]);
+        return;
+      }
+      const value = Number(raw);
+      if (Number.isNaN(value)) return;
+      if (col.role === "rating") ratings.push([respondentKey, col.studentId, value]);
+      else scores.push([respondentKey, col.group, col.entryId, value]);
+    });
   });
+
+  return { scores, comments, ratings, respondentCount: dataRows.length, blocks, notes };
 }
 
 function buildPresentationUploadsSection(tool, project, container) {
   const stateKey = `${tool.id}|${project.id}`;
   const rerender = () => renderScoringToolView(tool, container);
-  const pending = scoreSheetImports.get(stateKey);
 
   const block = document.createElement("div");
   block.className = "attendance-settings-block";
@@ -4690,7 +4734,7 @@ function buildPresentationUploadsSection(tool, project, container) {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "Upload the completed Teacher, Audience, or Peer Evaluation score sheets (CSV or Excel). You'll match each column to a group and rubric (or a student) before importing; scores, comments, and School IDs are stored with this project and saved with Save Scoring.";
+    'Upload the completed score sheets (CSV or Excel) and they are read automatically. The "name" column holds each respondent — a student\'s School ID, or an actual name such as a teacher. For Teacher and Audience sheets, the first column matching an active rubric starts Group 1, and each time the first rubric appears again the next group begins; comments are read the same way. A student\'s score for their own group, and their rating of themselves in a peer evaluation, are never counted.';
   block.appendChild(hint);
 
   const status = document.createElement("p");
@@ -4715,16 +4759,48 @@ function buildPresentationUploadsSection(tool, project, container) {
           throw new Error('Import the groups first (the "Student Groups" subtab).');
         }
         if (kind !== "peer" && !ScoringModule.presentationColumns(tool.id, project.id).some((c) => c.kind === kind)) {
-          throw new Error(`Activate at least one ${kind === "teacher" ? "Teacher" : "Audience"} rubric first (the "Rubrics" subtab) so columns can be matched to rubrics.`);
+          throw new Error(
+            `Activate at least one ${kind === "teacher" ? "Teacher" : "Audience"} rubric first (the "Rubrics" subtab) so the sheet's columns can be recognized.`
+          );
         }
         const rawRows = await readSpreadsheetRows(file);
-        if (rawRows.length < 2) throw new Error("The file needs a header row and at least one row of responses.");
-        const fresh = { kind, fileName: file.name, rawRows, headerRow: 1, columns: [] };
-        autoMapScoreSheet(fresh, tool, project);
-        scoreSheetImports.set(stateKey, fresh);
-        scoreSheetStatus.delete(stateKey);
+        if (rawRows.length < 2) throw new Error("The file needs a heading row and at least one row of responses.");
+
+        const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const parsed = parseScoreSheet(kind, rawRows, tool, project, uploadId);
+        const record = ScoringModule.addPresentationUpload(tool.id, project.id, {
+          id: uploadId,
+          kind,
+          fileName: file.name,
+          respondentCount: parsed.respondentCount,
+          scores: parsed.scores,
+          comments: parsed.comments,
+          ratings: parsed.ratings,
+        });
+
+        // Who responded: students (matched by School ID) or others (a teacher's name, etc.)
+        const respondents = new Set(
+          [...parsed.scores, ...parsed.comments, ...parsed.ratings].map((r) => r[0]).filter((k) => !k.startsWith("#"))
+        );
+        const students = [...respondents].filter((k) => ScoringModule.studentBySchoolId(k)).length;
+        const others = respondents.size - students;
+        const excluded =
+          kind === "peer"
+            ? ScoringModule.presentationCountedRatings(record).excluded
+            : ScoringModule.presentationCountedScores(tool.id, project.id, record).excluded;
+
+        scoreSheetStatus.set(
+          stateKey,
+          `Imported ${label}: ${parsed.respondentCount} response(s) (${students} by student ID, ${others} by name), ` +
+            (kind === "peer"
+              ? `${parsed.ratings.length} rating(s)`
+              : `${parsed.scores.length} score(s), ${parsed.comments.length} comment(s)`) +
+            (excluded > 0 ? `; ${excluded} ${kind === "peer" ? "self-rating(s)" : "own-group score(s)"} won't be counted` : "") +
+            (parsed.notes.length > 0 ? `. Note: ${parsed.notes.join("; ")}` : "") +
+            ". Click Save Scoring to store it."
+        );
       } catch (err) {
-        scoreSheetStatus.set(stateKey, `Couldn't read that file: ${err.message}`);
+        scoreSheetStatus.set(stateKey, `Couldn't import that file: ${err.message}`);
       }
       rerender();
     });
@@ -4737,235 +4813,9 @@ function buildPresentationUploadsSection(tool, project, container) {
   });
   block.appendChild(buttons);
 
-  if (pending) block.appendChild(buildScoreSheetMappingPanel(tool, project, pending, stateKey, rerender));
-
   block.appendChild(buildScoreSheetUploadList(tool, project, stateKey, rerender));
   block.appendChild(buildPeerAveragesTable(tool, project));
   return block;
-}
-
-/** The column-by-column review shown right after a score sheet is chosen. */
-function buildScoreSheetMappingPanel(tool, project, state, stateKey, rerender) {
-  const isPeer = state.kind === "peer";
-  const groups = ScoringModule.presentationGroups(tool.id, project.id);
-  const rubrics = isPeer
-    ? []
-    : ScoringModule.presentationColumns(tool.id, project.id).filter((c) => c.kind === state.kind);
-
-  const panel = document.createElement("div");
-  panel.className = "mapping-panel";
-  panel.style.marginTop = "14px";
-
-  const heading = document.createElement("h3");
-  heading.textContent = `Match the columns — ${SCORE_SHEET_LABELS[state.kind]}`;
-  panel.appendChild(heading);
-
-  const dataRows = testBankDataRows(state);
-  const info = document.createElement("p");
-  info.className = "hint";
-  info.textContent = `${state.fileName} — ${dataRows.length} response row(s). Check what each column is; columns set to "Ignore" are skipped.`;
-  panel.appendChild(info);
-
-  const headerRowRow = document.createElement("div");
-  headerRowRow.className = "mapping-row";
-  const headerRowLabel = document.createElement("label");
-  headerRowLabel.textContent = "Header row number";
-  const headerRowInput = document.createElement("input");
-  headerRowInput.type = "text";
-  headerRowInput.inputMode = "numeric";
-  headerRowInput.className = "point-value-input";
-  headerRowInput.value = state.headerRow;
-  headerRowInput.addEventListener("change", () => {
-    state.headerRow = Math.max(1, Math.min(state.rawRows.length - 1, Math.round(Number(headerRowInput.value) || 1)));
-    autoMapScoreSheet(state, tool, project);
-    rerender();
-  });
-  headerRowRow.append(headerRowLabel, headerRowInput);
-  panel.appendChild(headerRowRow);
-
-  // ----- Column table -----
-  const wrap = document.createElement("div");
-  wrap.style.maxHeight = "380px";
-  wrap.style.overflow = "auto";
-  wrap.style.marginTop = "12px";
-  const table = document.createElement("table");
-  table.className = "roster-table";
-  const thead = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  (isPeer ? ["Column heading", "What is it?", "Student"] : ["Column heading", "What is it?", "Group", "Rubric"]).forEach((label) => {
-    const th = document.createElement("th");
-    th.textContent = label;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const roles = isPeer
-    ? [
-        ["ignore", "Ignore"],
-        ["id", "School ID"],
-        ["rating", "Rating of a student"],
-      ]
-    : [
-        ["ignore", "Ignore"],
-        ["id", "School ID"],
-        ["score", "Score"],
-        ["comment", "Comment (a group)"],
-        ["global", "Global comment"],
-      ];
-
-  const makeSelect = (options, selected, onChange) => {
-    const select = document.createElement("select");
-    options.forEach(([value, label]) => {
-      const opt = document.createElement("option");
-      opt.value = String(value);
-      opt.textContent = label;
-      select.appendChild(opt);
-    });
-    select.value = String(selected);
-    select.addEventListener("change", () => onChange(select.value));
-    return select;
-  };
-
-  const tbody = document.createElement("tbody");
-  state.columns.forEach((col) => {
-    const tr = document.createElement("tr");
-
-    const headerTd = document.createElement("td");
-    headerTd.textContent = col.header || `Column ${col.index + 1}`;
-    tr.appendChild(headerTd);
-
-    const roleTd = document.createElement("td");
-    roleTd.appendChild(
-      makeSelect(roles, col.role, (value) => {
-        col.role = value;
-        rerender();
-      })
-    );
-    tr.appendChild(roleTd);
-
-    if (isPeer) {
-      const studentTd = document.createElement("td");
-      if (col.role === "rating") {
-        const options = [["", "— choose a student —"]].concat(
-          project.roster.map((entry) => [entry.studentId, `Group ${entry.group || "—"} · ${entry.name || "(unnamed)"}`])
-        );
-        studentTd.appendChild(makeSelect(options, col.studentId, (value) => (col.studentId = value)));
-      }
-      tr.appendChild(studentTd);
-    } else {
-      const groupTd = document.createElement("td");
-      if (col.role === "score" || col.role === "comment") {
-        groupTd.appendChild(
-          makeSelect(
-            groups.map((g) => [g, `Group ${g}`]),
-            col.group || groups[0],
-            (value) => (col.group = Number(value))
-          )
-        );
-        if (!col.group) col.group = groups[0];
-      }
-      tr.appendChild(groupTd);
-
-      const rubricTd = document.createElement("td");
-      if (col.role === "score") {
-        const options = [["", "— choose a rubric —"]].concat(rubrics.map((r) => [r.entryId, r.text]));
-        rubricTd.appendChild(makeSelect(options, col.entryId, (value) => (col.entryId = value)));
-      }
-      tr.appendChild(rubricTd);
-    }
-
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-  panel.appendChild(wrap);
-
-  // ----- Import / cancel -----
-  const buttons = document.createElement("div");
-  buttons.className = "mapping-buttons";
-
-  const importBtn = document.createElement("button");
-  importBtn.type = "button";
-  importBtn.className = "btn btn-primary";
-  importBtn.textContent = "Import";
-  importBtn.addEventListener("click", () => {
-    const idColumn = state.columns.find((c) => c.role === "id");
-    const scoreColumns = state.columns.filter((c) => (isPeer ? c.role === "rating" : c.role === "score"));
-    if (scoreColumns.length === 0) {
-      alert(isPeer ? 'Mark at least one column as a "Rating of a student".' : 'Mark at least one column as a "Score".');
-      return;
-    }
-    const incomplete = scoreColumns.filter((c) => (isPeer ? !c.studentId : !c.entryId || !c.group));
-    if (incomplete.length > 0) {
-      alert(
-        `${incomplete.length} column(s) still need a ${isPeer ? "student" : "group and rubric"} chosen — pick one for each, or set them to Ignore.`
-      );
-      return;
-    }
-
-    const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const cell = (row, index) => String(row[index] ?? "").trim();
-    const scores = [];
-    const comments = [];
-    const ratings = [];
-
-    dataRows.forEach((row, i) => {
-      const respondentKey = (idColumn && cell(row, idColumn.index)) || `#${uploadId}-${i}`;
-      scoreColumns.forEach((col) => {
-        const raw = cell(row, col.index);
-        if (raw === "") return;
-        const value = Number(raw);
-        if (Number.isNaN(value)) return;
-        if (isPeer) ratings.push([respondentKey, col.studentId, value]);
-        else scores.push([respondentKey, col.group, col.entryId, value]);
-      });
-      if (!isPeer) {
-        state.columns
-          .filter((c) => c.role === "comment" || c.role === "global")
-          .forEach((col) => {
-            const text = cell(row, col.index);
-            if (text) comments.push([respondentKey, col.role === "global" ? 0 : col.group, text]);
-          });
-      }
-    });
-
-    try {
-      ScoringModule.addPresentationUpload(tool.id, project.id, {
-        id: uploadId,
-        kind: state.kind,
-        fileName: state.fileName,
-        respondentCount: dataRows.length,
-        scores,
-        comments,
-        ratings,
-      });
-    } catch (err) {
-      alert(err.message);
-      return;
-    }
-    scoreSheetStatus.set(
-      stateKey,
-      `Imported ${SCORE_SHEET_LABELS[state.kind]}: ${dataRows.length} response(s), ` +
-        (isPeer ? `${ratings.length} rating(s)` : `${scores.length} score(s), ${comments.length} comment(s)`) +
-        ". Click Save Scoring to store it."
-    );
-    scoreSheetImports.delete(stateKey);
-    rerender();
-  });
-
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "btn btn-ghost";
-  cancelBtn.textContent = "Cancel";
-  cancelBtn.addEventListener("click", () => {
-    scoreSheetImports.delete(stateKey);
-    rerender();
-  });
-
-  buttons.append(importBtn, cancelBtn);
-  panel.appendChild(buttons);
-  return panel;
 }
 
 /** The stored uploads, with Details/Delete, plus buttons that apply the Teacher/Audience averages to the Scores grid. */
@@ -5089,17 +4939,29 @@ function buildScoreSheetUploadList(tool, project, stateKey, rerender) {
   return wrap;
 }
 
-/** What one stored upload contains: average scores per group and rubric plus every comment (teacher/audience), or the average rating each student received (peer). */
+/** What one stored upload contains: average scores per group and rubric plus every comment (teacher/audience), or the average rating each student received (peer). Own-group scores and self-ratings are left out, and the count of those is shown. */
 function buildScoreSheetDetails(tool, project, upload) {
   const wrap = document.createElement("div");
 
+  const noteLine = (text) => {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = text;
+    return p;
+  };
+
   if (upload.kind === "peer") {
+    const { counted, excluded } = ScoringModule.presentationCountedRatings(upload);
     const totals = {};
-    upload.ratings.forEach(([, studentId, value]) => {
+    counted.forEach(([, studentId, value]) => {
       if (!totals[studentId]) totals[studentId] = { sum: 0, count: 0 };
       totals[studentId].sum += value;
       totals[studentId].count += 1;
     });
+    const heading = document.createElement("p");
+    heading.innerHTML = "<strong>Average rating received</strong>";
+    wrap.appendChild(heading);
+    wrap.appendChild(noteLine(`${excluded} self-rating(s) were not counted.`));
     const list = document.createElement("ul");
     list.className = "consultation-item-list";
     project.roster.forEach((entry) => {
@@ -5109,16 +4971,15 @@ function buildScoreSheetDetails(tool, project, upload) {
       li.textContent = `Group ${entry.group || "—"} · ${entry.name || "(unnamed)"}: ${Math.round((t.sum / t.count) * 100) / 100} (${t.count} rating(s))`;
       list.appendChild(li);
     });
-    const heading = document.createElement("p");
-    heading.innerHTML = "<strong>Average rating received</strong>";
-    wrap.append(heading, list);
+    wrap.appendChild(list);
     return wrap;
   }
 
   // ----- Average per group and rubric, for this upload alone -----
   const columns = ScoringModule.presentationColumns(tool.id, project.id).filter((c) => c.kind === upload.kind);
+  const { counted, excluded } = ScoringModule.presentationCountedScores(tool.id, project.id, upload);
   const stats = {};
-  upload.scores.forEach(([, group, entryId, value]) => {
+  counted.forEach(([, group, entryId, value]) => {
     const key = `${group}|${entryId}`;
     if (!stats[key]) stats[key] = { sum: 0, count: 0 };
     stats[key].sum += value;
@@ -5129,6 +4990,7 @@ function buildScoreSheetDetails(tool, project, upload) {
   const scoreHeading = document.createElement("p");
   scoreHeading.innerHTML = "<strong>Average score per group and rubric</strong>";
   wrap.appendChild(scoreHeading);
+  wrap.appendChild(noteLine(`${excluded} score(s) given by students to their own group were not counted.`));
   const table = document.createElement("table");
   table.className = "roster-table";
   const thead = document.createElement("thead");
@@ -5162,10 +5024,7 @@ function buildScoreSheetDetails(tool, project, upload) {
   commentHeading.innerHTML = `<strong>Comments (${upload.comments.length})</strong>`;
   wrap.appendChild(commentHeading);
   if (upload.comments.length === 0) {
-    const none = document.createElement("p");
-    none.className = "hint";
-    none.textContent = "No comments in this upload.";
-    wrap.appendChild(none);
+    wrap.appendChild(noteLine("No comments in this upload."));
   } else {
     const box = document.createElement("div");
     box.style.maxHeight = "260px";
@@ -5194,7 +5053,7 @@ function buildPeerAveragesTable(tool, project) {
 
   wrap.style.marginTop = "18px";
   const heading = document.createElement("h4");
-  heading.textContent = "Peer evaluation averages (all uploads combined)";
+  heading.textContent = "Peer evaluation averages (all uploads combined, self-ratings excluded)";
   wrap.appendChild(heading);
 
   const table = document.createElement("table");
