@@ -2188,3 +2188,12 @@ textarea {
   color: var(--marker);
   box-shadow: 0 0 8px rgba(255, 122, 26, 0.5);
 }
+
+/* Table headers and footers (Attendance / Scoring tables): in this theme the
+   page tone and the card tone are the same color, so headers would blend
+   into the rows. Give them the darker page-background color instead. */
+[data-theme="tron-legacy"] .attendance-table thead th,
+[data-theme="tron-legacy"] .category-header-cell,
+[data-theme="tron-legacy"] .attendance-table tfoot td {
+  background: #0e1217;
+}
