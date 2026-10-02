@@ -594,7 +594,9 @@ const ScoringModule = {
   //     values: "group|entryId" -> score entered for that group,
   //     totalColumn: { mode, maxPoints } — same raw / out-of-max setting
   //       as the Progress Tracker's Total Score column,
-  //     templateSettings: instructions etc. for the score-sheet CSVs
+  //     templateSettings: instructions etc. for the score-sheet CSVs,
+  //     scoreUploads: score-sheet CSVs uploaded back from participants
+  //       (see "uploaded score sheets" below)
   //   }
   // Scores are entered per GROUP (each presentation group gets one
   // score per active rubric); every student in a group shares their
@@ -619,6 +621,13 @@ const ScoringModule = {
     if (!project.totalColumn || typeof project.totalColumn !== "object") project.totalColumn = {};
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
     if (typeof project.totalColumn.maxPoints !== "number") project.totalColumn.maxPoints = 0;
+
+    if (!Array.isArray(project.scoreUploads)) project.scoreUploads = [];
+    project.scoreUploads.forEach((upload) => {
+      ["scores", "comments", "ratings"].forEach((key) => {
+        if (!Array.isArray(upload[key])) upload[key] = [];
+      });
+    });
 
     // Settings for the Templates page (score-sheet CSVs).
     if (!project.templateSettings || typeof project.templateSettings !== "object") project.templateSettings = {};
@@ -997,6 +1006,111 @@ const ScoringModule = {
       put(row, 2, "short");
     }
     return rows;
+  },
+
+  // ----- Presentation Calc: uploaded score sheets -----
+  // project.scoreUploads: one entry per uploaded CSV —
+  //   { id, kind: "teacher" | "audience" | "peer", fileName, importedAt,
+  //     respondentCount,
+  //     scores:   [[respondentKey, group, entryId, value]],  teacher/audience: one score for one
+  //                                                         group on one active rubric
+  //     comments: [[respondentKey, group, text]],           teacher/audience; group 0 = global comment
+  //     ratings:  [[raterKey, studentId, value]] }          peer: one student's rating of another
+  // respondentKey is the respondent's School ID from the file (or a
+  // unique "#..." key when the file has no ID column). If the same
+  // respondent appears more than once for the same thing, the latest
+  // upload/row wins when scores are combined.
+
+  addPresentationUpload(toolId, projectId, upload) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) throw new Error("That project no longer exists.");
+    const record = {
+      id: upload.id || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      kind: upload.kind,
+      fileName: upload.fileName || "",
+      importedAt: new Date().toISOString(),
+      respondentCount: upload.respondentCount || 0,
+      scores: upload.scores || [],
+      comments: upload.comments || [],
+      ratings: upload.ratings || [],
+    };
+    project.scoreUploads.push(record);
+    return record;
+  },
+
+  removePresentationUpload(toolId, projectId, uploadId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (project) project.scoreUploads = project.scoreUploads.filter((u) => u.id !== uploadId);
+  },
+
+  presentationUploads(toolId, projectId, kind) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return [];
+    return project.scoreUploads.filter((u) => !kind || u.kind === kind);
+  },
+
+  /** Average of uploaded scores per "group|entryId" across every upload of one kind (teacher/audience), as { key: { group, entryId, avg, count } }. */
+  presentationSheetAverages(toolId, projectId, kind) {
+    const latest = new Map();
+    this.presentationUploads(toolId, projectId, kind).forEach((upload) => {
+      upload.scores.forEach(([respondentKey, group, entryId, value]) => {
+        latest.set(`${respondentKey}|${group}|${entryId}`, { group, entryId, value });
+      });
+    });
+    const totals = {};
+    latest.forEach(({ group, entryId, value }) => {
+      const key = `${group}|${entryId}`;
+      if (!totals[key]) totals[key] = { group, entryId, sum: 0, count: 0 };
+      totals[key].sum += value;
+      totals[key].count += 1;
+    });
+    Object.values(totals).forEach((t) => {
+      t.avg = t.sum / t.count;
+    });
+    return totals;
+  },
+
+  /** Fills the Scores grid's cells for one kind (teacher/audience) with the averages from the uploaded sheets, limited to each rubric's points. Returns { applied, clamped }. */
+  presApplySheetAverages(toolId, projectId, kind) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return { applied: 0, clamped: 0 };
+    const columns = this.presentationColumns(toolId, projectId).filter((c) => c.kind === kind);
+    const groups = new Set(this.presentationGroups(toolId, projectId));
+    let applied = 0;
+    let clamped = 0;
+    Object.entries(this.presentationSheetAverages(toolId, projectId, kind)).forEach(([key, stat]) => {
+      const column = columns.find((c) => c.entryId === stat.entryId);
+      if (!column || !groups.has(stat.group)) return;
+      let value = stat.avg;
+      if (value < 0) value = 0;
+      if (column.points > 0 && value > column.points) {
+        value = column.points;
+        clamped++;
+      }
+      project.values[key] = String(Math.round(value * 100) / 100);
+      applied++;
+    });
+    return { applied, clamped };
+  },
+
+  /** Average peer rating received by each student across every peer upload, as { studentId: { avg, count } }. */
+  presentationPeerAverages(toolId, projectId) {
+    const latest = new Map();
+    this.presentationUploads(toolId, projectId, "peer").forEach((upload) => {
+      upload.ratings.forEach(([raterKey, studentId, value]) => {
+        latest.set(`${raterKey}|${studentId}`, { studentId, value });
+      });
+    });
+    const totals = {};
+    latest.forEach(({ studentId, value }) => {
+      if (!totals[studentId]) totals[studentId] = { sum: 0, count: 0 };
+      totals[studentId].sum += value;
+      totals[studentId].count += 1;
+    });
+    Object.values(totals).forEach((t) => {
+      t.avg = t.sum / t.count;
+    });
+    return totals;
   },
 
   /** A student's contribution from one project: their group's Total Score (group taken from that project's imported roster snapshot). Null if they aren't in the snapshot or have no group. */

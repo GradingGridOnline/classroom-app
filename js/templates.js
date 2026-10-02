@@ -96,6 +96,7 @@ const TemplatesModule = {
               project.roster = [];
               project.sourceBankName = "";
               project.values = {};
+              project.scoreUploads = []; // uploaded score sheets
             };
             if (Array.isArray(tool.config.projects)) tool.config.projects.forEach(clearProject);
             else clearProject(tool.config); // saved before projects existed
