@@ -1212,6 +1212,104 @@ const ScoringModule = {
     return totals;
   },
 
+  // ----- Presentation Calc: data for the printed reports -----
+
+  /** Comments from the uploaded Teacher and Audience sheets, organized for printing:
+   *  { global: { teacher: [text], audience: [text] }, groups: { [group]: { teacher: [text], audience: [text] } } }.
+   *  If a respondent appears in more than one upload, their latest comment for that group wins. */
+  presentationComments(toolId, projectId) {
+    const result = { global: { teacher: [], audience: [] }, groups: {} };
+    ["teacher", "audience"].forEach((kind) => {
+      const latest = new Map();
+      this.presentationUploads(toolId, projectId, kind).forEach((upload) => {
+        upload.comments.forEach(([respondentKey, group, text]) => {
+          latest.set(`${respondentKey}|${group}`, { group, text });
+        });
+      });
+      latest.forEach(({ group, text }) => {
+        if (!group) {
+          result.global[kind].push(text);
+        } else {
+          if (!result.groups[group]) result.groups[group] = { teacher: [], audience: [] };
+          result.groups[group][kind].push(text);
+        }
+      });
+    });
+    return result;
+  },
+
+  /**
+   * The score table for one printed page. Pass { group } for a group's
+   * page, or { studentId } for one student's page. Returns
+   * { rows: [{ label, score, max, classAverage, isTotal }] }: one row per
+   * score column (Teacher / Audience rubrics, then Peer Evaluation) and a
+   * final weighted Total row. `score` is the group's entered score for
+   * that rubric; max is the rubric's points; classAverage averages the
+   * score over every student in the class (each student counted with
+   * their own group's score).
+   * On a STUDENT page the Peer Evaluation row (and so the Total) is that
+   * student's own average peer rating (self-ratings excluded) — falling
+   * back to their group's Peer Evaluation cell if they have none — so
+   * students in the same group can differ. On a GROUP page it is the
+   * group's Peer Evaluation cell.
+   */
+  presentationScoreRows(toolId, projectId, { group, studentId }) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return { rows: [] };
+    const columns = this.presentationColumns(toolId, projectId);
+    const roster = project.roster.filter((e) => e.group);
+    const peerAverages = this.presentationPeerAverages(toolId, projectId);
+    const perStudentPeer = !!studentId;
+
+    const groupValue = (g, col) => {
+      const raw = project.values[`${g}|${col.entryId}`];
+      if (raw === undefined) return null;
+      const num = Number(raw);
+      return Number.isNaN(num) ? null : num;
+    };
+    const scoreFor = (entry, col) => {
+      if (col.kind === "peer" && perStudentPeer) {
+        const mine = peerAverages[entry.studentId];
+        if (mine) return mine.avg;
+      }
+      return groupValue(entry.group, col);
+    };
+    const totalFor = (entry) => {
+      let total = 0;
+      let any = false;
+      columns.forEach((col) => {
+        const score = scoreFor(entry, col);
+        if (score === null) return;
+        total += score * col.weight;
+        any = true;
+      });
+      return any ? total : null;
+    };
+    const average = (values) => {
+      const present = values.filter((v) => v !== null);
+      return present.length > 0 ? present.reduce((sum, v) => sum + v, 0) / present.length : null;
+    };
+
+    const target = studentId ? roster.find((e) => e.studentId === studentId) : { group };
+    if (!target) return { rows: [] };
+
+    const rows = columns.map((col) => ({
+      label: col.label,
+      score: scoreFor(target, col),
+      max: col.points,
+      classAverage: average(roster.map((entry) => scoreFor(entry, col))),
+      isTotal: false,
+    }));
+    rows.push({
+      label: "Total (weighted)",
+      score: totalFor(target),
+      max: columns.reduce((sum, col) => sum + col.points * col.weight, 0),
+      classAverage: average(roster.map((entry) => totalFor(entry))),
+      isTotal: true,
+    });
+    return { rows };
+  },
+
   /** A student's contribution from one project: their group's Total Score (group taken from that project's imported roster snapshot). Null if they aren't in the snapshot or have no group. */
   _presentationContribution(tool, studentId, projectId) {
     const project = this.getPresentationProject(tool.id, projectId);

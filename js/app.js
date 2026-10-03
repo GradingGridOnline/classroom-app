@@ -3679,6 +3679,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
 
   // Same raw / out-of-max setting as the Progress Tracker's Total Score column.
   page.appendChild(buildTableTotalColumnBlock(tool, cfg, container, cfg.id));
+  page.appendChild(buildPresentationPrintSection(tool, cfg));
   page.appendChild(buildPresentationUploadsSection(tool, cfg, container));
   return page;
 }
@@ -5117,6 +5118,267 @@ function buildPeerAveragesTable(tool, project) {
   table.appendChild(tbody);
   wrap.appendChild(table);
   return wrap;
+}
+
+// ----- Presentation Calc: printed reports -----
+//
+// Three buttons on the Scores page print (through the browser's print
+// dialog — "Save as PDF" works too):
+//  1. Comments: a first page of Global Comments (Teacher's, then
+//     Audience), then one page per group with that group's Teacher's
+//     comments followed by its Audience comments.
+//  2. Group pages: one page per group — a score table by rubric (the
+//     group's score, the maximum possible, the class average) followed by
+//     the comments: Global, then Teacher's, then Audience.
+//  3. Student pages: one page per student — the same table with that
+//     student's own scores (their group's rubric scores, and their own
+//     peer evaluation) followed by the same comments for their group.
+
+function formatPrintNumber(value) {
+  return value === null || value === undefined ? "—" : String(Math.round(value * 100) / 100);
+}
+
+function newPresentationPrintSheet() {
+  const sheet = document.createElement("div");
+  sheet.className = "report-sheet";
+  // The page itself has no margin (see @page in style.css), so the sheet makes its own.
+  sheet.style.padding = "14mm 16mm";
+  sheet.style.fontSize = "0.95rem";
+  sheet.style.lineHeight = "1.45";
+  return sheet;
+}
+
+function printSheetHeading(text, subText) {
+  const wrap = document.createElement("div");
+  const h = document.createElement("h2");
+  h.textContent = text;
+  h.style.fontSize = "1.5rem";
+  h.style.margin = "0 0 2px";
+  wrap.appendChild(h);
+  if (subText) {
+    const sub = document.createElement("p");
+    sub.className = "report-sheet-sub";
+    sub.textContent = subText;
+    sub.style.margin = "0 0 12px";
+    wrap.appendChild(sub);
+  }
+  return wrap;
+}
+
+/** A titled list of comments ("(none)" when empty). */
+function appendCommentSection(sheet, title, comments) {
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  heading.style.fontSize = "1.05rem";
+  heading.style.margin = "14px 0 4px";
+  heading.style.borderBottom = "1px solid #999";
+  sheet.appendChild(heading);
+
+  if (comments.length === 0) {
+    const none = document.createElement("p");
+    none.textContent = "(none)";
+    none.style.color = "#777";
+    none.style.margin = "2px 0";
+    sheet.appendChild(none);
+    return;
+  }
+  const list = document.createElement("ul");
+  list.style.margin = "2px 0";
+  list.style.paddingLeft = "20px";
+  comments.forEach((text) => {
+    const li = document.createElement("li");
+    li.textContent = text;
+    li.style.marginBottom = "3px";
+    list.appendChild(li);
+  });
+  sheet.appendChild(list);
+}
+
+/** Score table: rubric | score | max possible | class average. */
+function buildPrintScoreTable(rows, scoreHeading) {
+  const table = document.createElement("table");
+  table.className = "report-sheet-table";
+  table.style.fontSize = "0.9rem";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Rubric", scoreHeading, "Max possible", "Class average"].forEach((label, i) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    th.style.textAlign = i === 0 ? "left" : "right";
+    th.style.borderBottom = "2px solid #333";
+    th.style.padding = "3px 8px";
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    [row.label, formatPrintNumber(row.score), formatPrintNumber(row.max), formatPrintNumber(row.classAverage)].forEach((text, i) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      td.style.padding = "3px 8px";
+      td.style.borderBottom = "1px solid #ddd";
+      if (i > 0) td.style.textAlign = "right";
+      if (row.isTotal) {
+        td.style.fontWeight = "700";
+        td.style.borderTop = "2px solid #333";
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+/** Puts the sheets in the print area (one per page) and opens the print dialog in portrait, with the course/project as the suggested PDF file name. */
+function printPresentationSheets(sheets, title) {
+  el.printArea.innerHTML = "";
+  sheets.forEach((sheet, index) => {
+    if (index < sheets.length - 1) sheet.classList.add("report-sheet-page-break");
+    el.printArea.appendChild(sheet);
+  });
+
+  const pageStyle = document.createElement("style");
+  pageStyle.textContent = "@page { size: A4 portrait; margin: 0; }";
+  document.head.appendChild(pageStyle);
+  const originalTitle = document.title;
+  document.title = title;
+  const restore = () => {
+    document.title = originalTitle;
+    pageStyle.remove();
+    window.removeEventListener("afterprint", restore);
+  };
+  window.addEventListener("afterprint", restore);
+  window.print();
+}
+
+/** Builds and prints one of the three reports. kind: "comments" | "groups" | "students". Returns a message if there's nothing to print. */
+function printPresentationReport(tool, project, kind) {
+  const groups = ScoringModule.presentationGroups(tool.id, project.id);
+  if (groups.length === 0) return 'There are no groups yet — import them on the "Student Groups" subtab first.';
+
+  const comments = ScoringModule.presentationComments(tool.id, project.id);
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  const subtitle = [course ? course.name : "", project.name].filter(Boolean).join(" — ");
+  const membersOf = (group) =>
+    project.roster
+      .filter((e) => e.group === group)
+      .map((e) => e.name || "(unnamed)")
+      .join(", ");
+  const groupComments = (group) => comments.groups[group] || { teacher: [], audience: [] };
+  const sheets = [];
+
+  const appendGlobal = (sheet) => {
+    appendCommentSection(sheet, "Global Comments — Teacher", comments.global.teacher);
+    appendCommentSection(sheet, "Global Comments — Audience", comments.global.audience);
+  };
+  const appendGroupComments = (sheet, group) => {
+    appendCommentSection(sheet, "Teacher's Comments", groupComments(group).teacher);
+    appendCommentSection(sheet, "Audience Comments", groupComments(group).audience);
+  };
+
+  if (kind === "comments") {
+    const hasGlobal = comments.global.teacher.length + comments.global.audience.length > 0;
+    if (hasGlobal) {
+      const sheet = newPresentationPrintSheet();
+      sheet.appendChild(printSheetHeading("Global Comments", subtitle));
+      appendCommentSection(sheet, "Teacher's Comments", comments.global.teacher);
+      appendCommentSection(sheet, "Audience Comments", comments.global.audience);
+      sheets.push(sheet);
+    }
+    groups.forEach((group) => {
+      const c = groupComments(group);
+      if (c.teacher.length + c.audience.length === 0) return; // nothing to print for this group
+      const sheet = newPresentationPrintSheet();
+      sheet.appendChild(printSheetHeading(`Group ${group}`, `${subtitle}${membersOf(group) ? ` · ${membersOf(group)}` : ""}`));
+      appendGroupComments(sheet, group);
+      sheets.push(sheet);
+    });
+    if (sheets.length === 0) return "There are no comments yet — upload Teacher or Audience score sheets that include comments first.";
+    printPresentationSheets(sheets, `${subtitle} Comments`);
+    return "";
+  }
+
+  if (kind === "groups") {
+    groups.forEach((group) => {
+      const sheet = newPresentationPrintSheet();
+      sheet.appendChild(printSheetHeading(`Group ${group}`, `${subtitle}${membersOf(group) ? ` · ${membersOf(group)}` : ""}`));
+      sheet.appendChild(buildPrintScoreTable(ScoringModule.presentationScoreRows(tool.id, project.id, { group }).rows, "Group's score"));
+      appendGlobal(sheet);
+      appendGroupComments(sheet, group);
+      sheets.push(sheet);
+    });
+    printPresentationSheets(sheets, `${subtitle} Group Scores`);
+    return "";
+  }
+
+  // kind === "students"
+  project.roster
+    .filter((entry) => entry.group)
+    .forEach((entry) => {
+      const sheet = newPresentationPrintSheet();
+      const who = `${entry.classNumber ? `#${entry.classNumber} ` : ""}${entry.name || "(unnamed)"}`;
+      sheet.appendChild(printSheetHeading(who, `${subtitle} · Group ${entry.group}`));
+      sheet.appendChild(
+        buildPrintScoreTable(ScoringModule.presentationScoreRows(tool.id, project.id, { studentId: entry.studentId }).rows, "Your score")
+      );
+      appendGlobal(sheet);
+      appendGroupComments(sheet, entry.group);
+      sheets.push(sheet);
+    });
+  if (sheets.length === 0) return "There are no students in groups yet.";
+  printPresentationSheets(sheets, `${subtitle} Student Scores`);
+  return "";
+}
+
+/** The three print buttons, shown on the Scores page. */
+function buildPresentationPrintSection(tool, project) {
+  const block = document.createElement("div");
+  block.className = "attendance-settings-block";
+  block.style.borderTop = "2px solid var(--line)";
+  block.style.paddingTop = "18px";
+  block.style.marginTop = "22px";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Print";
+  heading.style.fontFamily = "var(--font-heading)";
+  heading.style.fontSize = "1.5rem";
+  heading.style.color = "var(--green-dark)";
+  heading.style.margin = "0 0 8px";
+  block.appendChild(heading);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "Comments come from the uploaded Teacher and Audience score sheets. Group and student pages include the score tables from the grid above; on a student's page, the Peer Evaluation row (and the Total) is that student's own peer rating.";
+  block.appendChild(hint);
+
+  const status = document.createElement("p");
+  status.className = "result";
+  block.appendChild(status);
+
+  const buttons = document.createElement("div");
+  buttons.className = "panel-toolbar-buttons";
+  [
+    ["Print Comments", "comments"],
+    ["Print Group Score Pages", "groups"],
+    ["Print Student Score Pages", "students"],
+  ].forEach(([label, kind]) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-primary";
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      status.textContent = printPresentationReport(tool, project, kind);
+    });
+    buttons.appendChild(btn);
+  });
+  block.appendChild(buttons);
+  return block;
 }
 
 // ===== Report Card =====
