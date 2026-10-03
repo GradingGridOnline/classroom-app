@@ -588,9 +588,10 @@ const ScoringModule = {
   //       if seats get rearranged afterward.
   //     sourceBankName,
   //     rubricBank: [{ id, text }] — manually-entered rubric descriptions,
-  //     teacherRubrics / audienceRubrics: [{ id, rubricId, points }] —
+  //     teacherRubrics / audienceRubrics: [{ id, rubricId, points, weight }] —
   //       the active rubrics; each becomes one score column, worth up to
-  //       `points` (at most MAX_RUBRIC_POINTS),
+  //       `points` (at most MAX_RUBRIC_POINTS). `weight` (default 1)
+  //       multiplies that column's score in the group's Total Score,
   //     values: "group|entryId" -> score entered for that group,
   //     totalColumn: { mode, maxPoints } — same raw / out-of-max setting
   //       as the Progress Tracker's Total Score column,
@@ -615,6 +616,7 @@ const ScoringModule = {
     [project.teacherRubrics, project.audienceRubrics].forEach((list) => {
       list.forEach((entry) => {
         if (typeof entry.points === "number" && entry.points > MAX_RUBRIC_POINTS) entry.points = MAX_RUBRIC_POINTS;
+        if (typeof entry.weight !== "number" || !(entry.weight >= 0)) entry.weight = 1;
       });
     });
     if (!project.values || typeof project.values !== "object") project.values = {};
@@ -806,7 +808,7 @@ const ScoringModule = {
     if (list.length >= MAX_ACTIVE_RUBRICS) {
       throw new Error(`You've reached the limit of ${MAX_ACTIVE_RUBRICS} active rubrics.`);
     }
-    list.push({ id: `active-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, rubricId: null, points: 0 });
+    list.push({ id: `active-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, rubricId: null, points: 0, weight: 1 });
   },
 
   presRemoveActiveRubric(toolId, projectId, kind, entryId) {
@@ -831,6 +833,15 @@ const ScoringModule = {
     if (entry) entry.points = Math.max(0, Math.min(MAX_RUBRIC_POINTS, Math.round(Number(points) || 0)));
   },
 
+  /** Sets an active rubric's weight (0 or more; decimals fine). Its score is multiplied by this in the group's Total Score. Blank or invalid resets it to 1. */
+  presSetActiveWeight(toolId, projectId, kind, entryId, value) {
+    const project = this.getPresentationProject(toolId, projectId);
+    const entry = project && this._presActiveList(project, kind).find((e) => e.id === entryId);
+    if (!entry) return;
+    const num = Number(String(value == null ? "" : value).trim());
+    entry.weight = String(value).trim() !== "" && !Number.isNaN(num) && num >= 0 ? num : 1;
+  },
+
   // Score columns + entered values
 
   /** A project's score columns: every active rubric that has a rubric chosen (Teacher ones first, then Audience), as { entryId, kind, text, label, points }. */
@@ -851,6 +862,7 @@ const ScoringModule = {
           text: rubric.text || "(untitled rubric)",
           label: `${kind === "teacher" ? "Teacher" : "Audience"}: ${rubric.text || "(untitled rubric)"}`,
           points: entry.points || 0,
+          weight: typeof entry.weight === "number" ? entry.weight : 1,
         });
       });
     });
@@ -881,7 +893,7 @@ const ScoringModule = {
     project.values[key] = String(num);
   },
 
-  /** Total Score for one group: the sum of its entered scores across every score column (blank counts as 0). Null if there are no score columns yet. */
+  /** Total Score for one group: the sum of its entered scores across every score column, each multiplied by that rubric's weight (blank counts as 0). Null if there are no score columns yet. */
   computePresentationSum(toolId, projectId, group) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return null;
@@ -891,7 +903,7 @@ const ScoringModule = {
     columns.forEach((col) => {
       const raw = project.values[`${group}|${col.entryId}`];
       const num = Number(raw);
-      if (raw !== undefined && !Number.isNaN(num)) sum += num;
+      if (raw !== undefined && !Number.isNaN(num)) sum += num * col.weight;
     });
     return sum;
   },

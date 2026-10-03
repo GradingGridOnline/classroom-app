@@ -3563,7 +3563,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row, and every student in a group shares their group's total. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row (each rubric's score multiplied by its Weight, 1 by default), and every student in a group shares their group's total. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
   page.appendChild(hint);
 
@@ -3590,6 +3590,29 @@ function buildPresentationScoresPage(tool, cfg, container) {
         : "Total Score";
     headRow.appendChild(totalTh);
     thead.appendChild(headRow);
+
+    // Weight row: each rubric's score is multiplied by its weight in the Total Score (1 = counts as is).
+    const weightRow = document.createElement("tr");
+    const weightLabelTh = document.createElement("th");
+    weightLabelTh.textContent = "Weight";
+    weightRow.appendChild(weightLabelTh);
+    columns.forEach((col) => {
+      const th = document.createElement("th");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.inputMode = "decimal";
+      input.className = "weight-input";
+      input.value = col.weight;
+      input.title = "Weight: this rubric's score is multiplied by this in the Total Score (1 = as is, 2 = counts double, 0 = left out)";
+      input.addEventListener("change", () => {
+        ScoringModule.presSetActiveWeight(tool.id, cfg.id, col.kind, col.entryId, input.value);
+        renderScoringToolView(tool, container);
+      });
+      th.appendChild(input);
+      weightRow.appendChild(th);
+    });
+    weightRow.appendChild(document.createElement("th"));
+    thead.appendChild(weightRow);
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
