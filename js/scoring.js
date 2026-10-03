@@ -592,7 +592,9 @@ const ScoringModule = {
   //       the active rubrics; each becomes one score column, worth up to
   //       `points` (at most MAX_RUBRIC_POINTS). `weight` (default 1)
   //       multiplies that column's score in the group's Total Score,
-  //     values: "group|entryId" -> score entered for that group,
+  //     peerWeight: weight (default 1) of the fixed Peer Evaluation column,
+  //     values: "group|entryId" -> score entered for that group (the
+  //       Peer Evaluation column uses entryId "peer"),
   //     totalColumn: { mode, maxPoints } — same raw / out-of-max setting
   //       as the Progress Tracker's Total Score column,
   //     templateSettings: instructions etc. for the score-sheet CSVs,
@@ -619,6 +621,7 @@ const ScoringModule = {
         if (typeof entry.weight !== "number" || !(entry.weight >= 0)) entry.weight = 1;
       });
     });
+    if (typeof project.peerWeight !== "number" || !(project.peerWeight >= 0)) project.peerWeight = 1;
     if (!project.values || typeof project.values !== "object") project.values = {};
     if (!project.totalColumn || typeof project.totalColumn !== "object") project.totalColumn = {};
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
@@ -836,15 +839,21 @@ const ScoringModule = {
   /** Sets an active rubric's weight (0 or more; decimals fine). Its score is multiplied by this in the group's Total Score. Blank or invalid resets it to 1. */
   presSetActiveWeight(toolId, projectId, kind, entryId, value) {
     const project = this.getPresentationProject(toolId, projectId);
-    const entry = project && this._presActiveList(project, kind).find((e) => e.id === entryId);
-    if (!entry) return;
-    const num = Number(String(value == null ? "" : value).trim());
-    entry.weight = String(value).trim() !== "" && !Number.isNaN(num) && num >= 0 ? num : 1;
+    if (!project) return;
+    const text = String(value == null ? "" : value).trim();
+    const num = Number(text);
+    const weight = text !== "" && !Number.isNaN(num) && num >= 0 ? num : 1;
+    if (kind === "peer") {
+      project.peerWeight = weight; // the fixed Peer Evaluation column
+      return;
+    }
+    const entry = this._presActiveList(project, kind).find((e) => e.id === entryId);
+    if (entry) entry.weight = weight;
   },
 
   // Score columns + entered values
 
-  /** A project's score columns: every active rubric that has a rubric chosen (Teacher ones first, then Audience), as { entryId, kind, text, label, points }. */
+  /** A project's score columns: every active rubric that has a rubric chosen (Teacher ones first, then Audience), then the fixed Peer Evaluation column, as { entryId, kind, text, label, points, weight }. */
   presentationColumns(toolId, projectId) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return [];
@@ -865,6 +874,16 @@ const ScoringModule = {
           weight: typeof entry.weight === "number" ? entry.weight : 1,
         });
       });
+    });
+
+    // The fixed Peer Evaluation column always comes last (just before the Total Score). Its scores run from 0 up to the project's highest peer score (set on the Templates page).
+    columns.push({
+      entryId: "peer",
+      kind: "peer",
+      text: "Peer Evaluation",
+      label: "Peer Evaluation",
+      points: project.templateSettings.peerHighestScore,
+      weight: project.peerWeight,
     });
     return columns;
   },
@@ -898,7 +917,7 @@ const ScoringModule = {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return null;
     const columns = this.presentationColumns(toolId, projectId);
-    if (columns.length === 0) return null;
+    if (!columns.some((c) => c.kind !== "peer")) return null; // no rubrics yet
     let sum = 0;
     columns.forEach((col) => {
       const raw = project.values[`${group}|${col.entryId}`];
@@ -1143,6 +1162,31 @@ const ScoringModule = {
         clamped++;
       }
       project.values[key] = String(Math.round(value * 100) / 100);
+      applied++;
+    });
+    return { applied, clamped };
+  },
+
+  /** Fills the Peer Evaluation column: for each group, the average of its members' average peer ratings (self-ratings excluded), limited to the project's highest peer score. Returns { applied, clamped }. */
+  presApplyPeerAverages(toolId, projectId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return { applied: 0, clamped: 0 };
+    const averages = this.presentationPeerAverages(toolId, projectId);
+    const highest = project.templateSettings.peerHighestScore;
+    let applied = 0;
+    let clamped = 0;
+    this.presentationGroups(toolId, projectId).forEach((group) => {
+      const memberAverages = project.roster
+        .filter((entry) => entry.group === group && averages[entry.studentId])
+        .map((entry) => averages[entry.studentId].avg);
+      if (memberAverages.length === 0) return;
+      let value = memberAverages.reduce((sum, v) => sum + v, 0) / memberAverages.length;
+      if (value < 0) value = 0;
+      if (value > highest) {
+        value = highest;
+        clamped++;
+      }
+      project.values[`${group}|peer`] = String(Math.round(value * 100) / 100);
       applied++;
     });
     return { applied, clamped };

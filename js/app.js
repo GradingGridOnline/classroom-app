@@ -3553,21 +3553,22 @@ function renderScoringToolPresentationView(tool, container) {
 function buildPresentationScoresPage(tool, cfg, container) {
   const page = document.createElement("div");
   const columns = ScoringModule.presentationColumns(tool.id, cfg.id);
+  const rubricColumnCount = columns.filter((c) => c.kind !== "peer").length; // the Peer Evaluation column is always there
   const groups = ScoringModule.presentationGroups(tool.id, cfg.id);
 
   const hint = document.createElement("p");
   hint.className = "hint";
   if (groups.length === 0) {
     hint.textContent = 'No groups yet — open "Student Groups" and import a seating arrangement that has Group Numbers set.';
-  } else if (columns.length === 0) {
+  } else if (rubricColumnCount === 0) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row (each rubric's score multiplied by its Weight, 1 by default), and every student in a group shares their group's total. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row (each rubric's score multiplied by its Weight, 1 by default), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill it from uploaded Peer Evaluation sheets (below) or type it in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
   page.appendChild(hint);
 
-  if (groups.length > 0 && columns.length > 0) {
+  if (groups.length > 0 && rubricColumnCount > 0) {
     const wrap = document.createElement("div");
     wrap.className = "attendance-table-wrap";
     const table = document.createElement("table");
@@ -4853,7 +4854,7 @@ function buildScoreSheetUploadList(tool, project, stateKey, rerender) {
   // ----- Apply to grid -----
   const applyRow = document.createElement("div");
   applyRow.className = "panel-toolbar-buttons";
-  ["teacher", "audience"].forEach((kind) => {
+  ["teacher", "audience", "peer"].forEach((kind) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn btn-ghost btn-small";
@@ -4861,14 +4862,20 @@ function buildScoreSheetUploadList(tool, project, stateKey, rerender) {
     btn.title = "Puts the average score per group and rubric from the uploaded sheets into the Scores grid above";
     btn.disabled = ScoringModule.presentationUploads(tool.id, project.id, kind).length === 0;
     btn.addEventListener("click", () => {
+      const cellsName = kind === "teacher" ? "Teacher" : kind === "audience" ? "Audience" : "Peer Evaluation";
       if (
         !confirm(
-          `This replaces the ${kind === "teacher" ? "Teacher" : "Audience"} cells of the Scores grid with the averages from all uploaded ${SCORE_SHEET_LABELS[kind]} sheets. Continue?`
+          `This replaces the ${cellsName} cells of the Scores grid with ${
+            kind === "peer" ? "each group's average peer rating (self-ratings excluded)" : "the averages"
+          } from all uploaded ${SCORE_SHEET_LABELS[kind]} sheets. Continue?`
         )
       ) {
         return;
       }
-      const result = ScoringModule.presApplySheetAverages(tool.id, project.id, kind);
+      const result =
+        kind === "peer"
+          ? ScoringModule.presApplyPeerAverages(tool.id, project.id)
+          : ScoringModule.presApplySheetAverages(tool.id, project.id, kind);
       scoreSheetStatus.set(
         stateKey,
         `Filled ${result.applied} cell(s) of the Scores grid` +
