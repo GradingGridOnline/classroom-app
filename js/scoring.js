@@ -590,9 +590,11 @@ const ScoringModule = {
   //     rubricBank: [{ id, text }] — manually-entered rubric descriptions,
   //     teacherRubrics / audienceRubrics: [{ id, rubricId, points, weight }] —
   //       the active rubrics; each becomes one score column, worth up to
-  //       `points` (at most MAX_RUBRIC_POINTS). `weight` (default 1)
-  //       multiplies that column's score in the group's Total Score,
-  //     peerWeight: weight (default 1) of the fixed Peer Evaluation column,
+  //       `points` (at most MAX_RUBRIC_POINTS). `weight` is a PERCENTAGE
+  //       (null = not set) that the column's score counts for in the
+  //       group's Total Score — see _weightedTotal,
+  //     peerWeight: the percentage weight (null = not set) of the fixed Peer Evaluation column,
+  //     weightsArePercent: marks projects already converted from the earlier multiplier weights,
   //     values: "group|entryId" -> score entered for that group (the
   //       Peer Evaluation column uses entryId "peer"),
   //     totalColumn: { mode, maxPoints } — same raw / out-of-max setting
@@ -615,13 +617,24 @@ const ScoringModule = {
     ["rubricBank", "teacherRubrics", "audienceRubrics"].forEach((key) => {
       if (!Array.isArray(project[key])) project[key] = [];
     });
+    // Weights used to be multipliers (default 1); they are now percentages (null = not set). The
+    // one-time conversion turns the old default of 1 into "not set" so existing totals don't change.
+    if (!project.weightsArePercent) {
+      [project.teacherRubrics, project.audienceRubrics].forEach((list) => {
+        list.forEach((entry) => {
+          if (entry.weight === 1) entry.weight = null;
+        });
+      });
+      if (project.peerWeight === 1) project.peerWeight = null;
+      project.weightsArePercent = true;
+    }
     [project.teacherRubrics, project.audienceRubrics].forEach((list) => {
       list.forEach((entry) => {
         if (typeof entry.points === "number" && entry.points > MAX_RUBRIC_POINTS) entry.points = MAX_RUBRIC_POINTS;
-        if (typeof entry.weight !== "number" || !(entry.weight >= 0)) entry.weight = 1;
+        if (typeof entry.weight !== "number" || !(entry.weight >= 0)) entry.weight = null;
       });
     });
-    if (typeof project.peerWeight !== "number" || !(project.peerWeight >= 0)) project.peerWeight = 1;
+    if (typeof project.peerWeight !== "number" || !(project.peerWeight >= 0)) project.peerWeight = null;
     if (!project.values || typeof project.values !== "object") project.values = {};
     if (!project.totalColumn || typeof project.totalColumn !== "object") project.totalColumn = {};
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
@@ -811,7 +824,7 @@ const ScoringModule = {
     if (list.length >= MAX_ACTIVE_RUBRICS) {
       throw new Error(`You've reached the limit of ${MAX_ACTIVE_RUBRICS} active rubrics.`);
     }
-    list.push({ id: `active-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, rubricId: null, points: 0, weight: 1 });
+    list.push({ id: `active-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, rubricId: null, points: 0, weight: null });
   },
 
   presRemoveActiveRubric(toolId, projectId, kind, entryId) {
@@ -836,13 +849,13 @@ const ScoringModule = {
     if (entry) entry.points = Math.max(0, Math.min(MAX_RUBRIC_POINTS, Math.round(Number(points) || 0)));
   },
 
-  /** Sets an active rubric's weight (0 or more; decimals fine). Its score is multiplied by this in the group's Total Score. Blank or invalid resets it to 1. */
+  /** Sets an active rubric's weight, a percentage (0 or more; decimals fine). Blank or invalid means "not set". */
   presSetActiveWeight(toolId, projectId, kind, entryId, value) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return;
     const text = String(value == null ? "" : value).trim();
     const num = Number(text);
-    const weight = text !== "" && !Number.isNaN(num) && num >= 0 ? num : 1;
+    const weight = text !== "" && !Number.isNaN(num) && num >= 0 ? num : null;
     if (kind === "peer") {
       project.peerWeight = weight; // the fixed Peer Evaluation column
       return;
@@ -871,7 +884,7 @@ const ScoringModule = {
           text: rubric.text || "(untitled rubric)",
           label: `${kind === "teacher" ? "Teacher" : "Audience"}: ${rubric.text || "(untitled rubric)"}`,
           points: entry.points || 0,
-          weight: typeof entry.weight === "number" ? entry.weight : 1,
+          weight: typeof entry.weight === "number" ? entry.weight : null,
         });
       });
     });
@@ -912,19 +925,58 @@ const ScoringModule = {
     project.values[key] = String(num);
   },
 
-  /** Total Score for one group: the sum of its entered scores across every score column, each multiplied by that rubric's weight (blank counts as 0). Null if there are no score columns yet. */
+  /**
+   * Combines one row's scores into a Total. `scoreOf(column)` gives the
+   * score (number, or null if none). Returns { total, max }:
+   *  - With NO weights set anywhere: the plain sum of the scores, out of
+   *    the sum of the columns' points.
+   *  - With weights set (percentages): each column counts
+   *    score ÷ points × weight, so weights adding up to 100 make the
+   *    Total out of 100; a column with no weight counts for nothing. max
+   *    is the sum of the weights.
+   * total is null when the row has no scores at all.
+   */
+  _weightedTotal(columns, scoreOf) {
+    const weighted = columns.some((c) => c.weight !== null && c.weight !== undefined);
+    let total = 0;
+    let anyScore = false;
+    let max = 0;
+    columns.forEach((col) => {
+      const score = scoreOf(col);
+      if (score !== null && score !== undefined) anyScore = true;
+      const value = score === null || score === undefined ? 0 : score;
+      if (weighted) {
+        if (!(col.weight > 0)) return;
+        max += col.weight;
+        if (col.points > 0) total += (value / col.points) * col.weight;
+      } else {
+        max += col.points;
+        total += value;
+      }
+    });
+    return { total: anyScore ? total : null, max };
+  },
+
+  /** The sum of a project's rubric weights, for the check that they add up to 100: { total, anySet }. */
+  presentationWeightSum(toolId, projectId) {
+    const columns = this.presentationColumns(toolId, projectId);
+    const anySet = columns.some((c) => c.weight !== null && c.weight !== undefined);
+    return { total: columns.reduce((sum, c) => sum + (c.weight > 0 ? c.weight : 0), 0), anySet };
+  },
+
+  /** Total Score for one group (see _weightedTotal; blank counts as 0 and a row with nothing entered totals 0). Null if there are no score columns yet. */
   computePresentationSum(toolId, projectId, group) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return null;
     const columns = this.presentationColumns(toolId, projectId);
     if (!columns.some((c) => c.kind !== "peer")) return null; // no rubrics yet
-    let sum = 0;
-    columns.forEach((col) => {
+    const result = this._weightedTotal(columns, (col) => {
       const raw = project.values[`${group}|${col.entryId}`];
+      if (raw === undefined) return null;
       const num = Number(raw);
-      if (raw !== undefined && !Number.isNaN(num)) sum += num * col.weight;
+      return Number.isNaN(num) ? null : num;
     });
-    return sum;
+    return result.total === null ? 0 : result.total;
   },
 
   // ----- Presentation Calc: score-sheet templates (CSV) -----
@@ -1274,17 +1326,7 @@ const ScoringModule = {
       }
       return groupValue(entry.group, col);
     };
-    const totalFor = (entry) => {
-      let total = 0;
-      let any = false;
-      columns.forEach((col) => {
-        const score = scoreFor(entry, col);
-        if (score === null) return;
-        total += score * col.weight;
-        any = true;
-      });
-      return any ? total : null;
-    };
+    const totalFor = (entry) => this._weightedTotal(columns, (col) => scoreFor(entry, col)).total;
     const average = (values) => {
       const present = values.filter((v) => v !== null);
       return present.length > 0 ? present.reduce((sum, v) => sum + v, 0) / present.length : null;
@@ -1303,7 +1345,7 @@ const ScoringModule = {
     rows.push({
       label: "Total (weighted)",
       score: totalFor(target),
-      max: columns.reduce((sum, col) => sum + col.points * col.weight, 0),
+      max: this._weightedTotal(columns, () => null).max,
       classAverage: average(roster.map((entry) => totalFor(entry))),
       isTotal: true,
     });

@@ -3564,7 +3564,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row (each rubric's score multiplied by its Weight, 1 by default), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill it from uploaded Peer Evaluation sheets (below) or type it in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill it from uploaded Peer Evaluation sheets (below) or type it in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
   page.appendChild(hint);
 
@@ -3592,7 +3592,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
     headRow.appendChild(totalTh);
     thead.appendChild(headRow);
 
-    // Weight row: each rubric's score is multiplied by its weight in the Total Score (1 = counts as is).
+    // Weight row: each rubric's weight as a percentage of the Total Score; the box at the right shows their sum.
     const weightRow = document.createElement("tr");
     const weightLabelTh = document.createElement("th");
     weightLabelTh.textContent = "Weight";
@@ -3603,8 +3603,9 @@ function buildPresentationScoresPage(tool, cfg, container) {
       input.type = "text";
       input.inputMode = "decimal";
       input.className = "weight-input";
-      input.value = col.weight;
-      input.title = "Weight: this rubric's score is multiplied by this in the Total Score (1 = as is, 2 = counts double, 0 = left out)";
+      input.value = col.weight === null ? "" : col.weight;
+      input.placeholder = "%";
+      input.title = "Weight, as a percentage of the Total Score. Enter percentages for all the rubrics so they add up to 100 (see the box at the right).";
       input.addEventListener("change", () => {
         ScoringModule.presSetActiveWeight(tool.id, cfg.id, col.kind, col.entryId, input.value);
         renderScoringToolView(tool, container);
@@ -3612,7 +3613,23 @@ function buildPresentationScoresPage(tool, cfg, container) {
       th.appendChild(input);
       weightRow.appendChild(th);
     });
-    weightRow.appendChild(document.createElement("th"));
+    // Sum of the weights: green at exactly 100, red over 100.
+    const sumTh = document.createElement("th");
+    const weightSum = ScoringModule.presentationWeightSum(tool.id, cfg.id);
+    const sumBox = document.createElement("div");
+    sumBox.className = "weight-total-box";
+    if (!weightSum.anySet) {
+      sumBox.textContent = "Weights: not set";
+      sumBox.title = "With no weights entered, the rubric scores are simply added up.";
+    } else {
+      const shown = Math.round(weightSum.total * 100) / 100;
+      if (shown === 100) sumBox.classList.add("weight-total-ok");
+      else if (shown > 100) sumBox.classList.add("weight-total-over");
+      sumBox.textContent = `Weights: ${shown}%${shown === 100 ? " ✓" : shown > 100 ? " (over 100)" : ""}`;
+      sumBox.title = "The weights should add up to 100%.";
+    }
+    sumTh.appendChild(sumBox);
+    weightRow.appendChild(sumTh);
     thead.appendChild(weightRow);
     table.appendChild(thead);
 
@@ -5123,124 +5140,177 @@ function buildPeerAveragesTable(tool, project) {
 // ----- Presentation Calc: printed reports -----
 //
 // Three buttons on the Scores page print (through the browser's print
-// dialog — "Save as PDF" works too):
-//  1. Comments: a first page of Global Comments (Teacher's, then
-//     Audience), then one page per group with that group's Teacher's
-//     comments followed by its Audience comments.
+// dialog — "Save as PDF" works too). Every page is ONE sheet: the text
+// is automatically fitted by switching the comments into 2 or 3 columns
+// and, if needed, shrinking the type.
+//  1. Comments: one page per group — Global Comments, then that group's
+//     Teacher's comments, then its Audience comments.
 //  2. Group pages: one page per group — a score table by rubric (the
-//     group's score, the maximum possible, the class average) followed by
-//     the comments: Global, then Teacher's, then Audience.
+//     group's score, the maximum possible, the class average), then the
+//     comments in the same order.
 //  3. Student pages: one page per student — the same table with that
 //     student's own scores (their group's rubric scores, and their own
-//     peer evaluation) followed by the same comments for their group.
+//     peer evaluation), then the comments for their group.
+// Only Teacher global comments are printed (there are no Audience ones).
 
 function formatPrintNumber(value) {
   return value === null || value === undefined ? "—" : String(Math.round(value * 100) / 100);
 }
 
-function newPresentationPrintSheet() {
+/** One printed sheet: a fixed-size box (small enough for A4 or Letter) holding a "fit" block whose type size and comment columns get adjusted until everything fits. */
+function createPresentationPrintPage() {
   const sheet = document.createElement("div");
   sheet.className = "report-sheet";
-  // The page itself has no margin (see @page in style.css), so the sheet makes its own.
-  sheet.style.padding = "14mm 16mm";
-  sheet.style.fontSize = "0.95rem";
-  sheet.style.lineHeight = "1.45";
-  return sheet;
+  sheet.style.width = "185mm";
+  sheet.style.height = "255mm";
+  sheet.style.padding = "7mm";
+  sheet.style.margin = "0 auto";
+  sheet.style.overflow = "hidden";
+
+  const fit = document.createElement("div");
+  fit.style.fontSize = "13px";
+  fit.style.lineHeight = "1.35";
+  sheet.appendChild(fit);
+
+  const columns = document.createElement("div"); // the comments go here, in 1-3 columns
+  columns.style.columnGap = "7mm";
+  return { sheet, fit, columns };
+}
+
+/** Largest type / fewest columns at which the page's contents fit its sheet. */
+function fitPresentationPage(page) {
+  const attempts = [[13, 1], [13, 2], [12, 2], [11, 2], [10, 2], [10, 3], [9, 3], [8, 3], [7, 3], [6, 3]];
+  const style = getComputedStyle(page.sheet);
+  const available = page.sheet.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  for (const [size, columnCount] of attempts) {
+    page.fit.style.fontSize = `${size}px`;
+    page.columns.style.columnCount = String(columnCount);
+    if (page.fit.offsetHeight <= available * 0.96) return;
+  }
 }
 
 function printSheetHeading(text, subText) {
   const wrap = document.createElement("div");
   const h = document.createElement("h2");
   h.textContent = text;
-  h.style.fontSize = "1.5rem";
+  h.style.fontSize = "1.6em";
   h.style.margin = "0 0 2px";
   wrap.appendChild(h);
   if (subText) {
     const sub = document.createElement("p");
-    sub.className = "report-sheet-sub";
     sub.textContent = subText;
-    sub.style.margin = "0 0 12px";
+    sub.style.fontSize = "0.9em";
+    sub.style.color = "#444";
+    sub.style.margin = "0 0 8px";
     wrap.appendChild(sub);
   }
   return wrap;
 }
 
 /** A titled list of comments ("(none)" when empty). */
-function appendCommentSection(sheet, title, comments) {
+function appendCommentSection(parent, title, comments) {
   const heading = document.createElement("h3");
   heading.textContent = title;
-  heading.style.fontSize = "1.05rem";
-  heading.style.margin = "14px 0 4px";
+  heading.style.fontSize = "1.05em";
+  heading.style.margin = "8px 0 3px";
   heading.style.borderBottom = "1px solid #999";
-  sheet.appendChild(heading);
+  heading.style.breakAfter = "avoid";
+  parent.appendChild(heading);
 
   if (comments.length === 0) {
     const none = document.createElement("p");
     none.textContent = "(none)";
     none.style.color = "#777";
     none.style.margin = "2px 0";
-    sheet.appendChild(none);
+    parent.appendChild(none);
     return;
   }
   const list = document.createElement("ul");
   list.style.margin = "2px 0";
-  list.style.paddingLeft = "20px";
+  list.style.paddingLeft = "1.2em";
   comments.forEach((text) => {
     const li = document.createElement("li");
     li.textContent = text;
-    li.style.marginBottom = "3px";
+    li.style.marginBottom = "2px";
+    li.style.breakInside = "avoid";
     list.appendChild(li);
   });
-  sheet.appendChild(list);
+  parent.appendChild(list);
 }
 
-/** Score table: rubric | score | max possible | class average. */
+/** Score table: rubric | score | max possible | class average. With many rubrics it is split into two tables side by side. */
 function buildPrintScoreTable(rows, scoreHeading) {
-  const table = document.createElement("table");
-  table.className = "report-sheet-table";
-  table.style.fontSize = "0.9rem";
+  const buildOne = (subset) => {
+    const table = document.createElement("table");
+    table.className = "report-sheet-table";
+    table.style.fontSize = "1em";
+    table.style.flex = "1";
 
-  const thead = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  ["Rubric", scoreHeading, "Max possible", "Class average"].forEach((label, i) => {
-    const th = document.createElement("th");
-    th.textContent = label;
-    th.style.textAlign = i === 0 ? "left" : "right";
-    th.style.borderBottom = "2px solid #333";
-    th.style.padding = "3px 8px";
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  rows.forEach((row) => {
-    const tr = document.createElement("tr");
-    [row.label, formatPrintNumber(row.score), formatPrintNumber(row.max), formatPrintNumber(row.classAverage)].forEach((text, i) => {
-      const td = document.createElement("td");
-      td.textContent = text;
-      td.style.padding = "3px 8px";
-      td.style.borderBottom = "1px solid #ddd";
-      if (i > 0) td.style.textAlign = "right";
-      if (row.isTotal) {
-        td.style.fontWeight = "700";
-        td.style.borderTop = "2px solid #333";
-      }
-      tr.appendChild(td);
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["Rubric", scoreHeading, "Max", "Class avg."].forEach((label, i) => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      th.style.textAlign = i === 0 ? "left" : "right";
+      th.style.borderBottom = "2px solid #333";
+      th.style.padding = "2px 6px";
+      headRow.appendChild(th);
     });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  return table;
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    subset.forEach((row) => {
+      const tr = document.createElement("tr");
+      [row.label, formatPrintNumber(row.score), formatPrintNumber(row.max), formatPrintNumber(row.classAverage)].forEach((text, i) => {
+        const td = document.createElement("td");
+        td.textContent = text;
+        td.style.padding = "2px 6px";
+        td.style.borderBottom = "1px solid #ddd";
+        if (i > 0) td.style.textAlign = "right";
+        if (row.isTotal) {
+          td.style.fontWeight = "700";
+          td.style.borderTop = "2px solid #333";
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    return table;
+  };
+
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex";
+  wrap.style.gap = "7mm";
+  wrap.style.alignItems = "flex-start";
+  wrap.style.marginBottom = "4px";
+  if (rows.length > 10) {
+    const half = Math.ceil(rows.length / 2);
+    wrap.append(buildOne(rows.slice(0, half)), buildOne(rows.slice(half)));
+  } else {
+    wrap.appendChild(buildOne(rows));
+  }
+  return wrap;
 }
 
-/** Puts the sheets in the print area (one per page) and opens the print dialog in portrait, with the course/project as the suggested PDF file name. */
-function printPresentationSheets(sheets, title) {
-  el.printArea.innerHTML = "";
-  sheets.forEach((sheet, index) => {
-    if (index < sheets.length - 1) sheet.classList.add("report-sheet-page-break");
-    el.printArea.appendChild(sheet);
+/** Fits every page, puts them in the print area (one per sheet), and opens the print dialog in portrait, with the course/project as the suggested PDF file name. */
+function printPresentationPages(pages, title) {
+  // Pages are fitted while on screen but out of sight, since fitting needs a real layout.
+  const measure = document.createElement("div");
+  measure.style.cssText = "position:fixed;left:-10000px;top:0;visibility:hidden;";
+  document.body.appendChild(measure);
+  pages.forEach((page) => {
+    measure.appendChild(page.sheet);
+    fitPresentationPage(page);
   });
+
+  el.printArea.innerHTML = "";
+  pages.forEach((page, index) => {
+    if (index < pages.length - 1) page.sheet.classList.add("report-sheet-page-break");
+    el.printArea.appendChild(page.sheet);
+  });
+  measure.remove();
 
   const pageStyle = document.createElement("style");
   pageStyle.textContent = "@page { size: A4 portrait; margin: 0; }";
@@ -5270,49 +5340,44 @@ function printPresentationReport(tool, project, kind) {
       .map((e) => e.name || "(unnamed)")
       .join(", ");
   const groupComments = (group) => comments.groups[group] || { teacher: [], audience: [] };
-  const sheets = [];
+  const globalComments = comments.global.teacher; // only the teacher leaves global comments
+  const pages = [];
 
-  const appendGlobal = (sheet) => {
-    appendCommentSection(sheet, "Global Comments — Teacher", comments.global.teacher);
-    appendCommentSection(sheet, "Global Comments — Audience", comments.global.audience);
+  /** Global Comments (when there are any), then Teacher's, then Audience comments for the group. */
+  const fillComments = (page, group) => {
+    if (globalComments.length > 0) appendCommentSection(page.columns, "Global Comments", globalComments);
+    appendCommentSection(page.columns, "Teacher's Comments", groupComments(group).teacher);
+    appendCommentSection(page.columns, "Audience Comments", groupComments(group).audience);
   };
-  const appendGroupComments = (sheet, group) => {
-    appendCommentSection(sheet, "Teacher's Comments", groupComments(group).teacher);
-    appendCommentSection(sheet, "Audience Comments", groupComments(group).audience);
-  };
+  const groupSubtitle = (group) => `${subtitle}${membersOf(group) ? ` · ${membersOf(group)}` : ""}`;
 
   if (kind === "comments") {
-    const hasGlobal = comments.global.teacher.length + comments.global.audience.length > 0;
-    if (hasGlobal) {
-      const sheet = newPresentationPrintSheet();
-      sheet.appendChild(printSheetHeading("Global Comments", subtitle));
-      appendCommentSection(sheet, "Teacher's Comments", comments.global.teacher);
-      appendCommentSection(sheet, "Audience Comments", comments.global.audience);
-      sheets.push(sheet);
-    }
+    const anyComments =
+      globalComments.length > 0 || groups.some((g) => groupComments(g).teacher.length + groupComments(g).audience.length > 0);
+    if (!anyComments) return "There are no comments yet — upload Teacher or Audience score sheets that include comments first.";
     groups.forEach((group) => {
-      const c = groupComments(group);
-      if (c.teacher.length + c.audience.length === 0) return; // nothing to print for this group
-      const sheet = newPresentationPrintSheet();
-      sheet.appendChild(printSheetHeading(`Group ${group}`, `${subtitle}${membersOf(group) ? ` · ${membersOf(group)}` : ""}`));
-      appendGroupComments(sheet, group);
-      sheets.push(sheet);
+      const page = createPresentationPrintPage();
+      page.fit.appendChild(printSheetHeading(`Group ${group}`, groupSubtitle(group)));
+      page.fit.appendChild(page.columns);
+      fillComments(page, group);
+      pages.push(page);
     });
-    if (sheets.length === 0) return "There are no comments yet — upload Teacher or Audience score sheets that include comments first.";
-    printPresentationSheets(sheets, `${subtitle} Comments`);
+    printPresentationPages(pages, `${subtitle} Comments`);
     return "";
   }
 
   if (kind === "groups") {
     groups.forEach((group) => {
-      const sheet = newPresentationPrintSheet();
-      sheet.appendChild(printSheetHeading(`Group ${group}`, `${subtitle}${membersOf(group) ? ` · ${membersOf(group)}` : ""}`));
-      sheet.appendChild(buildPrintScoreTable(ScoringModule.presentationScoreRows(tool.id, project.id, { group }).rows, "Group's score"));
-      appendGlobal(sheet);
-      appendGroupComments(sheet, group);
-      sheets.push(sheet);
+      const page = createPresentationPrintPage();
+      page.fit.appendChild(printSheetHeading(`Group ${group}`, groupSubtitle(group)));
+      page.fit.appendChild(
+        buildPrintScoreTable(ScoringModule.presentationScoreRows(tool.id, project.id, { group }).rows, "Group score")
+      );
+      page.fit.appendChild(page.columns);
+      fillComments(page, group);
+      pages.push(page);
     });
-    printPresentationSheets(sheets, `${subtitle} Group Scores`);
+    printPresentationPages(pages, `${subtitle} Group Scores`);
     return "";
   }
 
@@ -5320,18 +5385,21 @@ function printPresentationReport(tool, project, kind) {
   project.roster
     .filter((entry) => entry.group)
     .forEach((entry) => {
-      const sheet = newPresentationPrintSheet();
+      const page = createPresentationPrintPage();
       const who = `${entry.classNumber ? `#${entry.classNumber} ` : ""}${entry.name || "(unnamed)"}`;
-      sheet.appendChild(printSheetHeading(who, `${subtitle} · Group ${entry.group}`));
-      sheet.appendChild(
-        buildPrintScoreTable(ScoringModule.presentationScoreRows(tool.id, project.id, { studentId: entry.studentId }).rows, "Your score")
+      page.fit.appendChild(printSheetHeading(who, `${subtitle} · Group ${entry.group}`));
+      page.fit.appendChild(
+        buildPrintScoreTable(
+          ScoringModule.presentationScoreRows(tool.id, project.id, { studentId: entry.studentId }).rows,
+          "Your score"
+        )
       );
-      appendGlobal(sheet);
-      appendGroupComments(sheet, entry.group);
-      sheets.push(sheet);
+      page.fit.appendChild(page.columns);
+      fillComments(page, entry.group);
+      pages.push(page);
     });
-  if (sheets.length === 0) return "There are no students in groups yet.";
-  printPresentationSheets(sheets, `${subtitle} Student Scores`);
+  if (pages.length === 0) return "There are no students in groups yet.";
+  printPresentationPages(pages, `${subtitle} Student Scores`);
   return "";
 }
 
@@ -5354,7 +5422,7 @@ function buildPresentationPrintSection(tool, project) {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "Comments come from the uploaded Teacher and Audience score sheets. Group and student pages include the score tables from the grid above; on a student's page, the Peer Evaluation row (and the Total) is that student's own peer rating.";
+    "Comments come from the uploaded Teacher and Audience score sheets. Each page is fitted to one sheet (comments run in columns, with smaller type if needed). Group and student pages include the score tables; on a student's page, the Peer Evaluation row (and the Total) is that student's own peer rating.";
   block.appendChild(hint);
 
   const status = document.createElement("p");
