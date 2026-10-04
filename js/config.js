@@ -19,12 +19,16 @@ const APP_CONFIG = {
     // Google Form and reading its responses. drive.file only grants
     // access to files this app itself creates — never the rest of
     // your Drive.
+    // gmail.send is for emailing the printable reports (PDFs) to
+    // students: it only lets the app SEND mail as you — it cannot read
+    // or delete anything in your mailbox.
     scopes: [
       "https://www.googleapis.com/auth/drive.appdata",
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/drive.file",
       "https://www.googleapis.com/auth/forms.body",
       "https://www.googleapis.com/auth/forms.responses.readonly",
+      "https://www.googleapis.com/auth/gmail.send",
     ].join(" "),
   },
 };

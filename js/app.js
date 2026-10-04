@@ -3697,6 +3697,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
   // Same raw / out-of-max setting as the Progress Tracker's Total Score column.
   page.appendChild(buildTableTotalColumnBlock(tool, cfg, container, cfg.id));
   page.appendChild(buildPresentationPrintSection(tool, cfg));
+  page.appendChild(buildPresentationEmailSection(tool, cfg));
   page.appendChild(buildPresentationUploadsSection(tool, cfg, container));
   return page;
 }
@@ -5326,10 +5327,23 @@ function printPresentationPages(pages, title) {
   window.print();
 }
 
-/** Builds and prints one of the three reports. kind: "comments" | "groups" | "students". Returns a message if there's nothing to print. */
+/** Prints one of the three reports. kind: "comments" | "groups" | "students". Returns a message if there's nothing to print. */
 function printPresentationReport(tool, project, kind) {
+  const built = buildPresentationReportPages(tool, project, kind);
+  if (built.error) return built.error;
+  printPresentationPages(built.pages, built.title);
+  return "";
+}
+
+/**
+ * Builds the pages of one report (not yet fitted or printed). Returns
+ * { pages, title } or { error }. Each page also records which group it is
+ * for (page.group) and, on student pages, which student (page.studentId),
+ * so the pages can be matched to recipients when emailing.
+ */
+function buildPresentationReportPages(tool, project, kind) {
   const groups = ScoringModule.presentationGroups(tool.id, project.id);
-  if (groups.length === 0) return 'There are no groups yet — import them on the "Student Groups" subtab first.';
+  if (groups.length === 0) return { error: 'There are no groups yet — import them on the "Student Groups" subtab first.' };
 
   const comments = ScoringModule.presentationComments(tool.id, project.id);
   const course = CoursesModule.find(RosterModule.currentCourseId);
@@ -5354,21 +5368,24 @@ function printPresentationReport(tool, project, kind) {
   if (kind === "comments") {
     const anyComments =
       globalComments.length > 0 || groups.some((g) => groupComments(g).teacher.length + groupComments(g).audience.length > 0);
-    if (!anyComments) return "There are no comments yet — upload Teacher or Audience score sheets that include comments first.";
+    if (!anyComments) {
+      return { error: "There are no comments yet — upload Teacher or Audience score sheets that include comments first." };
+    }
     groups.forEach((group) => {
       const page = createPresentationPrintPage();
+      page.group = group;
       page.fit.appendChild(printSheetHeading(`Group ${group}`, groupSubtitle(group)));
       page.fit.appendChild(page.columns);
       fillComments(page, group);
       pages.push(page);
     });
-    printPresentationPages(pages, `${subtitle} Comments`);
-    return "";
+    return { pages, title: `${subtitle} Comments` };
   }
 
   if (kind === "groups") {
     groups.forEach((group) => {
       const page = createPresentationPrintPage();
+      page.group = group;
       page.fit.appendChild(printSheetHeading(`Group ${group}`, groupSubtitle(group)));
       page.fit.appendChild(
         buildPrintScoreTable(ScoringModule.presentationScoreRows(tool.id, project.id, { group }).rows, "Group score")
@@ -5377,8 +5394,7 @@ function printPresentationReport(tool, project, kind) {
       fillComments(page, group);
       pages.push(page);
     });
-    printPresentationPages(pages, `${subtitle} Group Scores`);
-    return "";
+    return { pages, title: `${subtitle} Group Scores` };
   }
 
   // kind === "students"
@@ -5386,6 +5402,8 @@ function printPresentationReport(tool, project, kind) {
     .filter((entry) => entry.group)
     .forEach((entry) => {
       const page = createPresentationPrintPage();
+      page.group = entry.group;
+      page.studentId = entry.studentId;
       const who = `${entry.classNumber ? `#${entry.classNumber} ` : ""}${entry.name || "(unnamed)"}`;
       page.fit.appendChild(printSheetHeading(who, `${subtitle} · Group ${entry.group}`));
       page.fit.appendChild(
@@ -5398,9 +5416,8 @@ function printPresentationReport(tool, project, kind) {
       fillComments(page, entry.group);
       pages.push(page);
     });
-  if (pages.length === 0) return "There are no students in groups yet.";
-  printPresentationPages(pages, `${subtitle} Student Scores`);
-  return "";
+  if (pages.length === 0) return { error: "There are no students in groups yet." };
+  return { pages, title: `${subtitle} Student Scores` };
 }
 
 /** The three print buttons, shown on the Scores page. */
@@ -5442,6 +5459,334 @@ function buildPresentationPrintSection(tool, project) {
     btn.textContent = label;
     btn.addEventListener("click", () => {
       status.textContent = printPresentationReport(tool, project, kind);
+    });
+    buttons.appendChild(btn);
+  });
+  block.appendChild(buttons);
+  return block;
+}
+
+// ----- Presentation Calc: emailing the reports as PDFs -----
+//
+// Each of the three printable reports can be emailed instead of printed:
+// every page is drawn to an image (so Japanese text and the layout come
+// out exactly as on the printout), made into a one-page PDF, and sent as
+// an attachment through the signed-in Google account's Gmail (this needs
+// the Gmail "send" permission — see js/config.js).
+//   Comments / Group pages: each student receives their GROUP's page.
+//   Student pages: each student receives their own page.
+// Recipients are the students in the project's groups who have an email
+// address on the Roster; students without one are skipped and listed.
+// A "test address" sends just one email, to that address only.
+
+const REPORT_EMAIL_LABELS = {
+  comments: "Comments",
+  groups: "Group Score Page",
+  students: "Student Score Page",
+};
+
+const DEFAULT_EMAIL_SUBJECT = "{course}: {project} — {report}";
+const DEFAULT_EMAIL_MESSAGE = "Hello {name},\n\nAttached is your {report} for {project}.\n";
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function utf8ToBase64(text) {
+  return bytesToBase64(new TextEncoder().encode(text));
+}
+
+/** Base64 text broken into 76-character lines, as email requires. */
+function wrapBase64(base64) {
+  return (base64.match(/.{1,76}/g) || []).join("\r\n");
+}
+
+/** A complete email (headers + plain-text body + one PDF attachment) as text, ready for the Gmail API. Non-English subjects and file names are encoded the way email requires. */
+function buildPdfEmailMessage({ to, subject, body, filename, pdfBytes }) {
+  const boundary = `ggo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const encodedName = encodeURIComponent(filename).replace(/'/g, "%27");
+  return [
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${utf8ToBase64(subject)}?=`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(utf8ToBase64(body)),
+    `--${boundary}`,
+    'Content-Type: application/pdf; name="report.pdf"',
+    `Content-Disposition: attachment; filename="report.pdf"; filename*=UTF-8''${encodedName}`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(bytesToBase64(pdfBytes)),
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+}
+
+async function sendGmailMessage(message) {
+  const token = await storage.getAccessToken();
+  const raw = btoa(message).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        "Google hasn't allowed this app to send email yet. Sign out, sign in again and approve the email permission (and make sure the Gmail API is turned on in Google Cloud). " +
+          text.slice(0, 160)
+      );
+    }
+    throw new Error(`Gmail error (${response.status}): ${text.slice(0, 200)}`);
+  }
+}
+
+/** Fits one report page, draws it to an image, and returns it as a one-page PDF (bytes). */
+async function renderPageToPdfBytes(page, stage) {
+  stage.appendChild(page.sheet);
+  fitPresentationPage(page);
+  const canvas = await html2canvas(page.sheet, {
+    scale: 2,
+    backgroundColor: "#ffffff",
+    logging: false,
+    onclone: (clonedDocument) => {
+      // The stage sits off-screen; bring it back to the top-left in the copy that gets drawn.
+      const clonedStage = clonedDocument.getElementById("ggo-pdf-stage");
+      if (clonedStage) {
+        clonedStage.style.position = "static";
+        clonedStage.style.left = "0";
+        clonedStage.style.top = "0";
+      }
+    },
+  });
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "mm", format: [185, 255], orientation: "portrait" });
+  pdf.addImage(canvas.toDataURL("image/jpeg", 0.88), "JPEG", 0, 0, 185, 255);
+  return new Uint8Array(pdf.output("arraybuffer"));
+}
+
+/** Replaces {name}, {group}, {report}, {project}, {course} in the subject/message text. */
+function fillEmailTemplate(template, values) {
+  return template
+    .replaceAll("{name}", values.name)
+    .replaceAll("{group}", values.group)
+    .replaceAll("{report}", values.report)
+    .replaceAll("{project}", values.project)
+    .replaceAll("{course}", values.course);
+}
+
+/**
+ * Emails one report. targetStudentId: one student's id, or "" for every
+ * student in the project's groups. testAddress: if given, only the first
+ * email is sent, to that address. Progress is reported through `status`.
+ */
+async function emailPresentationReports(tool, project, kind, targetStudentId, testAddress, status) {
+  if (typeof html2canvas === "undefined" || !window.jspdf) {
+    status.textContent = "The PDF tools didn't load — check your internet connection and reload the page.";
+    return;
+  }
+  const built = buildPresentationReportPages(tool, project, kind);
+  if (built.error) {
+    status.textContent = built.error;
+    return;
+  }
+
+  const label = REPORT_EMAIL_LABELS[kind];
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  const settings = project.templateSettings;
+  const subjectTemplate = settings.emailSubject.trim() || DEFAULT_EMAIL_SUBJECT;
+  const messageTemplate = settings.emailMessage.trim() ? settings.emailMessage : DEFAULT_EMAIL_MESSAGE;
+
+  // ----- Who gets what -----
+  const recipients = project.roster.filter((entry) => entry.group && (!targetStudentId || entry.studentId === targetStudentId));
+  const emailOf = (entry) => {
+    const student = RosterModule.students.find((s) => s.id === entry.studentId);
+    return student && /@/.test(student.email || "") ? student.email.trim() : "";
+  };
+  const pageFor = (entry) =>
+    kind === "students" ? built.pages.find((p) => p.studentId === entry.studentId) : built.pages.find((p) => p.group === entry.group);
+
+  let jobs = recipients.map((entry) => ({ entry, to: emailOf(entry), page: pageFor(entry) })).filter((job) => job.page);
+  const skipped = jobs.filter((job) => !job.to).map((job) => job.entry.name || "(unnamed)");
+  const test = testAddress.trim();
+  if (test) {
+    jobs = jobs.slice(0, 1).map((job) => ({ ...job, to: test, isTest: true }));
+  } else {
+    jobs = jobs.filter((job) => job.to);
+  }
+  if (jobs.length === 0) {
+    status.textContent = skipped.length > 0 ? `None of those students has an email address on the Roster (${skipped.join(", ")}).` : "There is nobody to send to.";
+    return;
+  }
+
+  const summary = test
+    ? `Send ONE test email with a PDF to ${test}?`
+    : `Send ${jobs.length} email(s), each with a PDF (${label}), to ${jobs.length === 1 ? jobs[0].to : "these students"}?` +
+      (skipped.length > 0 ? `\n\nNo email address on the Roster, so skipped: ${skipped.join(", ")}.` : "");
+  if (!confirm(summary)) return;
+
+  // ----- Make the PDFs (one per page, reused by everyone who gets that page) and send -----
+  const stage = document.createElement("div");
+  stage.id = "ggo-pdf-stage";
+  stage.style.cssText = "position:fixed;left:-10000px;top:0;background:#fff;";
+  document.body.appendChild(stage);
+
+  const pdfs = new Map(); // page -> bytes
+  const failures = [];
+  let sent = 0;
+  try {
+    for (const job of jobs) {
+      status.textContent = `Sending ${sent + failures.length + 1} of ${jobs.length}…`;
+      try {
+        if (!pdfs.has(job.page)) pdfs.set(job.page, await renderPageToPdfBytes(job.page, stage));
+        const values = {
+          name: job.entry.name || "",
+          group: String(job.entry.group),
+          report: label,
+          project: project.name,
+          course: course ? course.name : "",
+        };
+        const safe = (text) => text.replace(/[\\/:*?"<>|]/g, "").trim();
+        const fileLabel = kind === "students" ? job.entry.name || "student" : `Group ${job.entry.group}`;
+        const filename = `${[safe(values.course), safe(values.project), label, safe(fileLabel)].filter(Boolean).join(" ")}.pdf`;
+        await sendGmailMessage(
+          buildPdfEmailMessage({
+            to: job.to,
+            subject: (job.isTest ? "[TEST] " : "") + fillEmailTemplate(subjectTemplate, values),
+            body: fillEmailTemplate(messageTemplate, values),
+            filename,
+            pdfBytes: pdfs.get(job.page),
+          })
+        );
+        sent++;
+      } catch (err) {
+        failures.push(`${job.entry.name || "(unnamed)"}: ${err.message}`);
+        if (/allowed this app to send email/.test(err.message)) break; // no point trying the rest
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250)); // be gentle with Gmail's limits
+    }
+  } finally {
+    stage.remove();
+  }
+
+  status.textContent =
+    `Sent ${sent} email(s)` +
+    (test ? " (test)" : "") +
+    (skipped.length > 0 && !test ? `; skipped (no email address): ${skipped.join(", ")}` : "") +
+    (failures.length > 0 ? `. Problems: ${failures.join(" | ")}` : ".");
+}
+
+/** The email section on the Scores page: who to send to, the message, and the three buttons. */
+function buildPresentationEmailSection(tool, project) {
+  const settings = project.templateSettings;
+
+  const block = document.createElement("div");
+  block.className = "attendance-settings-block";
+  block.style.borderTop = "2px solid var(--line)";
+  block.style.paddingTop = "18px";
+  block.style.marginTop = "22px";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Email as PDF";
+  heading.style.fontFamily = "var(--font-heading)";
+  heading.style.fontSize = "1.5rem";
+  heading.style.color = "var(--green-dark)";
+  heading.style.margin = "0 0 8px";
+  block.appendChild(heading);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "Sends the same pages as the Print buttons, one PDF per email, through your Google account. Comments and Group pages go to every student in that group; Student pages go to that student. Students need an email address on the Roster. Use the test box to send a single sample to yourself first.";
+  block.appendChild(hint);
+
+  const addRow = (labelText, control) => {
+    const row = document.createElement("div");
+    row.className = "mapping-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    row.append(label, control);
+    block.appendChild(row);
+  };
+
+  const recipientSelect = document.createElement("select");
+  const everyone = document.createElement("option");
+  everyone.value = "";
+  everyone.textContent = "All students in the groups";
+  recipientSelect.appendChild(everyone);
+  project.roster
+    .filter((entry) => entry.group)
+    .forEach((entry) => {
+      const opt = document.createElement("option");
+      opt.value = entry.studentId;
+      opt.textContent = `Group ${entry.group} · ${entry.name || "(unnamed)"}`;
+      recipientSelect.appendChild(opt);
+    });
+  addRow("Send to", recipientSelect);
+
+  const subjectInput = document.createElement("input");
+  subjectInput.type = "text";
+  subjectInput.placeholder = DEFAULT_EMAIL_SUBJECT;
+  subjectInput.value = settings.emailSubject;
+  subjectInput.addEventListener("input", () => {
+    settings.emailSubject = subjectInput.value;
+  });
+  addRow("Subject", subjectInput);
+
+  const messageInput = document.createElement("textarea");
+  messageInput.rows = 4;
+  messageInput.placeholder = DEFAULT_EMAIL_MESSAGE;
+  messageInput.value = settings.emailMessage;
+  messageInput.addEventListener("input", () => {
+    settings.emailMessage = messageInput.value;
+  });
+  addRow("Message", messageInput);
+
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.textContent = "In the subject and message, {name}, {group}, {report}, {project} and {course} are filled in for each student. Leave them blank to use the standard wording. Saved with Save Scoring.";
+  block.appendChild(note);
+
+  const testInput = document.createElement("input");
+  testInput.type = "text";
+  testInput.placeholder = "your own address — sends ONE test email only";
+  addRow("Test address", testInput);
+
+  const status = document.createElement("p");
+  status.className = "result";
+  block.appendChild(status);
+
+  const buttons = document.createElement("div");
+  buttons.className = "panel-toolbar-buttons";
+  [
+    ["Email Comments", "comments"],
+    ["Email Group Score Pages", "groups"],
+    ["Email Student Score Pages", "students"],
+  ].forEach(([label, kind]) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-primary";
+    btn.textContent = label;
+    btn.addEventListener("click", async () => {
+      const all = buttons.querySelectorAll("button");
+      all.forEach((b) => (b.disabled = true));
+      try {
+        await emailPresentationReports(tool, project, kind, recipientSelect.value, testInput.value, status);
+      } catch (err) {
+        status.textContent = `Couldn't send: ${err.message}`;
+      }
+      all.forEach((b) => (b.disabled = false));
     });
     buttons.appendChild(btn);
   });

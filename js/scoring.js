@@ -653,6 +653,8 @@ const ScoringModule = {
     if (typeof ts.audienceInstructions !== "string") ts.audienceInstructions = "";
     if (typeof ts.audienceComments !== "boolean") ts.audienceComments = true;
     if (typeof ts.peerInstructions !== "string") ts.peerInstructions = "";
+    if (typeof ts.emailSubject !== "string") ts.emailSubject = "";
+    if (typeof ts.emailMessage !== "string") ts.emailMessage = "";
     ts.peerHighestScore = Math.max(1, Math.min(10, Math.round(Number(ts.peerHighestScore) || 10)));
     return project;
   },
