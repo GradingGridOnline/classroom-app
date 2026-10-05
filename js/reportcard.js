@@ -3,14 +3,18 @@
 // AttendanceModule to assemble one student's full picture — used by
 // both Student Consultation and the printed report card.
 //
-// selectedItemIds is this module's own persisted state: which
-// scoring items appear on a printed report card. Stored as
-// reportcard-<courseId>.json. Defaults to every current item
-// selected the first time (so printing works immediately without
-// requiring setup) — after that, it's exactly what's been saved.
+// Saved state (reportcard-<courseId>.json):
+//  - selectedItemIds: which scoring items appear on a printed report
+//    card. Defaults to every current item selected the first time (so
+//    printing works immediately without requiring setup) — after that,
+//    it's exactly what's been saved.
+//  - emailSubject / emailMessage: the wording used when report cards
+//    are emailed to students (blank = the standard wording).
 
 const ReportCardModule = {
   selectedItemIds: new Set(),
+  emailSubject: "",
+  emailMessage: "",
   currentCourseId: null,
 
   fileName(courseId) {
@@ -25,12 +29,16 @@ const ReportCardModule = {
     } else {
       this.selectAll(); // first time — default to everything included
     }
+    this.emailSubject = data && typeof data.emailSubject === "string" ? data.emailSubject : "";
+    this.emailMessage = data && typeof data.emailMessage === "string" ? data.emailMessage : "";
   },
 
   async save() {
     if (!this.currentCourseId) throw new Error("No course selected.");
     await storage.saveFile(this.fileName(this.currentCourseId), {
       selectedItemIds: Array.from(this.selectedItemIds),
+      emailSubject: this.emailSubject,
+      emailMessage: this.emailMessage,
     });
   },
 

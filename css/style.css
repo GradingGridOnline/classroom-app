@@ -622,6 +622,80 @@ textarea {
   border-bottom-width: 4px;
 }
 
+/* ----- Outlined tabs for the 3rd and 4th levels (Presentation Calc: project tabs, and the
+   Scores / Student Groups / Rubrics / Templates tabs inside a project) -----
+   The open tab and its contents share one outline and one background, which is a
+   slightly darkened (or, in the dark themes, slightly lightened) version of the card
+   color, so the open tab and what's under it read as a single block. The 3rd level's
+   outline uses the theme's main accent color, the 4th level's its secondary accent. */
+.level3-row,
+.level3-panel {
+  --level-bg: linear-gradient(rgba(0, 0, 0, 0.045), rgba(0, 0, 0, 0.045)), var(--card);
+  --level-outline: var(--green);
+}
+
+.level4-row,
+.level4-panel {
+  --level-bg: linear-gradient(rgba(0, 0, 0, 0.09), rgba(0, 0, 0, 0.09)), var(--card);
+  --level-outline: var(--marker);
+}
+
+[data-theme="cyberpunk"] .level3-row,
+[data-theme="cyberpunk"] .level3-panel,
+[data-theme="tron-legacy"] .level3-row,
+[data-theme="tron-legacy"] .level3-panel {
+  --level-bg: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), var(--card);
+}
+
+[data-theme="cyberpunk"] .level4-row,
+[data-theme="cyberpunk"] .level4-panel,
+[data-theme="tron-legacy"] .level4-row,
+[data-theme="tron-legacy"] .level4-panel {
+  --level-bg: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)), var(--card);
+}
+
+.level-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 8px;
+  margin: 0;
+  border-bottom: 2px solid var(--level-outline);
+}
+
+.level-tab-row .tab-btn {
+  position: relative;
+  margin: 0 0 -2px; /* sinks 2px so the open tab covers the line under it */
+  padding: 9px 18px;
+  font-size: 0.95rem;
+  border: 2px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.level-tab-row .tab-btn-active {
+  color: var(--ink);
+  font-weight: 700;
+  background: var(--level-bg);
+  border-color: var(--level-outline);
+  border-bottom: none;
+}
+
+.level-panel {
+  padding: 16px;
+  margin-bottom: 10px;
+  background: var(--level-bg);
+  border: 2px solid var(--level-outline);
+  border-top: none; /* the tab row's line is this panel's top edge */
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* The frozen first column of a table must be solid, and match the panel it sits in. */
+.level4-panel .attendance-table td:first-child {
+  background: var(--level-bg);
+}
+
 .panel-toolbar {
   display: flex;
   flex-wrap: wrap;

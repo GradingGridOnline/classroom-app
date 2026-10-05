@@ -655,6 +655,7 @@ async function openCourseDetail(course) {
     await ReportCardModule.load(course.id);
     renderItemSelectionList();
     renderPrintcardStudentOptions();
+    renderReportCardEmailSection();
     el.printcardStatus.textContent = "";
   } catch (err) {
     el.printcardStatus.textContent = `Couldn't load report card settings: ${err.message}`;
@@ -3456,7 +3457,7 @@ function renderScoringToolPresentationView(tool, container) {
 
   // ----- Project tabs (one per project) + "+ New Project" -----
   const projectRow = document.createElement("div");
-  projectRow.className = "tab-row";
+  projectRow.className = "level-tab-row level3-row"; // 3rd level of tabs: outlined, joined to its panel below
   toolCfg.projects.forEach((project) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -3473,6 +3474,7 @@ function renderScoringToolPresentationView(tool, container) {
   newBtn.className = "btn btn-ghost btn-small";
   newBtn.textContent = "+ New Project";
   newBtn.style.alignSelf = "center";
+  newBtn.style.margin = "0 0 6px 8px";
   newBtn.addEventListener("click", addProject);
   projectRow.appendChild(newBtn);
   container.appendChild(projectRow);
@@ -3487,6 +3489,11 @@ function renderScoringToolPresentationView(tool, container) {
   }
 
   const project = toolCfg.projects.find((p) => p.id === projectId);
+
+  // The open project's contents sit in an outlined panel that joins its tab.
+  const projectPanel = document.createElement("div");
+  projectPanel.className = "level-panel level3-panel";
+  container.appendChild(projectPanel);
 
   // ----- Project name + rename / delete -----
   const header = document.createElement("div");
@@ -3518,12 +3525,12 @@ function renderScoringToolPresentationView(tool, container) {
   });
   headerButtons.append(renameBtn, deleteBtn);
   header.appendChild(headerButtons);
-  container.appendChild(header);
+  projectPanel.appendChild(header);
 
   // ----- The project's four subtabs -----
   const page = presentationToolPage.get(tool.id) || "scores";
   const tabRow = document.createElement("div");
-  tabRow.className = "tab-row reportcard-mode-row";
+  tabRow.className = "level-tab-row level4-row"; // 4th level of tabs
   [
     ["scores", "Scores"],
     ["groups", "Student Groups"],
@@ -3540,12 +3547,16 @@ function renderScoringToolPresentationView(tool, container) {
     });
     tabRow.appendChild(btn);
   });
-  container.appendChild(tabRow);
+  projectPanel.appendChild(tabRow);
 
-  if (page === "groups") container.appendChild(buildPresentationGroupsPage(tool, project, container));
-  else if (page === "rubrics") container.appendChild(buildPresentationRubricsPage(tool, project, container));
-  else if (page === "templates") container.appendChild(buildPresentationTemplatesPage(tool, project, container));
-  else container.appendChild(buildPresentationScoresPage(tool, project, container));
+  const pagePanel = document.createElement("div");
+  pagePanel.className = "level-panel level4-panel";
+  projectPanel.appendChild(pagePanel);
+
+  if (page === "groups") pagePanel.appendChild(buildPresentationGroupsPage(tool, project, container));
+  else if (page === "rubrics") pagePanel.appendChild(buildPresentationRubricsPage(tool, project, container));
+  else if (page === "templates") pagePanel.appendChild(buildPresentationTemplatesPage(tool, project, container));
+  else pagePanel.appendChild(buildPresentationScoresPage(tool, project, container));
 }
 
 // ----- Scores page -----
@@ -6214,5 +6225,219 @@ el.syncEmailBtn.addEventListener("click", async () => {
     el.emailCollectStatus.textContent = `Couldn't sync: ${err.message}`;
   }
 });
+
+// ===== Report Card: emailing report cards as PDFs =====
+// Uses the same page as "Print This Student" / "Print All Students"
+// (buildReportCardSheet), drawn to an image and made into a one-page PDF,
+// then sent through the signed-in Google account's Gmail — the helpers
+// (buildPdfEmailMessage, sendGmailMessage, fillEmailTemplate) are shared
+// with the Presentation Calc emailing. Students need an email address on
+// the Roster. A "test address" sends just one email, to that address only.
+
+const DEFAULT_REPORTCARD_SUBJECT = "{course}: Report Card";
+const DEFAULT_REPORTCARD_MESSAGE = "Hello {name},\n\nAttached is your report card for {course}.\n";
+
+/** Draws an element to an image and returns it as a one-page PDF (bytes). A page taller than the PDF is scaled down to fit. */
+async function renderElementToPdfBytes(element, stage) {
+  stage.appendChild(element);
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    backgroundColor: "#ffffff",
+    logging: false,
+    onclone: (clonedDocument) => {
+      const clonedStage = clonedDocument.getElementById("ggo-pdf-stage");
+      if (clonedStage) {
+        clonedStage.style.position = "static";
+        clonedStage.style.left = "0";
+        clonedStage.style.top = "0";
+      }
+    },
+  });
+  stage.removeChild(element);
+
+  const pageWidthMm = 185;
+  const pageHeightMm = 255;
+  let drawWidth = pageWidthMm;
+  let drawHeight = (canvas.height / canvas.width) * pageWidthMm;
+  if (drawHeight > pageHeightMm) {
+    const shrink = pageHeightMm / drawHeight;
+    drawWidth *= shrink;
+    drawHeight = pageHeightMm;
+  }
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "mm", format: [pageWidthMm, pageHeightMm], orientation: "portrait" });
+  pdf.addImage(canvas.toDataURL("image/jpeg", 0.88), "JPEG", (pageWidthMm - drawWidth) / 2, 0, drawWidth, drawHeight);
+  return new Uint8Array(pdf.output("arraybuffer"));
+}
+
+/** Emails report cards: targetStudentId = one student's id, or "" for everyone on the roster. testAddress: if given, only the first email is sent, to that address. */
+async function emailReportCards(targetStudentId, testAddress, status) {
+  if (typeof html2canvas === "undefined" || !window.jspdf) {
+    status.textContent = "The PDF tools didn't load — check your internet connection and reload the page.";
+    return;
+  }
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  const courseName = course ? course.name : "";
+  const subjectTemplate = ReportCardModule.emailSubject.trim() || DEFAULT_REPORTCARD_SUBJECT;
+  const messageTemplate = ReportCardModule.emailMessage.trim() ? ReportCardModule.emailMessage : DEFAULT_REPORTCARD_MESSAGE;
+
+  const students = RosterModule.students.filter((s) => !targetStudentId || s.id === targetStudentId);
+  let jobs = students.map((student) => ({ student, to: /@/.test(student.email || "") ? student.email.trim() : "" }));
+  const skipped = jobs.filter((job) => !job.to).map((job) => job.student.name || "(unnamed)");
+  const test = testAddress.trim();
+  if (test) jobs = jobs.slice(0, 1).map((job) => ({ ...job, to: test, isTest: true }));
+  else jobs = jobs.filter((job) => job.to);
+
+  if (jobs.length === 0) {
+    status.textContent =
+      skipped.length > 0
+        ? `None of those students has an email address on the Roster (${skipped.join(", ")}).`
+        : "There are no students to send to.";
+    return;
+  }
+
+  const summary = test
+    ? `Send ONE test report card email to ${test}?`
+    : `Send ${jobs.length} report card email(s), each with a PDF?` +
+      (skipped.length > 0 ? `\n\nNo email address on the Roster, so skipped: ${skipped.join(", ")}.` : "");
+  if (!confirm(summary)) return;
+
+  const stage = document.createElement("div");
+  stage.id = "ggo-pdf-stage";
+  stage.style.cssText = "position:fixed;left:-10000px;top:0;background:#fff;";
+  document.body.appendChild(stage);
+
+  const failures = [];
+  let sent = 0;
+  try {
+    for (const job of jobs) {
+      status.textContent = `Sending ${sent + failures.length + 1} of ${jobs.length}…`;
+      try {
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText = "width:185mm;padding:7mm;box-sizing:border-box;background:#fff;color:#000;";
+        wrapper.appendChild(buildReportCardSheet(job.student.id));
+        const pdfBytes = await renderElementToPdfBytes(wrapper, stage);
+
+        const values = { name: job.student.name || "", group: "", report: "Report Card", project: "", course: courseName };
+        const safe = (text) => text.replace(/[\\/:*?"<>|]/g, "").trim();
+        const filename = `${[safe(courseName), "Report Card", safe(job.student.name || "")].filter(Boolean).join(" ")}.pdf`;
+        await sendGmailMessage(
+          buildPdfEmailMessage({
+            to: job.to,
+            subject: (job.isTest ? "[TEST] " : "") + fillEmailTemplate(subjectTemplate, values),
+            body: fillEmailTemplate(messageTemplate, values),
+            filename,
+            pdfBytes,
+          })
+        );
+        sent++;
+      } catch (err) {
+        failures.push(`${job.student.name || "(unnamed)"}: ${err.message}`);
+        if (/allowed this app to send email/.test(err.message)) break; // no point trying the rest
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250)); // be gentle with Gmail's limits
+    }
+  } finally {
+    stage.remove();
+  }
+
+  status.textContent =
+    `Sent ${sent} email(s)` +
+    (test ? " (test)" : "") +
+    (skipped.length > 0 && !test ? `; skipped (no email address): ${skipped.join(", ")}` : "") +
+    (failures.length > 0 ? `. Problems: ${failures.join(" | ")}` : ".");
+}
+
+/** Builds (or rebuilds) the "Email report cards" block at the bottom of the Report Card print view. */
+function renderReportCardEmailSection() {
+  const existing = document.getElementById("reportcard-email-section");
+  if (existing) existing.remove();
+
+  const block = document.createElement("div");
+  block.id = "reportcard-email-section";
+  block.className = "attendance-settings-block";
+
+  const heading = document.createElement("h4");
+  heading.textContent = "Email report cards";
+  block.appendChild(heading);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    'Sends each student their report card (the same page as printing, using the items selected above) as a PDF, through your Google account. Students need an email address on the Roster. "Email This Student" uses the student chosen in the Print box above. Use the test box to send one sample to yourself first.';
+  block.appendChild(hint);
+
+  const addRow = (labelText, control) => {
+    const row = document.createElement("div");
+    row.className = "mapping-row";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    row.append(label, control);
+    block.appendChild(row);
+  };
+
+  const subjectInput = document.createElement("input");
+  subjectInput.type = "text";
+  subjectInput.placeholder = DEFAULT_REPORTCARD_SUBJECT;
+  subjectInput.value = ReportCardModule.emailSubject;
+  subjectInput.addEventListener("input", () => {
+    ReportCardModule.emailSubject = subjectInput.value;
+  });
+  addRow("Subject", subjectInput);
+
+  const messageInput = document.createElement("textarea");
+  messageInput.rows = 4;
+  messageInput.placeholder = DEFAULT_REPORTCARD_MESSAGE;
+  messageInput.value = ReportCardModule.emailMessage;
+  messageInput.addEventListener("input", () => {
+    ReportCardModule.emailMessage = messageInput.value;
+  });
+  addRow("Message", messageInput);
+
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.textContent = "{name} and {course} are filled in for each student. Leave the boxes blank for the standard wording. Saved with Save Selection.";
+  block.appendChild(note);
+
+  const testInput = document.createElement("input");
+  testInput.type = "text";
+  testInput.placeholder = "your own address — sends ONE test email only";
+  addRow("Test address", testInput);
+
+  const status = document.createElement("p");
+  status.className = "result";
+  block.appendChild(status);
+
+  const buttons = document.createElement("div");
+  buttons.className = "panel-toolbar-buttons";
+  [
+    ["Email This Student", () => el.printcardStudentSelect.value],
+    ["Email All Students", () => ""],
+  ].forEach(([label, getTarget]) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = label === "Email All Students" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small";
+    btn.textContent = label;
+    btn.addEventListener("click", async () => {
+      const target = getTarget();
+      if (label === "Email This Student" && !target) {
+        status.textContent = "Choose a student in the Print box above first.";
+        return;
+      }
+      const all = buttons.querySelectorAll("button");
+      all.forEach((b) => (b.disabled = true));
+      try {
+        await emailReportCards(target, testInput.value, status);
+      } catch (err) {
+        status.textContent = `Couldn't send: ${err.message}`;
+      }
+      all.forEach((b) => (b.disabled = false));
+    });
+    buttons.appendChild(btn);
+  });
+  block.appendChild(buttons);
+
+  el.printcardView.appendChild(block);
+}
 
 main();
