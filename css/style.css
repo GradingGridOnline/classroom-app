@@ -16,51 +16,55 @@
 }
 
 /* ===== Cyberpunk theme =====
-   A colorful palette on a lighter, purple-indigo base (colors taken
-   from the cyberpunk swatch sheet). Layers, from back to front: the
-   page is a deep purple (--paper), panels and cards are indigo
-   (--card), and text boxes are a darker indigo with a cyan outline.
-   Text is near-white; headings and secondary buttons are light cyan
-   (--green-dark); hot pink is the primary/interactive color
-   (--green: buttons, active tab, selected items); yellow (--marker)
-   is the HUD/status accent (corner brackets, status messages, hover
-   outlines); violet is the border color (--line); cyan is the
-   glow/"occupied desk" color. --green-dark is used as a hover
-   BACKGROUND in two places (primary button, session "P" button), so
-   those get their own explicit override just below. */
+   A LIGHT take on cyberpunk: a near-white page with a faint blueprint
+   grid (the counterpart of Tron's glowing floor grid), white cards, and
+   grays for everything structural, with NEON BLUE and NEON GREEN as the
+   accents — the neon lives in outlines, glows, and fills; text stays dark
+   gray so it reads on white.
+   Roles: --paper = the page and the light-gray inner bands (table
+   headers, empty desks); --card = white panels; --green = neon-leaning
+   blue, the primary/interactive color (buttons, active tab, selected
+   items); --green-dark = deep blue for headings and secondary-button
+   text (also used as a hover BACKGROUND in two places, which get their
+   own override just below); --marker = neon green, the HUD/status
+   accent (corner brackets, outlines, hover borders — status TEXT gets a
+   darker green so it's readable); --line = cool gray borders. */
 [data-theme="cyberpunk"] {
-  --paper: #4b3a8a;
-  --ink: #f5f5ff;
-  --ink-soft: #cbc3f6;
-  --green: #f438c5;
-  --green-dark: #9df1fc;
-  --marker: #fffc00;
-  --line: #7e69f2;
-  --card: #353e83;
+  --paper: #f1f4f7;
+  --ink: #1c232b;
+  --ink-soft: #5a6672;
+  --green: #0073e6;
+  --green-dark: #08508f;
+  --marker: #39ff14;
+  --line: #c3cdd8;
+  --card: #ffffff;
   --font-heading: "Orbitron", sans-serif;
   --font-body: "Share Tech Mono", monospace;
   --radius: 2px;
   --radius-small: 2px;
-  --card-shadow: 0 0 0 1px rgba(80, 220, 253, 0.3), 0 0 30px rgba(80, 220, 253, 0.12);
-  --glow: 0 0 10px rgba(244, 56, 197, 0.6);
-  --focus-glow: 0 0 0 2px rgba(80, 220, 253, 0.45), 0 0 12px rgba(80, 220, 253, 0.5);
+  --card-shadow: 0 0 0 1px rgba(0, 170, 255, 0.35), 0 0 22px rgba(0, 200, 255, 0.16);
+  --glow: 0 0 12px rgba(0, 190, 255, 0.6);
+  --focus-glow: 0 0 0 2px rgba(0, 190, 255, 0.35), 0 0 12px rgba(57, 255, 20, 0.35);
 }
 
-/* --green-dark now equals --ink (white), so the two spots that used it
-   as a hover BACKGROUND need their own color — otherwise white text
-   would sit on a white button. */
+/* --green-dark is a hover BACKGROUND in two places (primary button,
+   session "P" button): use a deeper blue there. */
 [data-theme="cyberpunk"] .btn-primary:hover,
 [data-theme="cyberpunk"] .session-present-btn:hover {
-  background: #c92796;
+  background: #005bb5;
 }
 
-/* Text boxes: darker indigo fill with a cyan outline. Checkboxes are
-   left alone. */
+/* Text boxes: near-white with a neon-blue outline. Checkboxes are left alone. */
 [data-theme="cyberpunk"] input:not([type="checkbox"]),
 [data-theme="cyberpunk"] select,
 [data-theme="cyberpunk"] textarea {
-  background: #263570;
-  border: 1px solid #6cf4f0;
+  background: #fbfdff;
+  border: 1px solid #19c3ff;
+}
+
+/* Status messages: a darker neon green so they're readable on white. */
+[data-theme="cyberpunk"] .result {
+  color: #0a7d36;
 }
 
 * { box-sizing: border-box; }
@@ -105,19 +109,22 @@ body {
   position: relative;
 }
 
-/* Faint scanline texture — only visible in the cyberpunk theme */
+/* Page pattern for the cyberpunk theme: a faint blueprint grid with fine
+   neon-green diagonal hatching — the light counterpart of Tron's floor grid. */
+[data-theme="cyberpunk"] body {
+  background: #f7f9fb;
+}
+
 [data-theme="cyberpunk"] body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(245, 245, 255, 0.03) 0px,
-    rgba(245, 245, 255, 0.03) 1px,
-    transparent 1px,
-    transparent 3px
-  );
+  background-image:
+    linear-gradient(to right, rgba(0, 160, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 160, 255, 0.11) 1px, transparent 1px),
+    repeating-linear-gradient(135deg, rgba(57, 255, 20, 0.07) 0px, rgba(57, 255, 20, 0.07) 2px, transparent 2px, transparent 18px);
+  background-size: 36px 36px, 36px 36px, auto;
   z-index: 0;
 }
 
@@ -219,7 +226,7 @@ body {
 }
 
 [data-theme="cyberpunk"] .btn-primary:hover {
-  box-shadow: 0 0 16px rgba(244, 56, 197, 0.85);
+  box-shadow: 0 0 16px rgba(0, 200, 255, 0.85);
 }
 
 [data-theme="cyberpunk"] .btn-ghost {
@@ -475,11 +482,11 @@ textarea {
 
 [data-theme="cyberpunk"] .roster-table input:hover,
 [data-theme="cyberpunk"] .roster-table input:focus {
-  background: #2f4290;
+  background: #e8f7ff;
 }
 
 [data-theme="cyberpunk"] .course-name:hover {
-  text-shadow: 0 0 8px rgba(255, 46, 196, 0.6);
+  text-shadow: 0 0 8px rgba(0, 150, 255, 0.3);
 }
 
 /* ===== Settings menu & theme picker ===== */
@@ -555,7 +562,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .theme-item-active {
-  text-shadow: 0 0 6px rgba(255, 46, 196, 0.6);
+  text-shadow: 0 0 6px rgba(0, 150, 255, 0.3);
 }
 
 [data-theme="cyberpunk"] .header h1,
@@ -595,7 +602,7 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .tab-btn-active {
-  text-shadow: 0 0 6px rgba(255, 46, 196, 0.5);
+  text-shadow: 0 0 6px rgba(0, 150, 255, 0.3);
 }
 
 /* ----- Main course tabs (Roster, Seating Chart, Scoring, ...) -----
@@ -640,15 +647,11 @@ textarea {
   --level-outline: var(--marker);
 }
 
-[data-theme="cyberpunk"] .level3-row,
-[data-theme="cyberpunk"] .level3-panel,
 [data-theme="tron-legacy"] .level3-row,
 [data-theme="tron-legacy"] .level3-panel {
   --level-bg: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), var(--card);
 }
 
-[data-theme="cyberpunk"] .level4-row,
-[data-theme="cyberpunk"] .level4-panel,
 [data-theme="tron-legacy"] .level4-row,
 [data-theme="tron-legacy"] .level4-panel {
   --level-bg: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)), var(--card);
@@ -968,12 +971,12 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .desk-occupied {
-  border-color: #6cf4f0;
-  box-shadow: 0 0 8px rgba(108, 244, 240, 0.45);
+  border-color: #00b4ff;
+  box-shadow: 0 0 8px rgba(0, 190, 255, 0.4);
 }
 
 [data-theme="cyberpunk"] .desk-occupied:hover {
-  box-shadow: 0 0 12px rgba(255, 252, 0, 0.55);
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.6);
   border-color: var(--marker);
 }
 
@@ -985,13 +988,13 @@ textarea {
   border-color: var(--line);
 }
 
-/* Group color — cyberpunk theme: keep the dark fill, color the border/glow instead */
+/* Group color — cyberpunk theme: keep the white fill, color the border/glow instead */
 [data-theme="cyberpunk"] .desk-grouped.desk-empty,
 [data-theme="cyberpunk"] .desk-grouped.desk-occupied {
   background: var(--card);
-  border-color: hsl(var(--group-hue), 95%, 62%);
+  border-color: hsl(var(--group-hue), 85%, 45%);
   border-width: 2px;
-  box-shadow: 0 0 6px hsl(var(--group-hue), 95%, 62%), 0 0 16px hsl(var(--group-hue), 95%, 55%);
+  box-shadow: 0 0 6px hsla(var(--group-hue), 90%, 55%, 0.55), 0 0 14px hsla(var(--group-hue), 90%, 55%, 0.3);
 }
 
 .front-label {
@@ -1618,17 +1621,17 @@ textarea {
 }
 
 [data-theme="cyberpunk"] .weight-total-ok {
-  background: var(--card);
-  border-color: #6cf4f0;
-  color: #6cf4f0;
-  box-shadow: 0 0 8px rgba(108, 244, 240, 0.45);
+  background: #eafff0;
+  border-color: #1ee05a;
+  color: #0a7d36;
+  box-shadow: 0 0 8px rgba(57, 255, 20, 0.4);
 }
 
 [data-theme="cyberpunk"] .weight-total-over {
-  background: var(--card);
-  border-color: #e82562;
-  color: #ff6f9c;
-  box-shadow: 0 0 8px rgba(232, 37, 98, 0.6);
+  background: #fff0f0;
+  border-color: #ff4d4d;
+  color: #c62828;
+  box-shadow: 0 0 8px rgba(255, 77, 77, 0.4);
 }
 
 /* Scoring settings: category management with nested item editing */
