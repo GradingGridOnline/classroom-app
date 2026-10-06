@@ -107,6 +107,15 @@
           <h2 id="course-detail-title">Course</h2>
         </div>
 
+        <!-- Shown only for a course linked to a template -->
+        <div id="course-link-row" class="panel-toolbar" hidden>
+          <span id="course-link-note" class="hint"></span>
+          <div class="panel-toolbar-buttons">
+            <button id="update-template-btn" class="btn btn-ghost btn-small" hidden>Update Template from this course</button>
+          </div>
+        </div>
+        <p id="course-link-status" class="result"></p>
+
         <div class="tab-row main-tab-row">
           <button id="tab-roster-btn" class="tab-btn tab-btn-active">Roster</button>
           <button id="tab-seating-btn" class="tab-btn">Seating Chart</button>

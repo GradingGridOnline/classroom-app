@@ -398,6 +398,7 @@ function renderCourseList() {
       if (CoursesModule.sortMode === "period") renderCourseList(); // the order depends on it
     });
     li.appendChild(periodSelect);
+    li.appendChild(buildCourseTemplateSelect(course));
 
     if (manual) {
       const upBtn = makeSmallButton("↑", "Move up", () => {
@@ -533,6 +534,17 @@ function renderTemplateList() {
     li.appendChild(nameSpan);
 
     li.appendChild(
+      makeSmallButton(
+        template.linkable ? "Linking: On" : "Linking: Off",
+        "Whether courses can be linked to this template (saved with Save Courses & Periods)",
+        () => {
+          template.linkable = !template.linkable;
+          renderCourseList();
+        }
+      )
+    );
+
+    li.appendChild(
       makeSmallButton("Create Course", "Make a new course from this template (saved to Google Drive right away)", () => {
         const name = prompt("Name for the new course:", template.name);
         if (name === null) return;
@@ -561,6 +573,9 @@ function renderTemplateList() {
       makeSmallButton("Delete", "", () => {
         if (!confirm(`Delete the template "${template.name}"? Courses already made from it are not affected.`)) return;
         TemplatesModule.remove(template.id);
+        CoursesModule.courses.forEach((c) => {
+          if (c.templateId === template.id) c.templateId = null;
+        });
         renderCourseList();
       })
     );
@@ -668,6 +683,8 @@ async function openCourseDetail(course) {
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't load email collection state: ${err.message}`;
   }
+
+  await syncLinkedTemplate(course);
 }
 
 el.backToCoursesBtn.addEventListener("click", showCourses);
@@ -6442,5 +6459,110 @@ function renderReportCardEmailSection() {
 
   el.printcardView.appendChild(block);
 }
+
+// ===== Course <-> template links =====
+
+/** The "Template" dropdown shown on each active course in the course list. */
+function buildCourseTemplateSelect(course) {
+  const select = document.createElement("select");
+  select.className = "course-period-select";
+  select.title = "Link this course to a template so its structure mirrors the template";
+
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No template (standalone)";
+  select.appendChild(none);
+  TemplatesModule.templates
+    .filter((t) => t.linkable || t.id === course.templateId)
+    .forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t.id;
+      opt.textContent = `Template: ${t.name}`;
+      select.appendChild(opt);
+    });
+  select.value = TemplatesModule.find(course.templateId) ? course.templateId : "";
+
+  select.addEventListener("click", (e) => e.stopPropagation());
+  select.addEventListener("change", () => {
+    const next = select.value;
+    if (!next) {
+      if (!confirm(`Make "${course.name}" a standalone course again? It keeps its current structure but stops following the template.`)) {
+        renderCourseList();
+        return;
+      }
+      CoursesModule.setTemplate(course.id, null);
+      runCourseAction("Unlinking…", () => CoursesModule.save(), "Course is now standalone ✓");
+      return;
+    }
+    const template = TemplatesModule.find(next);
+    if (
+      !confirm(
+        `Link "${course.name}" to the template "${template.name}"?\n\nIts scoring categories, items, weights and tools, attendance settings, and report card choices will be replaced by the template's (matched in order, so scores entered under matching items are kept). Students, scores, attendance records, groups and seating are not changed.\n\nThis is saved to Google Drive right away.`
+      )
+    ) {
+      renderCourseList();
+      return;
+    }
+    runCourseAction("Linking…", () => TemplatesModule.linkCourse(course.id, next), `Linked to "${template.name}" ✓`);
+  });
+  return select;
+}
+
+/** Runs when a course is opened: if it's linked to a template, re-applies the template's structure and shows the link note + update button. */
+async function syncLinkedTemplate(course) {
+  const row = document.getElementById("course-link-row");
+  const note = document.getElementById("course-link-note");
+  const updateBtn = document.getElementById("update-template-btn");
+  row.hidden = true;
+  updateBtn.hidden = true;
+  if (!course.templateId) return;
+
+  const template = TemplatesModule.find(course.templateId);
+  row.hidden = false;
+  if (!template) {
+    note.textContent = "This course was linked to a template that no longer exists, so it is working as a standalone course.";
+    return;
+  }
+
+  try {
+    await TemplatesModule.syncLoadedCourse(template.id);
+    renderAttendance();
+    scoringMode = "entry";
+    renderScoringToolTabs();
+    showScoringMode("entry");
+    renderItemSelectionList();
+    note.textContent =
+      `Linked to template "${template.name}". Its structure follows the template each time the course is opened; ` +
+      "students, scores, groups and rubrics stay your own. To change the structure for every linked course, edit it here, then click Update Template.";
+    updateBtn.hidden = false;
+  } catch (err) {
+    note.textContent = `Couldn't sync with the template "${template.name}": ${err.message}`;
+  }
+}
+
+document.getElementById("update-template-btn").addEventListener("click", async () => {
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  const template = course && TemplatesModule.find(course.templateId);
+  const status = document.getElementById("course-link-status");
+  if (!template) return;
+  if (
+    !confirm(
+      `Replace the structure of the template "${template.name}" with this course's?\n\nThis saves this course's Attendance, Scoring and Report Card settings now. Every other course linked to the template will follow the next time it is opened.`
+    )
+  ) {
+    return;
+  }
+  status.textContent = "Updating template…";
+  try {
+    await RubricBankModule.save();
+    await AttendanceModule.save();
+    await ScoringModule.save();
+    await ReportCardModule.save();
+    await TemplatesModule.updateFromCourse(template.id, course.id);
+    status.textContent = `Template "${template.name}" updated ✓`;
+  } catch (err) {
+    status.textContent = `Couldn't update the template: ${err.message}`;
+  }
+});
 
 main();

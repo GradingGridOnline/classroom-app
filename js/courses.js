@@ -1,10 +1,12 @@
 // ===== Courses module =====
 // Handles the list of courses (up to MAX_COURSES). Each course is
-// { id, name, periodId, archived } — the seating grid, roster, etc.
-// live in their own per-course files.
+// { id, name, periodId, archived, templateId } — the seating grid,
+// roster, etc. live in their own per-course files.
 //
 // - archived: true moves a course out of the main list into the
 //   "Archived Courses" section (nothing is deleted).
+// - templateId: the id of the template this course is linked to (its
+//   structure mirrors that template), or null for a standalone course.
 // - Display order: `sortMode` is "manual" (the order of the `courses`
 //   array, changed with the up/down buttons), "name" (A-Z), or
 //   "period" (by the period's start time). Only manual order is ever
@@ -35,11 +37,12 @@ const CoursesModule = {
     return this.courses;
   },
 
-  /** Ensures courses saved before period assignment / archiving existed get sensible defaults. */
+  /** Ensures courses saved before period assignment / archiving / template links existed get sensible defaults. */
   _backfill() {
     this.courses.forEach((c) => {
       if (!("periodId" in c)) c.periodId = null;
       if (typeof c.archived !== "boolean") c.archived = false;
+      if (!("templateId" in c)) c.templateId = null;
     });
   },
 
@@ -57,7 +60,7 @@ const CoursesModule = {
     if (this.courses.length >= MAX_COURSES) {
       throw new Error(`You've reached the limit of ${MAX_COURSES} courses.`);
     }
-    const course = { id: this._newId(), name: trimmed, periodId: null, archived: false };
+    const course = { id: this._newId(), name: trimmed, periodId: null, archived: false, templateId: null };
     this.courses.push(course);
     return course;
   },
@@ -66,6 +69,12 @@ const CoursesModule = {
   setPeriod(id, periodId) {
     const course = this.find(id);
     if (course) course.periodId = periodId || null;
+  },
+
+  /** Links the course to a template (or, with null, makes it standalone). Only records the link — see TemplatesModule.linkCourse for the rest. */
+  setTemplate(id, templateId) {
+    const course = this.find(id);
+    if (course) course.templateId = templateId || null;
   },
 
   rename(id, name) {
@@ -155,9 +164,10 @@ const CoursesModule = {
   /**
    * Copies a course and everything saved for it (roster, seating chart,
    * attendance, scoring, report card settings) into a new course named
-   * "<name> (copy)", placed right after the original. Copies what was
-   * last SAVED to Google Drive. This is an explicit action, so the
-   * copied files — and the course list — are written immediately.
+   * "<name> (copy)", placed right after the original (and linked to the
+   * same template, if any). Copies what was last SAVED to Google Drive.
+   * This is an explicit action, so the copied files — and the course
+   * list — are written immediately.
    */
   async duplicate(id) {
     const source = this.find(id);
@@ -171,6 +181,7 @@ const CoursesModule = {
       name: `${source.name} (copy)`,
       periodId: source.periodId,
       archived: false,
+      templateId: source.templateId || null,
     };
 
     for (const prefix of COURSE_DATA_PREFIXES) {
