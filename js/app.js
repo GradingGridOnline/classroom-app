@@ -642,6 +642,7 @@ async function openCourseDetail(course) {
   }
 
   try {
+    await RubricBankModule.load();
     await ScoringModule.load(course.id);
     scoringMode = "entry"; // reset to Main Scores each time a course is opened
     renderScoringToolTabs(); // (re)builds tabs/views for this course's saved tools
@@ -2290,6 +2291,7 @@ function buildAttendanceFooterRow() {
 el.saveScoringBtn.addEventListener("click", async () => {
   el.scoringStatus.textContent = "Saving…";
   try {
+    await RubricBankModule.save();
     await ScoringModule.save();
     el.scoringStatus.textContent = "Saved to Google Drive ✓";
   } catch (err) {
@@ -3868,7 +3870,7 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
     blankOpt.value = "";
     blankOpt.textContent = "— Choose a rubric —";
     select.appendChild(blankOpt);
-    cfg.rubricBank.forEach((rubric) => {
+    RubricBankModule.rubrics.forEach((rubric) => {
       const opt = document.createElement("option");
       opt.value = rubric.id;
       opt.textContent = rubric.text || "(untitled rubric)";
@@ -3934,12 +3936,12 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
   return block;
 }
 
-/** The Rubric Bank: a list of free-text rubric descriptions the active rubrics pick from. */
+/** The shared Rubric Bank: free-text rubric descriptions used by every project in every course. */
 function buildPresentationBankBlock(tool, cfg, rerender, status) {
   const block = document.createElement("div");
   block.className = "rubric-bank-block";
   const heading = document.createElement("h5");
-  heading.textContent = "Rubric Bank";
+  heading.textContent = "Rubric Bank (shared by every project and course)";
   block.appendChild(heading);
 
   const table = document.createElement("table");
@@ -3947,7 +3949,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
   table.innerHTML = "<thead><tr><th>Rubric</th><th></th></tr></thead>";
   const tbody = document.createElement("tbody");
 
-  if (cfg.rubricBank.length === 0) {
+  if (RubricBankModule.rubrics.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 2;
@@ -3957,7 +3959,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
     tbody.appendChild(tr);
   }
 
-  cfg.rubricBank.forEach((rubric) => {
+  RubricBankModule.rubrics.forEach((rubric) => {
     const tr = document.createElement("tr");
 
     const textTd = document.createElement("td");
@@ -3966,7 +3968,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
     input.value = rubric.text;
     input.placeholder = "Describe the rubric…";
     input.addEventListener("change", () => {
-      ScoringModule.presSetRubricText(tool.id, cfg.id, rubric.id, input.value);
+      RubricBankModule.setText(rubric.id, input.value);
       rerender(); // the text may be shown in an active rubric's dropdown
     });
     textTd.appendChild(input);
@@ -3977,9 +3979,10 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
     removeBtn.type = "button";
     removeBtn.className = "btn btn-ghost btn-small";
     removeBtn.textContent = "×";
-    removeBtn.title = "Remove this rubric";
+    removeBtn.title = "Remove this rubric from the shared bank";
     removeBtn.addEventListener("click", () => {
-      ScoringModule.presRemoveRubricBankRow(tool.id, cfg.id, rubric.id);
+      if (!confirm("Remove this rubric from the shared bank? It disappears for every course. Projects in other courses using it will lose that column until you pick another rubric.")) return;
+      ScoringModule.presRemoveRubricBankRow(rubric.id);
       rerender();
     });
     removeTd.appendChild(removeBtn);
@@ -3996,7 +3999,7 @@ function buildPresentationBankBlock(tool, cfg, rerender, status) {
   addBtn.textContent = "+ Add Rubric";
   addBtn.addEventListener("click", () => {
     try {
-      ScoringModule.presAddRubricBankRow(tool.id, cfg.id);
+      RubricBankModule.add();
     } catch (err) {
       status.textContent = err.message;
       return;

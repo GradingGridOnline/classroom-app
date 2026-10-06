@@ -77,6 +77,18 @@ const TemplatesModule = {
 
     const data = {};
 
+    // Rubrics live in one shared bank; the template carries its own copy of the ones its projects use.
+    await RubricBankModule.ensureLoaded();
+    const rubricMap = new Map();
+    const collectRubrics = (project) => {
+      (project.rubricBank || []).forEach((r) => rubricMap.set(r.id, { id: r.id, text: r.text }));
+      [...(project.teacherRubrics || []), ...(project.audienceRubrics || [])].forEach((e) => {
+        const r = RubricBankModule.find(e.rubricId);
+        if (r) rubricMap.set(r.id, { id: r.id, text: r.text });
+      });
+      project.rubricBank = [];
+    };
+
     if (attendance && attendance.settings) {
       const settings = this._clone(attendance.settings);
       if (settings.exportTemplate) delete settings.exportTemplate.rows; // never keep student rows from an uploaded file
@@ -93,6 +105,7 @@ const TemplatesModule = {
           if (tool.type === "presentation") {
             // Keep each project's rubrics and settings; drop its imported students + groups and entered scores.
             const clearProject = (project) => {
+              collectRubrics(project);
               project.roster = [];
               project.sourceBankName = "";
               project.values = {};
@@ -126,6 +139,7 @@ const TemplatesModule = {
         weights: this._clone(scoring.weights || {}),
         tools,
       };
+      data.rubricBank = [...rubricMap.values()];
     }
 
     if (seating) {
@@ -170,6 +184,18 @@ const TemplatesModule = {
     try {
       const id = course.id;
 
+      // Merge the template's rubrics into the shared bank (templates saved before the shared bank kept them inside each project).
+      await RubricBankModule.ensureLoaded();
+      RubricBankModule.mergeIn(data.rubricBank);
+      ((data.scoring && data.scoring.tools) || []).forEach((tool) => {
+        if (tool.type !== "presentation" || !tool.config) return;
+        const projects = Array.isArray(tool.config.projects) ? tool.config.projects : [tool.config];
+        projects.forEach((p) => {
+          RubricBankModule.mergeIn(p.rubricBank);
+          p.rubricBank = [];
+        });
+      });
+
       if (data.attendance) {
         const settings = this._clone(data.attendance.settings || {});
         const count = Math.max(0, Math.min(100, Math.round(Number(settings.termClassCount) || 0)));
@@ -206,6 +232,7 @@ const TemplatesModule = {
         await storage.saveFile(`reportcard-${id}.json`, this._clone(data.reportcard));
       }
 
+      if (RubricBankModule.dirty) await RubricBankModule.save();
       await CoursesModule.save();
     } catch (err) {
       CoursesModule.remove(course.id);

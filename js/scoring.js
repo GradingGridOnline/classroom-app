@@ -87,6 +87,21 @@ const ScoringModule = {
     }
     this.presentationMigrated = !!(data && data.presentationMigrated);
     if (!this.presentationMigrated) await this._migrateLegacyPresentationCalc(courseId);
+    await RubricBankModule.ensureLoaded();
+    this._mergeLegacyRubricBanks();
+  },
+
+  /** Older data kept a rubricBank inside each project. Move those into the shared bank (ids are kept, so active-rubric references still work). */
+  _mergeLegacyRubricBanks() {
+    this.tools.forEach((tool) => {
+      if (tool.type !== "presentation") return;
+      this.presentationProjects(tool.id).forEach((project) => {
+        if (project.rubricBank.length > 0) {
+          RubricBankModule.mergeIn(project.rubricBank);
+          project.rubricBank = [];
+        }
+      });
+    });
   },
 
   /** Presentation Calc used to be its own tab with its own file (presentationcalc-<courseId>.json). If that file has a roster or rubrics in it, carry them into a new Presentation Calc scoring tool (once). The old file is left untouched in Drive; its Google Forms scoring data is not carried over. */
@@ -786,31 +801,19 @@ const ScoringModule = {
 
   // Rubric bank
 
-  presAddRubricBankRow(toolId, projectId) {
-    const project = this.getPresentationProject(toolId, projectId);
-    if (!project) return;
-    if (project.rubricBank.length >= MAX_RUBRIC_BANK) {
-      throw new Error(`You've reached the limit of ${MAX_RUBRIC_BANK} rubrics.`);
-    }
-    project.rubricBank.push({ id: `rubric-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text: "" });
-  },
-
-  /** Removing a rubric also clears it from any active row that had it selected. */
-  presRemoveRubricBankRow(toolId, projectId, rubricId) {
-    const project = this.getPresentationProject(toolId, projectId);
-    if (!project) return;
-    project.rubricBank = project.rubricBank.filter((r) => r.id !== rubricId);
-    [project.teacherRubrics, project.audienceRubrics].forEach((list) => {
-      list.forEach((entry) => {
-        if (entry.rubricId === rubricId) entry.rubricId = null;
+  /** Removes a rubric from the shared bank, and clears it from every active rubric in this course's projects. */
+  presRemoveRubricBankRow(rubricId) {
+    RubricBankModule.remove(rubricId);
+    this.tools.forEach((tool) => {
+      if (tool.type !== "presentation") return;
+      this.presentationProjects(tool.id).forEach((project) => {
+        [project.teacherRubrics, project.audienceRubrics].forEach((list) =>
+          list.forEach((entry) => {
+            if (entry.rubricId === rubricId) entry.rubricId = null;
+          })
+        );
       });
     });
-  },
-
-  presSetRubricText(toolId, projectId, rubricId, text) {
-    const project = this.getPresentationProject(toolId, projectId);
-    const rubric = project && project.rubricBank.find((r) => r.id === rubricId);
-    if (rubric) rubric.text = text;
   },
 
   // Active rubrics (each one is a score column)
@@ -878,7 +881,7 @@ const ScoringModule = {
       ["audience", project.audienceRubrics],
     ].forEach(([kind, list]) => {
       list.forEach((entry) => {
-        const rubric = project.rubricBank.find((r) => r.id === entry.rubricId);
+        const rubric = RubricBankModule.find(entry.rubricId);
         if (!rubric) return;
         columns.push({
           entryId: entry.id,
