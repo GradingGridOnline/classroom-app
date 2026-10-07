@@ -144,3 +144,35 @@ table.rubric-bank-grid td > input:focus {
   font-size: 0.85rem;
   color: var(--ink-soft);
 }
+
+/* ===== Seating chart: empty desks stand out ===== */
+.desk-empty:not(.desk-grouped) {
+  border: 2px dashed var(--ink-soft);
+}
+.desk-empty:not(.desk-grouped):hover {
+  border-color: var(--green);
+}
+[data-theme="tron-legacy"] .desk-empty:not(.desk-grouped) {
+  border-color: #3fb8d4;
+}
+[data-theme="tron-legacy"] .desk-empty:not(.desk-grouped):hover {
+  border-color: var(--marker);
+}
+
+/* ===== Seating chart print sheet ===== */
+.seating-print-header {
+  flex-shrink: 0;
+  margin: 0 0 6px;
+}
+.seating-print-header h2 {
+  margin: 0 0 2px;
+}
+.seating-print-period {
+  margin: 0;
+  font-size: 1rem;
+  color: #333;
+}
+.print-desk-empty:not(.print-desk-grouped) {
+  border: 2pt dashed #333;
+  color: #333;
+}

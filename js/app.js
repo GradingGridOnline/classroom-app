@@ -1070,10 +1070,27 @@ function buildSeatingPrintSheet() {
   const sheet = document.createElement("div");
   sheet.className = "seating-print-sheet";
 
+  // Top-left corner: the course name, with the period (and its time, when the
+  // period has one) underneath. This always comes first, so it is always the
+  // top-left item on the page.
+  const courseName = (course && course.name) || el.courseDetailTitle.textContent.trim() || "Seating Chart";
+  const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
+  const header = document.createElement("div");
+  header.className = "seating-print-header";
+  const heading = document.createElement("h2");
+  heading.textContent = courseName;
+  header.appendChild(heading);
+  if (periodLabel) {
+    const periodEl = document.createElement("p");
+    periodEl.className = "seating-print-period";
+    periodEl.textContent = periodLabel;
+    header.appendChild(periodEl);
+  }
+  sheet.appendChild(header);
+
   // Students marked "Exclude from Seating" back on the Attendance tab
   // never appear in the chart itself, so they're called out here
-  // instead — a horizontal list at the very top of the page, shown
-  // only when at least one exists.
+  // instead — just under the course name, shown only when at least one exists.
   const excludedStudents = RosterModule.students.filter((s) => s.excludeFromSeating);
   if (excludedStudents.length > 0) {
     const excludedEl = document.createElement("p");
@@ -1084,11 +1101,6 @@ function buildSeatingPrintSheet() {
     excludedEl.textContent = `Not in seating chart: ${names}`;
     sheet.appendChild(excludedEl);
   }
-
-  const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
-  const heading = document.createElement("h2");
-  heading.textContent = [course ? course.name : "Seating Chart", periodLabel].filter(Boolean).join(" — ");
-  sheet.appendChild(heading);
 
   const grid = document.createElement("div");
   grid.className = "seating-print-grid";
@@ -1202,7 +1214,7 @@ function buildSeatingPrintSheet() {
   boxRow.appendChild(buildSeatingPrintBox("Lesson Contents"));
   boxRow.appendChild(buildSeatingPrintBox("Homework"));
   boxRow.appendChild(buildSeatingPrintBox("Date of Lesson"));
-  boxRow.appendChild(buildSeatingPrintCourseBox(course, periodLabel));
+  boxRow.appendChild(buildSeatingPrintCourseBox(courseName, periodLabel));
   sheet.appendChild(boxRow);
 
   return sheet;
@@ -1222,7 +1234,7 @@ function buildSeatingPrintBox(label) {
 }
 
 /** Bottom-right box: course name + period, pre-filled (unlike the other three, which are left blank for handwriting). */
-function buildSeatingPrintCourseBox(course, periodLabel) {
+function buildSeatingPrintCourseBox(courseName, periodLabel) {
   const box = document.createElement("div");
   box.className = "seating-print-box";
 
@@ -1234,7 +1246,7 @@ function buildSeatingPrintCourseBox(course, periodLabel) {
   const content = document.createElement("div");
   content.className = "seating-print-box-content";
   const nameP = document.createElement("p");
-  nameP.textContent = course ? course.name : "";
+  nameP.textContent = courseName;
   content.appendChild(nameP);
   if (periodLabel) {
     const periodP = document.createElement("p");
