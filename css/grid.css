@@ -1,0 +1,132 @@
+/* ===== Table colors + spreadsheet-style cells =====
+   Loaded after style.css.
+   - Each theme sets a header color (--th-bg); the column cells below it use
+     a slightly lighter version of it (--td-bg). Change --th-bg / --td-bg per
+     theme here to adjust.
+   - Text boxes and drop-downs inside table cells fill their cell edge to
+     edge, so stacked boxes touch each other like a spreadsheet column. */
+
+:root {
+  --th-bg: #e4e1d6;
+  --td-bg: color-mix(in srgb, var(--th-bg) 45%, #ffffff);
+}
+[data-theme="cyberpunk"] {
+  --th-bg: #d6e6f5;
+  --td-bg: color-mix(in srgb, var(--th-bg) 45%, #ffffff);
+}
+[data-theme="basic"] {
+  --th-bg: #d0d9e2;
+  --td-bg: color-mix(in srgb, var(--th-bg) 45%, #ffffff);
+}
+[data-theme="tron-legacy"] {
+  --th-bg: #0e1217;
+  --td-bg: color-mix(in srgb, var(--th-bg) 86%, var(--green));
+}
+
+/* ----- Header colors ----- */
+.attendance-table thead th,
+.attendance-table thead th:first-child,
+.attendance-table tfoot td,
+.attendance-table tfoot td:first-child,
+.roster-table thead th,
+.category-header-cell,
+.rubric-active-grid th,
+.rubric-points-grid th,
+.rubric-bank-grid th {
+  background: var(--th-bg);
+}
+
+/* ----- Column colors (slightly lighter than the header) ----- */
+.attendance-table td,
+.attendance-table td:first-child,
+.level4-panel .attendance-table td:first-child,
+.roster-table td,
+.rubric-active-grid td,
+.rubric-points-grid td,
+.rubric-bank-grid td {
+  background: var(--td-bg);
+}
+.attendance-table tfoot td,
+.attendance-table tfoot td:first-child {
+  background: var(--th-bg);
+}
+
+/* ----- Cell borders ----- */
+.roster-table td:has(> input),
+.rubric-active-grid th,
+.rubric-points-grid th,
+.rubric-bank-grid th,
+.rubric-active-grid td,
+.rubric-points-grid td,
+.rubric-bank-grid td {
+  border: 1px solid var(--line);
+}
+
+/* ----- Cells that hold a text box / drop-down: no padding, so the box fills the cell ----- */
+.attendance-table td:has(> input:not([type="checkbox"])),
+.attendance-table td:has(> select),
+.roster-table td:has(> input),
+.rubric-active-grid td,
+.rubric-points-grid td,
+.rubric-bank-grid td {
+  padding: 0;
+}
+
+/* ----- The boxes themselves: edge to edge, no gaps, no rounded corners ----- */
+table.attendance-table td > input:not([type="checkbox"]),
+table.attendance-table td > select:not([multiple]),
+table.roster-table td > input:not([type="checkbox"]),
+table.rubric-active-grid td > select:not([multiple]),
+table.rubric-points-grid td > select:not([multiple]),
+table.rubric-bank-grid td > input:not([type="checkbox"]) {
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Rubric tables: every row the same height so the two side-by-side tables line up */
+.rubric-active-grid td,
+.rubric-points-grid td,
+.rubric-bank-grid td {
+  height: 32px;
+}
+table.rubric-active-grid td > select:not([multiple]),
+table.rubric-points-grid td > select:not([multiple]),
+table.rubric-bank-grid td > input:not([type="checkbox"]) {
+  height: 32px;
+  padding: 4px 8px;
+}
+.rubric-points-grid select {
+  width: 100%;
+}
+.rubric-points-grid {
+  padding-left: 0;
+}
+
+/* Attendance: the three boxes stacked in a class cell touch, with a thin line between */
+table.attendance-table td > select.attendance-code-select:not([multiple]),
+table.attendance-table td > select.attendance-infraction-select:not([multiple]) {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Score readout under a score box (Main Scores items fed by a Scoring Tool) */
+.attendance-table td > .score-source-readout {
+  padding: 0 6px 3px;
+}
+
+/* The selected cell */
+table.attendance-table td > input:focus,
+table.attendance-table td > select:focus,
+table.roster-table td > input:focus,
+table.rubric-active-grid td > select:focus,
+table.rubric-points-grid td > select:focus,
+table.rubric-bank-grid td > input:focus {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+  position: relative;
+  z-index: 1;
+}
