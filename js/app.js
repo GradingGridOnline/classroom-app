@@ -3064,7 +3064,7 @@ function renderScoringToolTableView(tool, container) {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "Enter scores below; the Total Score column adds up each row. To use a total in Main Scores, open an item's Sources panel and give this tracker a weight.";
+    "Enter scores below; the Total Score column adds up each row (with sub-rows, each box in the main row adds up its sub-rows first). To use a total in Main Scores, open an item's Sources panel and give this tracker a weight.";
   container.appendChild(hint);
 
   container.appendChild(buildTablePreview(tool, cfg, container));
@@ -3096,13 +3096,16 @@ function renderScoringToolTableView(tool, container) {
     const identityRowCount = ScoringModule.getTableIdentityRows(tool.id).length;
     summary.textContent =
       `Rows: ${cfg.firstColumn.mode === "groups" ? "Groups" : "Students"} — ` +
-      `${identityRowCount} row(s), ${cfg.columns.length} column(s) plus Total Score.`;
+      `${identityRowCount} row(s), ${cfg.columns.length} column(s) plus Total Score. ` +
+      (cfg.mode === "max" ? `Scored out of maximum points (Total Score out of ${ScoringModule.tableMaxTotal(tool.id)}). ` : "Scored in raw points. ") +
+      (cfg.subRows.length > 0 ? `Sub-rows: ${cfg.subRows.map((r) => r.name).join(", ")}.` : "No sub-rows.");
     settingsWrap.appendChild(summary);
   } else {
     settingsWrap.appendChild(buildTableFirstColumnBlock(tool, cfg, container));
     settingsWrap.appendChild(buildTableRowsBlock(tool, cfg, container));
+    settingsWrap.appendChild(buildTableModeBlock(tool, cfg, container));
     settingsWrap.appendChild(buildTableColumnsBlock(tool, cfg, container));
-    settingsWrap.appendChild(buildTableTotalColumnBlock(tool, cfg, container));
+    settingsWrap.appendChild(buildTableSubRowsBlock(tool, cfg, container));
   }
 
   container.appendChild(settingsWrap);
@@ -3119,6 +3122,7 @@ function buildTablePreview(tool, cfg, container) {
   wrap.className = "attendance-table-wrap";
   const table = document.createElement("table");
   table.className = "attendance-table scoring-table";
+  const maxMode = cfg.mode === "max";
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
@@ -3127,14 +3131,12 @@ function buildTablePreview(tool, cfg, container) {
   headRow.appendChild(firstTh);
   cfg.columns.forEach((col) => {
     const th = document.createElement("th");
-    th.textContent = col.type === "score_max" && col.maxPoints > 0 ? `${col.name} (/${col.maxPoints})` : col.name;
+    th.textContent = maxMode && col.maxPoints > 0 ? `${col.name} (/${col.maxPoints})` : col.name;
     headRow.appendChild(th);
   });
+  const totalMax = ScoringModule.tableMaxTotal(tool.id);
   const totalTh = document.createElement("th");
-  totalTh.textContent =
-    cfg.totalColumn.mode === "max" && cfg.totalColumn.maxPoints > 0
-      ? `Total Score (/${cfg.totalColumn.maxPoints})`
-      : "Total Score";
+  totalTh.textContent = maxMode && totalMax > 0 ? `Total Score (/${totalMax})` : "Total Score";
   headRow.appendChild(totalTh);
   thead.appendChild(headRow);
   table.appendChild(thead);
@@ -3154,7 +3156,7 @@ function buildTablePreview(tool, cfg, container) {
     tbody.appendChild(tr);
   } else {
     identityRows.forEach(({ key, label }) => {
-      tbody.appendChild(buildTablePreviewRow(tool, cfg, container, key, label));
+      buildTablePreviewRows(tool, cfg, container, key, label).forEach((tr) => tbody.appendChild(tr));
     });
   }
   table.appendChild(tbody);
@@ -3162,58 +3164,91 @@ function buildTablePreview(tool, cfg, container) {
   return wrap;
 }
 
-/** One grid line, keyed directly by its identity row's key (a student id, or a group number as a string) — what per-cell values are keyed by. */
-function buildTablePreviewRow(tool, cfg, container, lineId, label) {
+/** One score box. subId (optional) makes it a sub-row's box. */
+function makeTrackerInput(tool, cfg, container, lineId, col, subId) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.inputMode = "decimal";
+  input.className = "scoring-score-input";
+  input.value = ScoringModule.getTableValue(tool.id, lineId, col.id, subId);
+  if (cfg.mode === "max" && col.maxPoints > 0) {
+    input.placeholder = `/${col.maxPoints}`;
+    input.title = `Out of ${col.maxPoints}`;
+  }
+  input.addEventListener("change", async () => {
+    try {
+      ScoringModule.setTableValue(tool.id, lineId, col.id, input.value, subId);
+    } catch (err) {
+      alert(err.message);
+      input.value = ScoringModule.getTableValue(tool.id, lineId, col.id, subId);
+      return;
+    }
+    await saveScoringToolThen(tool, container);
+  });
+  return input;
+}
+
+/** The grid line(s) for one identity row, keyed by its key (a student id, or a group number as a string): the main row, then — if the tracker has sub-rows — one line per sub-row. With sub-rows, the main row's boxes are read-only sums of their sub-rows. Returns an array of <tr>. */
+function buildTablePreviewRows(tool, cfg, container, lineId, label) {
+  const maxMode = cfg.mode === "max";
+  const hasSubRows = cfg.subRows.length > 0;
+  const rows = [];
+
   const tr = document.createElement("tr");
+  if (hasSubRows) tr.className = "tracker-parent-row";
   const labelTd = document.createElement("td");
   labelTd.textContent = label;
   tr.appendChild(labelTd);
 
   cfg.columns.forEach((col) => {
     const td = document.createElement("td");
-    if (col.type === "test") {
+    if (col.type === "test" || hasSubRows) {
       const num = ScoringModule.tableCellNumber(tool.id, lineId, col);
-      td.className = "hint";
-      td.textContent = num === null ? "—" : String(Math.round(num * 100) / 100);
+      const colMax = ScoringModule.tableColumnMax(tool.id, col);
+      td.className = col.type === "test" ? "hint" : "tracker-parent-sum";
+      td.textContent =
+        num === null ? "—" : String(Math.round(num * 100) / 100) + (maxMode && colMax > 0 ? `/${colMax}` : "");
       tr.appendChild(td);
       return;
     }
-    const input = document.createElement("input");
-    input.type = "text";
-    input.inputMode = "decimal";
-    input.className = "scoring-score-input";
-    input.value = ScoringModule.getTableValue(tool.id, lineId, col.id);
-    if (col.type === "score_max" && col.maxPoints > 0) {
-      input.placeholder = `/${col.maxPoints}`;
-      input.title = `Out of ${col.maxPoints}`;
-    }
-    input.addEventListener("change", async () => {
-      try {
-        ScoringModule.setTableValue(tool.id, lineId, col.id, input.value);
-      } catch (err) {
-        alert(err.message);
-        input.value = ScoringModule.getTableValue(tool.id, lineId, col.id);
-        return;
-      }
-      await saveScoringToolThen(tool, container);
-    });
-    td.appendChild(input);
+    td.appendChild(makeTrackerInput(tool, cfg, container, lineId, col));
     tr.appendChild(td);
   });
 
   const totalTd = document.createElement("td");
   totalTd.className = "attendance-stat-cell";
   const sum = ScoringModule.computeTableScoreSum(tool.id, lineId);
+  const totalMax = ScoringModule.tableMaxTotal(tool.id);
   if (sum === null) {
     totalTd.textContent = "—";
   } else {
     const shown = Math.round(sum * 100) / 100;
-    totalTd.textContent =
-      cfg.totalColumn.mode === "max" && cfg.totalColumn.maxPoints > 0 ? `${shown}/${cfg.totalColumn.maxPoints}` : String(shown);
+    totalTd.textContent = maxMode && totalMax > 0 ? `${shown}/${totalMax}` : String(shown);
   }
   tr.appendChild(totalTd);
+  rows.push(tr);
 
-  return tr;
+  cfg.subRows.forEach((sub) => {
+    const subTr = document.createElement("tr");
+    subTr.className = "tracker-sub-row";
+    const subLabel = document.createElement("td");
+    subLabel.textContent = sub.name;
+    subTr.appendChild(subLabel);
+    cfg.columns.forEach((col) => {
+      const td = document.createElement("td");
+      if (col.type === "test") {
+        td.className = "hint";
+        td.textContent = "—";
+      } else {
+        td.appendChild(makeTrackerInput(tool, cfg, container, lineId, col, sub.id));
+      }
+      subTr.appendChild(td);
+    });
+    subTr.appendChild(document.createElement("td")); // no per-sub-row total
+    rows.push(subTr);
+  });
+
+  return rows;
 }
 
 /** First-column setting: whether rows represent Students or Groups. (The column's name is fixed to match.) */
@@ -3287,7 +3322,7 @@ function buildTableRowsBlock(tool, cfg, container) {
   return wrap;
 }
 
-/** Column count setting plus a nameable, editable list of columns, each either "Score" or "Score (with max)". Doesn't include the first column (Students/Groups) or the fixed Total Score column at the end. */
+/** Column count setting plus a nameable, editable list of columns ("Score" or "Test / quiz score"). In "max" mode each column also has its maximum. Doesn't include the first column (Students/Groups) or the fixed Total Score column at the end. */
 function buildTableColumnsBlock(tool, cfg, container) {
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
@@ -3327,7 +3362,6 @@ function buildTableColumnsBlock(tool, cfg, container) {
     const typeSelect = document.createElement("select");
     [
       ["score", "Score"],
-      ["score_max", "Score (with max)"],
       ["test", "Test / quiz score"],
     ].forEach(([val, label]) => {
       const opt = document.createElement("option");
@@ -3342,12 +3376,12 @@ function buildTableColumnsBlock(tool, cfg, container) {
     });
     li.appendChild(typeSelect);
 
-    if (column.type === "score_max") {
+    if (cfg.mode === "max") {
       const maxInput = document.createElement("input");
       maxInput.type = "text";
       maxInput.inputMode = "decimal";
       maxInput.className = "point-value-input";
-      maxInput.title = "Maximum score";
+      maxInput.title = "Maximum score for this column (for each sub-row, if the tracker has sub-rows)";
       maxInput.placeholder = "Max";
       maxInput.value = column.maxPoints || "";
       maxInput.addEventListener("change", async () => {
@@ -3376,6 +3410,93 @@ function buildTableColumnsBlock(tool, cfg, container) {
   });
   wrap.appendChild(list);
 
+  return wrap;
+}
+
+/** Whole-tracker setting: raw points, or out of maximum points (each column then has a maximum, and the Total Score's maximum is worked out automatically). */
+function buildTableModeBlock(tool, cfg, container) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Scoring type";
+  wrap.appendChild(heading);
+
+  const row = document.createElement("div");
+  row.className = "mapping-row";
+  const modeSelect = document.createElement("select");
+  [
+    ["raw", "Raw points (no maximums)"],
+    ["max", "Out of maximum points"],
+  ].forEach(([val, label]) => {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    if (val === cfg.mode) opt.selected = true;
+    modeSelect.appendChild(opt);
+  });
+  modeSelect.addEventListener("change", async () => {
+    ScoringModule.setTableMode(tool.id, modeSelect.value);
+    await saveScoringToolThen(tool, container);
+  });
+  row.appendChild(modeSelect);
+  wrap.appendChild(row);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    cfg.mode === "max"
+      ? `Give each column its maximum below. The Total Score is worked out automatically as the sum of those maximums (currently ${ScoringModule.tableMaxTotal(tool.id)}), and Main Scores receives it as a percentage × 100 (e.g. 17 out of 20 → 85).`
+      : "Scores are plain points; the Total Score is their sum, and Main Scores receives that sum as-is.";
+  wrap.appendChild(hint);
+  return wrap;
+}
+
+/** Sub-rows: a list of names shared by every row. Each row's boxes then add up their sub-rows. */
+function buildTableSubRowsBlock(tool, cfg, container) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance-settings-block";
+  const heading = document.createElement("h4");
+  heading.textContent = "Sub-rows";
+  wrap.appendChild(heading);
+
+  const countRow = document.createElement("div");
+  countRow.className = "mapping-row";
+  const countInput = document.createElement("input");
+  countInput.type = "text";
+  countInput.inputMode = "numeric";
+  countInput.value = cfg.subRows.length;
+  countInput.addEventListener("change", async () => {
+    ScoringModule.setTableSubRowCount(tool.id, countInput.value);
+    await saveScoringToolThen(tool, container);
+  });
+  const countHint = document.createElement("label");
+  countHint.textContent = "Number of sub-rows under each row (0 = none)";
+  countRow.append(countInput, countHint);
+  wrap.appendChild(countRow);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "With sub-rows, scores are entered on the sub-rows; each box in the main row shows the sum of its sub-rows, and those boxes add up in Total Score. Test / quiz columns aren't split into sub-rows. Scores typed directly into main rows before adding sub-rows are kept, but aren't counted while sub-rows exist.";
+  wrap.appendChild(hint);
+
+  if (cfg.subRows.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "infraction-edit-list";
+    cfg.subRows.forEach((sub) => {
+      const li = document.createElement("li");
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = sub.name;
+      nameInput.addEventListener("change", async () => {
+        ScoringModule.setTableSubRowName(tool.id, sub.id, nameInput.value);
+        await saveScoringToolThen(tool, container);
+      });
+      li.appendChild(nameInput);
+      list.appendChild(li);
+    });
+    wrap.appendChild(list);
+  }
   return wrap;
 }
 

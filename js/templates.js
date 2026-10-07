@@ -121,6 +121,7 @@ const TemplatesModule = {
       const tools = (Array.isArray(scoring.tools) ? this._clone(scoring.tools) : []).map((tool) => {
         if (tool.config && typeof tool.config === "object") {
           tool.config.values = {}; // entered scores
+          tool.config.subValues = {}; // entered sub-row scores
           if (tool.type === "presentation") {
             // Keep each project's rubrics and settings; drop its imported students + groups and entered scores.
             const clearProject = (project) => {
@@ -273,6 +274,18 @@ const TemplatesModule = {
           const line = key.slice(0, i);
           const col = key.slice(i + 1);
           if (colMap[col]) nc.values[`${line}|${colMap[col]}`] = value;
+        });
+        // Sub-rows follow the template; each course keeps its own sub-row scores.
+        nc.subValues = {};
+        const subMap = {};
+        this._pair(Array.isArray(oc.subRows) ? oc.subRows : [], Array.isArray(nc.subRows) ? nc.subRows : []).forEach(
+          ({ tmpl: newSub, old: oldSub }) => {
+            if (oldSub) subMap[oldSub.id] = newSub.id;
+          }
+        );
+        Object.entries(oc.subValues || {}).forEach(([key, value]) => {
+          const [line, sub, col] = key.split("|");
+          if (subMap[sub] && colMap[col]) nc.subValues[`${line}|${subMap[sub]}|${colMap[col]}`] = value;
         });
       } else if (nt.type === "testbank") {
         nc.tests = Array.isArray(oc.tests) ? oc.tests : [];

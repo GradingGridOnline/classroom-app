@@ -130,3 +130,17 @@ table.rubric-bank-grid td > input:focus {
   position: relative;
   z-index: 1;
 }
+
+/* ----- Progress Tracker sub-rows ----- */
+.tracker-parent-row td:first-child {
+  font-weight: 700;
+}
+.tracker-parent-sum {
+  text-align: center;
+  font-weight: 600;
+}
+.tracker-sub-row td:first-child {
+  padding-left: 26px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}

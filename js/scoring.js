@@ -37,7 +37,9 @@ const MAX_RUBRIC_POINTS = 10; // ceiling for the selectable point-value dropdown
 // { toolId, testId }) — students-mode trackers only. The last column of every Progress Tracker is
 // always a fixed, read-only "Total Score" (the sum of that row's
 // entries) — it isn't stored as a column, it's added automatically.
-const TABLE_COLUMN_TYPES = ["score", "score_max", "test"];
+// (Older trackers also had a "score_max" column type; those are converted to "score" and the whole tracker becomes "max" mode — see getTableConfig.)
+const TABLE_COLUMN_TYPES = ["score", "test"];
+const MAX_TABLE_SUBROWS = 20;
 
 // The set of scoring tool types that can be added from Main Scores'
 // Settings. Add a new entry here (and a matching renderer in app.js)
@@ -367,6 +369,18 @@ const ScoringModule = {
     if (!cfg.values || typeof cfg.values !== "object") cfg.values = {};
     if (!Array.isArray(cfg.columns)) cfg.columns = [];
 
+    // The whole tracker is either "raw" (plain points, no maximums) or "max" (every column has a
+    // maximum, and the Total Score's maximum is their sum). Older trackers become "max" if any
+    // column was "score_max" or their Total Score was set to "out of a maximum".
+    if (cfg.mode !== "raw" && cfg.mode !== "max") {
+      const wasMax = cfg.columns.some((c) => c.type === "score_max") || (cfg.totalColumn && cfg.totalColumn.mode === "max");
+      cfg.mode = wasMax ? "max" : "raw";
+    }
+    // Optional sub-rows, shared by every row: [{ id, name }]; their scores live in subValues,
+    // keyed "lineId|subRowId|columnId".
+    if (!Array.isArray(cfg.subRows)) cfg.subRows = [];
+    if (!cfg.subValues || typeof cfg.subValues !== "object") cfg.subValues = {};
+
     // The fixed Total Score column's own setting: "raw" (the plain sum)
     // or "max" (the sum shown out of totalColumn.maxPoints, and sent to
     // Main Scores as a percentage × 100 — see _toolContributionForStudent).
@@ -514,43 +528,89 @@ const ScoringModule = {
     return { raw: true, value: sum };
   },
 
+  setTableMode(toolId, mode) {
+    const cfg = this.getTableConfig(toolId);
+    if (cfg) cfg.mode = mode === "max" ? "max" : "raw";
+  },
+
+  /** Sets how many sub-rows every row has (0 = none), adding default-named ones or trimming from the end. */
+  setTableSubRowCount(toolId, count) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    count = Math.max(0, Math.min(MAX_TABLE_SUBROWS, Math.round(Number(count) || 0)));
+    if (count > cfg.subRows.length) {
+      while (cfg.subRows.length < count) {
+        cfg.subRows.push({
+          id: `sub-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: `Sub-row ${cfg.subRows.length + 1}`,
+        });
+      }
+    } else if (count < cfg.subRows.length) {
+      const removed = cfg.subRows.slice(count);
+      cfg.subRows = cfg.subRows.slice(0, count);
+      this._purgeTableValues(cfg, { subIds: new Set(removed.map((r) => r.id)) });
+    }
+  },
+
+  setTableSubRowName(toolId, subId, name) {
+    const cfg = this.getTableConfig(toolId);
+    const sub = cfg && cfg.subRows.find((r) => r.id === subId);
+    if (sub) sub.name = (name || "").trim() || sub.name;
+  },
+
+  /** The maximum for one column's main-row box in "max" mode: the column's maximum, times the number of sub-rows when it is split into sub-rows (test/quiz columns aren't). 0 in "raw" mode. */
+  tableColumnMax(toolId, column) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg || cfg.mode !== "max") return 0;
+    const split = column.type !== "test" && cfg.subRows.length > 0;
+    return (column.maxPoints || 0) * (split ? cfg.subRows.length : 1);
+  },
+
+  /** The maximum for the Total Score column in "max" mode: the sum of every column's maximum (0 in "raw" mode). Automatic — not chosen by the user. */
+  tableMaxTotal(toolId) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg || cfg.mode !== "max") return 0;
+    return cfg.columns.reduce((sum, col) => sum + this.tableColumnMax(toolId, col), 0);
+  },
+
   // ----- Progress Tracker cell values -----
   // Keyed by "lineId|columnId", where lineId is an identity row's key
   // directly — a student id, or a group number as a string (see
   // getTableIdentityRows). The Total Score column stores nothing
   // here; it's computed from the other columns on the same line.
 
-  getTableValue(toolId, lineId, columnId) {
+  getTableValue(toolId, lineId, columnId, subId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return "";
+    if (subId) return cfg.subValues[`${lineId}|${subId}|${columnId}`] || "";
     return cfg.values[`${lineId}|${columnId}`] || "";
   },
 
-  /** value: "" (blank) or a number. A "score_max" column also requires 0 up to its maximum (when a maximum is set). Throws on anything else. */
-  setTableValue(toolId, lineId, columnId, value) {
+  /** value: "" (blank) or a number. In "max" mode the number must also be from 0 up to the column's maximum (when one is set). subId (optional) is a sub-row. Throws on anything else. */
+  setTableValue(toolId, lineId, columnId, value, subId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return;
     const column = cfg.columns.find((c) => c.id === columnId);
-    const key = `${lineId}|${columnId}`;
+    const store = subId ? cfg.subValues : cfg.values;
+    const key = subId ? `${lineId}|${subId}|${columnId}` : `${lineId}|${columnId}`;
     const trimmed = value == null ? "" : String(value).trim();
 
     if (trimmed === "") {
-      delete cfg.values[key];
+      delete store[key];
       return;
     }
     const num = Number(trimmed);
     if (Number.isNaN(num)) throw new Error("Enter a number.");
-    if (column && column.type === "score_max") {
-      if (num < 0 || (column.maxPoints > 0 && num > column.maxPoints)) {
-        throw new Error(
-          column.maxPoints > 0 ? `Enter a number from 0 to ${column.maxPoints}.` : "Enter a number of 0 or more."
-        );
+    if (cfg.mode === "max") {
+      const max = column ? column.maxPoints || 0 : 0;
+      if (num < 0 || (max > 0 && num > max)) {
+        throw new Error(max > 0 ? `Enter a number from 0 to ${max}.` : "Enter a number of 0 or more.");
       }
     }
-    cfg.values[key] = String(num);
+    store[key] = String(num);
   },
 
-  /** One cell's value as a number, or null if blank/non-numeric. For a "test" column that's the student's score on the chosen test/quiz (students-mode trackers only); for the others it's the number typed into the cell. */
+  /** One main-row box's value as a number, or null if blank. For a "test" column that's the student's score on the chosen test/quiz (students-mode trackers only). When the tracker has sub-rows, it's the sum of that column's sub-row scores (null if none entered); otherwise it's the number typed into the box. */
   tableCellNumber(toolId, lineId, column) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return null;
@@ -558,6 +618,20 @@ const ScoringModule = {
       if (cfg.firstColumn.mode !== "students") return null;
       const source = column.testSource || {};
       return source.toolId && source.testId ? this.testScore(source.toolId, source.testId, lineId) : null;
+    }
+    if (cfg.subRows.length > 0) {
+      let sum = 0;
+      let any = false;
+      cfg.subRows.forEach((sub) => {
+        const raw = cfg.subValues[`${lineId}|${sub.id}|${column.id}`];
+        if (raw === undefined) return;
+        const num = Number(raw);
+        if (!Number.isNaN(num)) {
+          sum += num;
+          any = true;
+        }
+      });
+      return any ? sum : null;
     }
     const raw = cfg.values[`${lineId}|${column.id}`];
     if (raw === undefined) return null;
@@ -577,15 +651,25 @@ const ScoringModule = {
     return sum;
   },
 
-  /** Deletes any stored cell values whose lineId is in `lineIds` and/or whose columnId is in `columnIds` — called when columns are removed so their old values don't linger as orphaned data. */
-  _purgeTableValues(cfg, { lineIds, columnIds } = {}) {
-    if (!lineIds && !columnIds) return;
+  /** Deletes any stored cell values whose lineId is in `lineIds`, whose columnId is in `columnIds`, and/or (sub-row values) whose sub-row id is in `subIds` — called when columns or sub-rows are removed so their old values don't linger as orphaned data. */
+  _purgeTableValues(cfg, { lineIds, columnIds, subIds } = {}) {
+    if (!lineIds && !columnIds && !subIds) return;
     Object.keys(cfg.values).forEach((key) => {
       const sepIndex = key.indexOf("|");
       const lineId = key.slice(0, sepIndex);
       const columnId = key.slice(sepIndex + 1);
       if ((lineIds && lineIds.has(lineId)) || (columnIds && columnIds.has(columnId))) {
         delete cfg.values[key];
+      }
+    });
+    Object.keys(cfg.subValues || {}).forEach((key) => {
+      const [lineId, subId, columnId] = key.split("|");
+      if (
+        (lineIds && lineIds.has(lineId)) ||
+        (columnIds && columnIds.has(columnId)) ||
+        (subIds && subIds.has(subId))
+      ) {
+        delete cfg.subValues[key];
       }
     });
   },
@@ -1611,7 +1695,10 @@ const ScoringModule = {
     // "Out of a max" mode sends the percentage × 100 (e.g. 17 out of 20
     // → 85), which then goes through the item's Score Sources weights
     // like any other contribution. Raw mode sends the plain sum.
-    return this._totalContribution(cfg, sum);
+    return this._totalContribution(
+      { totalColumn: { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id) } },
+      sum
+    );
   },
 
   /**
