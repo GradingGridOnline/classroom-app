@@ -11,8 +11,8 @@
   --td-bg: color-mix(in srgb, var(--th-bg) 45%, #ffffff);
 }
 [data-theme="cyberpunk"] {
-  --th-bg: #2962ff; /* neon blue column headers */
-  --td-bg: color-mix(in srgb, var(--th-bg) 16%, #ffffff); /* a bit lighter blue for the rows */
+  --th-bg: #ff6f9f; /* neon pink column headers */
+  --td-bg: color-mix(in srgb, var(--th-bg) 17%, #ffffff); /* a bit lighter pink for the rows */
 }
 [data-theme="basic"] {
   --th-bg: #d0d9e2;
@@ -178,76 +178,80 @@ table.rubric-bank-grid td > input:focus {
 }
 
 
-/* ===== Cyberpunk theme: colorful =====
-   Teal-to-purple gradient page, bright yellow menu/tab bars with black text,
-   neon blue table column headers (white text) with lighter blue rows, and
-   neon magenta / cyan / green accents for outlines, selections and glows.
-   Colors to tweak: --green (main neon accent: buttons, selected items, active
-   tab), --marker (second neon accent: outlines, hover borders), --th-bg /
-   --td-bg (table header and row blue, set in the table-colors block near the
-   top of this file). */
+/* ===== Cyberpunk theme: neon portrait palette =====
+   Based on the teal / neon-pink / amber-glow image: teal page, pastel pink cards,
+   neon pink column headers (black text) over lighter pink rows, amber menu bars
+   (black text), and cyan / pink neon outlines and glows. Text is black or white
+   depending on the background behind it.
+   Colors to tweak: --green (main accent: buttons, selected items), --marker
+   (neon pink outlines and hover borders), --th-bg / --td-bg (table header and row
+   pink, set in the table-colors block near the top of this file), and the amber
+   (#ffb13b) used for the menu bars below. */
 [data-theme="cyberpunk"] {
-  --paper: #efe7ff;
-  --ink: #1b1230;
-  --ink-soft: #55467a;
-  --green: #d100b8;
-  --green-dark: #7a0099;
-  --marker: #00e5ff;
-  --line: #a98ae0;
-  --card: #fdfbff;
-  --card-shadow: 0 0 0 1px rgba(0, 229, 255, 0.8), 0 0 26px rgba(209, 0, 184, 0.35);
-  --glow: 0 0 12px rgba(209, 0, 184, 0.65);
-  --focus-glow: 0 0 0 2px rgba(0, 229, 255, 0.5), 0 0 14px rgba(209, 0, 184, 0.5);
+  --paper: #f7e6f1;
+  --ink: #14202b;
+  --ink-soft: #526577;
+  --green: #0b7f95;
+  --green-dark: #07566a;
+  --marker: #ff5c93;
+  --line: #d99ab9;
+  --card: #fffafc;
+  --card-shadow: 0 0 0 1px rgba(255, 92, 147, 0.85), 0 0 26px rgba(25, 230, 230, 0.4);
+  --glow: 0 0 12px rgba(255, 92, 147, 0.6);
+  --focus-glow: 0 0 0 2px rgba(25, 230, 230, 0.55), 0 0 14px rgba(255, 92, 147, 0.55);
 }
 
-/* Page: teal-to-purple gradient, with a faint white grid and cyan hatching over it */
+/* Page: deep teal fading to bright cyan, with soft pink glow at the top left */
 [data-theme="cyberpunk"] body {
-  background: linear-gradient(135deg, #00bfa5 0%, #1a8fb0 30%, #5b3fc0 68%, #a21caf 100%);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 120, 170, 0.38), transparent 42%),
+    radial-gradient(circle at 88% 92%, rgba(25, 255, 235, 0.65), transparent 40%),
+    linear-gradient(160deg, #0d3d52 0%, #14879e 52%, #22c9d3 100%);
   background-attachment: fixed;
 }
 [data-theme="cyberpunk"] body::before {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-    repeating-linear-gradient(135deg, rgba(0, 229, 255, 0.1) 0px, rgba(0, 229, 255, 0.1) 2px, transparent 2px, transparent 18px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.09) 1px, transparent 1px),
+    repeating-linear-gradient(135deg, rgba(255, 130, 175, 0.1) 0px, rgba(255, 130, 175, 0.1) 2px, transparent 2px, transparent 18px);
 }
 
-/* App title sits on the gradient, so make it glow white */
+/* App title sits on the teal, so make it glow white */
 [data-theme="cyberpunk"] .header h1 {
   color: #ffffff;
-  text-shadow: 0 0 10px #00e5ff, 0 0 22px #d100b8;
+  text-shadow: 0 0 10px #19e6e6, 0 0 22px #ff5c93;
 }
 [data-theme="cyberpunk"] .header .btn-ghost {
   background: #ffffff;
 }
 
-/* Buttons: neon gradient */
+/* Buttons: teal gradient with white text; pink glow on hover */
 [data-theme="cyberpunk"] .btn-primary {
-  background: linear-gradient(90deg, #d100b8, #7c4dff);
+  background: linear-gradient(90deg, #0b7f95, #0d62a8);
 }
 [data-theme="cyberpunk"] .btn-primary:hover,
 [data-theme="cyberpunk"] .session-present-btn:hover {
-  background: linear-gradient(90deg, #a0008e, #5a2fd6);
-  box-shadow: 0 0 16px rgba(209, 0, 184, 0.85);
+  background: linear-gradient(90deg, #07667a, #0a4f8a);
+  box-shadow: 0 0 16px rgba(255, 92, 147, 0.85);
 }
 [data-theme="cyberpunk"] .session-present-btn {
-  background: #d100b8;
-  border-color: #d100b8;
+  background: #0b7f95;
+  border-color: #0b7f95;
 }
 
-/* Card corner brackets: cyan top-left, magenta bottom-right */
+/* Card corner brackets: pink top-left, cyan bottom-right */
 [data-theme="cyberpunk"] .card::after {
-  border-bottom-color: #ff2bd6;
-  border-right-color: #ff2bd6;
+  border-bottom-color: #19e6e6;
+  border-right-color: #19e6e6;
 }
 
-/* Menu / tab bars: bright yellow with black text and a neon underline */
+/* Menu / tab bars: amber glow with black text and a neon pink underline */
 [data-theme="cyberpunk"] .main-tab-row,
 [data-theme="cyberpunk"] .reportcard-mode-row {
-  background: #ffe600;
+  background: #ffb13b;
   border-top-color: #000;
-  border-bottom: 3px solid #d100b8;
-  box-shadow: 0 6px 14px rgba(209, 0, 184, 0.35);
+  border-bottom: 3px solid #ff5c93;
+  box-shadow: 0 6px 14px rgba(255, 92, 147, 0.35);
 }
 [data-theme="cyberpunk"] .reportcard-mode-row {
   padding: 0 12px;
@@ -260,11 +264,11 @@ table.rubric-bank-grid td > input:focus {
 [data-theme="cyberpunk"] .reportcard-mode-row .tab-btn-active {
   color: #000;
   font-weight: 700;
-  border-bottom-color: #d100b8;
+  border-bottom-color: #000;
   text-shadow: none;
 }
 
-/* Table headers: white text on the neon blue */
+/* Table headers: black text on the neon pink */
 [data-theme="cyberpunk"] .attendance-table thead th,
 [data-theme="cyberpunk"] .attendance-table thead th *:not(input):not(select):not(button):not(.weight-total-box),
 [data-theme="cyberpunk"] .attendance-table tfoot td,
@@ -274,37 +278,36 @@ table.rubric-bank-grid td > input:focus {
 [data-theme="cyberpunk"] .rubric-points-grid th,
 [data-theme="cyberpunk"] .rubric-bank-grid th,
 [data-theme="cyberpunk"] .attendance-table th .score-toggle-btn {
-  color: #ffffff;
+  color: #000000;
 }
 [data-theme="cyberpunk"] .attendance-table thead th,
 [data-theme="cyberpunk"] .roster-table thead th,
 [data-theme="cyberpunk"] .rubric-active-grid th,
 [data-theme="cyberpunk"] .rubric-points-grid th,
 [data-theme="cyberpunk"] .rubric-bank-grid th {
-  border-color: #0b2a99;
+  border-color: #b23a69;
 }
-/* Buttons sitting in the blue footer row (Export to LMS) keep a light background so they stay readable */
+/* Text boxes inside the header row (attendance dates, weight boxes) keep dark text on their light background */
+[data-theme="cyberpunk"] .attendance-table thead th input,
+[data-theme="cyberpunk"] .attendance-table thead th select,
+[data-theme="cyberpunk"] .rubric-active-grid th input,
+[data-theme="cyberpunk"] .rubric-bank-grid th input {
+  color: #14202b;
+}
+/* Buttons sitting in the pink footer row (Export to LMS) keep a light background */
 [data-theme="cyberpunk"] .attendance-table tfoot .btn-ghost {
   background: #ffffff;
 }
 
 /* Seating chart: neon desks */
 [data-theme="cyberpunk"] .desk-empty:not(.desk-grouped) {
-  border-color: #b100d6;
+  border-color: #d6246e;
 }
 [data-theme="cyberpunk"] .desk-occupied {
-  border-color: #00e5ff;
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.55);
+  border-color: #19c8c8;
+  box-shadow: 0 0 8px rgba(25, 230, 230, 0.55);
 }
 [data-theme="cyberpunk"] .desk-occupied:hover {
-  border-color: #ff2bd6;
-  box-shadow: 0 0 12px rgba(255, 43, 214, 0.7);
-}
-
-/* Text boxes inside the blue header row (attendance dates, weight boxes) keep dark text on their light background */
-[data-theme="cyberpunk"] .attendance-table thead th input,
-[data-theme="cyberpunk"] .attendance-table thead th select,
-[data-theme="cyberpunk"] .rubric-active-grid th input,
-[data-theme="cyberpunk"] .rubric-bank-grid th input {
-  color: #1b1230;
+  border-color: #ff5c93;
+  box-shadow: 0 0 12px rgba(255, 92, 147, 0.7);
 }
