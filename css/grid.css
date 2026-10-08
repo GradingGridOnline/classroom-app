@@ -11,8 +11,8 @@
   --td-bg: color-mix(in srgb, var(--th-bg) 45%, #ffffff);
 }
 [data-theme="cyberpunk"] {
-  --th-bg: #ffe600; /* bright yellow headers */
-  --td-bg: color-mix(in srgb, var(--th-bg) 28%, #ffffff);
+  --th-bg: #2962ff; /* neon blue column headers */
+  --td-bg: color-mix(in srgb, var(--th-bg) 16%, #ffffff); /* a bit lighter blue for the rows */
 }
 [data-theme="basic"] {
   --th-bg: #d0d9e2;
@@ -179,11 +179,13 @@ table.rubric-bank-grid td > input:focus {
 
 
 /* ===== Cyberpunk theme: colorful =====
-   Teal-to-purple gradient page, bright yellow headers with black text, and
+   Teal-to-purple gradient page, bright yellow menu/tab bars with black text,
+   neon blue table column headers (white text) with lighter blue rows, and
    neon magenta / cyan / green accents for outlines, selections and glows.
    Colors to tweak: --green (main neon accent: buttons, selected items, active
-   tab), --marker (second neon accent: outlines, hover borders), --th-bg
-   (header yellow, set in the table-colors block near the top of this file). */
+   tab), --marker (second neon accent: outlines, hover borders), --th-bg /
+   --td-bg (table header and row blue, set in the table-colors block near the
+   top of this file). */
 [data-theme="cyberpunk"] {
   --paper: #efe7ff;
   --ink: #1b1230;
@@ -262,9 +264,9 @@ table.rubric-bank-grid td > input:focus {
   text-shadow: none;
 }
 
-/* Table headers: black text on the yellow */
+/* Table headers: white text on the neon blue */
 [data-theme="cyberpunk"] .attendance-table thead th,
-[data-theme="cyberpunk"] .attendance-table thead th *:not(input):not(select):not(button),
+[data-theme="cyberpunk"] .attendance-table thead th *:not(input):not(select):not(button):not(.weight-total-box),
 [data-theme="cyberpunk"] .attendance-table tfoot td,
 [data-theme="cyberpunk"] .roster-table thead th,
 [data-theme="cyberpunk"] .category-header-cell,
@@ -272,11 +274,18 @@ table.rubric-bank-grid td > input:focus {
 [data-theme="cyberpunk"] .rubric-points-grid th,
 [data-theme="cyberpunk"] .rubric-bank-grid th,
 [data-theme="cyberpunk"] .attendance-table th .score-toggle-btn {
-  color: #000;
+  color: #ffffff;
 }
 [data-theme="cyberpunk"] .attendance-table thead th,
-[data-theme="cyberpunk"] .roster-table thead th {
-  border-color: #000;
+[data-theme="cyberpunk"] .roster-table thead th,
+[data-theme="cyberpunk"] .rubric-active-grid th,
+[data-theme="cyberpunk"] .rubric-points-grid th,
+[data-theme="cyberpunk"] .rubric-bank-grid th {
+  border-color: #0b2a99;
+}
+/* Buttons sitting in the blue footer row (Export to LMS) keep a light background so they stay readable */
+[data-theme="cyberpunk"] .attendance-table tfoot .btn-ghost {
+  background: #ffffff;
 }
 
 /* Seating chart: neon desks */
