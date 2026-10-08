@@ -186,18 +186,17 @@ table.rubric-bank-grid td > input:focus {
    Colors to tweak: --green (main accent: buttons, selected items), --marker
    (neon pink outlines and hover borders), --th-bg / --td-bg (table header and row
    blue, set in the table-colors block near the top of this file), and the amber
-   (#ffb13b) used for the menu bars below. The panels (--card) are dark, so text is
-   light; the tables keep light blue rows, so inside them the text colors are
-   switched back to dark. */
+   (#ffb13b) used for the menu bars below. The main panel is a blue-green gradient
+   (see ".card" below: change the three colors to adjust it); text on it is near-black. */
 [data-theme="cyberpunk"] {
-  --paper: #164a5c;
-  --ink: #e6fbff;
-  --ink-soft: #92c6d3;
-  --green: #22c7de;
-  --green-dark: #86f2f2;
+  --paper: #c4eeee;
+  --ink: #06141c;
+  --ink-soft: #123846;
+  --green: #0b7f95;
+  --green-dark: #06495a;
   --marker: #ff5c93;
-  --line: #2f8296;
-  --card: #0c3a4a; /* the dark blue-green panel color */
+  --line: #4fa9bc;
+  --card: #e4f8f7; /* small tiles (desks, course rows, menus) */
   --card-shadow: 0 0 0 1px rgba(255, 92, 147, 0.85), 0 0 26px rgba(25, 230, 230, 0.4);
   --glow: 0 0 12px rgba(255, 92, 147, 0.6);
   --focus-glow: 0 0 0 2px rgba(25, 230, 230, 0.55), 0 0 14px rgba(255, 92, 147, 0.55);
@@ -317,47 +316,32 @@ table.rubric-bank-grid td > input:focus {
   box-shadow: 0 0 12px rgba(255, 92, 147, 0.7);
 }
 
-/* ----- Dark panels: light text, dark text boxes ----- */
+/* ----- Main panel: gradient from dark blue-green (top left) to light blue-green (bottom right) ----- */
+[data-theme="cyberpunk"] .card {
+  background: linear-gradient(150deg, #2b97ac 0%, #5fc4cf 45%, #b3f0ec 100%);
+}
+
+/* Text boxes and drop-downs: light with dark text */
 [data-theme="cyberpunk"] input:not([type="checkbox"]),
 [data-theme="cyberpunk"] select,
 [data-theme="cyberpunk"] textarea {
-  background: #123f4f;
-  color: #e6fbff;
+  background: #f5fdff;
+  color: #06141c;
 }
 [data-theme="cyberpunk"] .result {
-  color: #5dffb0;
+  color: #05632f;
 }
 [data-theme="cyberpunk"] .unseated-item-selected {
   background: #0b7f95;
-  border-color: #22c7de;
+  border-color: #0b7f95;
   color: #ffffff;
 }
 
-/* The light blue table rows keep dark text: switch the text colors back to dark inside tables */
+/* Inside tables the text colors stay dark, and the lines a little lighter */
 [data-theme="cyberpunk"] .attendance-table,
 [data-theme="cyberpunk"] .roster-table,
 [data-theme="cyberpunk"] .rubric-active-grid,
 [data-theme="cyberpunk"] .rubric-points-grid,
 [data-theme="cyberpunk"] .rubric-bank-grid {
-  --ink: #14202b;
-  --ink-soft: #3f5568;
-  --green: #0b7f95;
-  --green-dark: #07566a;
   --line: #6fb0c4;
-  color: #14202b;
-}
-
-/* Outlined sub-tab panels get slightly lighter than the dark card (instead of darker) */
-[data-theme="cyberpunk"] .level3-row,
-[data-theme="cyberpunk"] .level3-panel {
-  --level-bg: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), var(--card);
-}
-[data-theme="cyberpunk"] .level4-row,
-[data-theme="cyberpunk"] .level4-panel {
-  --level-bg: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)), var(--card);
-}
-
-/* Pop-out group numbers on the dark desks */
-[data-theme="cyberpunk"] #popout-grid .popout-group-badge {
-  color: hsl(var(--group-hue), 90%, 72%);
 }
