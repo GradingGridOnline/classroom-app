@@ -1053,6 +1053,15 @@ function fontSizeToFit(text, maxWidthPx, fontWeight = "400", maxSizePx = 40) {
   return Math.min(maxSizePx, (maxWidthPx / widthAtRef) * refSize);
 }
 
+/** "Period 2 (09:00–10:30)" for a course's assigned period — with whichever of the start / end times the period has — or "" if the course has no period assigned. */
+function printPeriodLine(course) {
+  const period = course && course.periodId ? PeriodsModule.find(course.periodId) : null;
+  if (!period) return "";
+  const time =
+    period.startTime && period.endTime ? `${period.startTime}–${period.endTime}` : period.startTime || period.endTime || "";
+  return time ? `${period.name} (${time})` : period.name;
+}
+
 /**
  * Builds a printable sheet of the current seating arrangement, from the
  * teacher's own viewpoint (same row/column order as the on-screen
@@ -1074,7 +1083,7 @@ function buildSeatingPrintSheet() {
   // period has one) underneath. This always comes first, so it is always the
   // top-left item on the page.
   const courseName = (course && course.name) || el.courseDetailTitle.textContent.trim() || "Seating Chart";
-  const periodLabel = course && course.periodId ? PeriodsModule.label(course.periodId) : "";
+  const periodLabel = printPeriodLine(course);
   const header = document.createElement("div");
   header.className = "seating-print-header";
   const heading = document.createElement("h2");
@@ -1236,7 +1245,7 @@ function buildSeatingPrintBox(label) {
 /** Bottom-right box: course name + period, pre-filled (unlike the other three, which are left blank for handwriting). */
 function buildSeatingPrintCourseBox(courseName, periodLabel) {
   const box = document.createElement("div");
-  box.className = "seating-print-box";
+  box.className = "seating-print-box seating-print-box-right";
 
   const labelEl = document.createElement("span");
   labelEl.className = "seating-print-box-label";

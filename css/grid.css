@@ -349,3 +349,44 @@ table.rubric-bank-grid td > input:focus {
 [data-theme="cyberpunk"] .rubric-bank-grid {
   --line: #6fb0c4;
 }
+
+/* ===== Seating chart print: the bottom row of boxes must stay on the page ===== */
+/* The four boxes used a fixed 10:1 shape, which made the last (course / period) box
+   grow wider than its share and run off the right edge of the page whenever it held
+   a course name plus a period line. They now have a fixed height and a width that
+   can't exceed their share; the course box is wider and right-aligned. */
+.seating-print-box {
+  aspect-ratio: auto;
+  height: 17mm;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.seating-print-box-right {
+  flex: 2;
+}
+.seating-print-box-right .seating-print-box-label {
+  left: auto;
+  right: 6px;
+}
+.seating-print-box-right .seating-print-box-content {
+  text-align: right;
+}
+.seating-print-box-content p {
+  line-height: 1.2;
+}
+
+/* Printing: always a plain white page with black text, whatever the theme */
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+  }
+  body::before {
+    display: none !important;
+  }
+  .seating-print-sheet,
+  .seating-print-header h2 {
+    color: #000000 !important;
+  }
+}
