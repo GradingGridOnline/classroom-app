@@ -322,8 +322,11 @@ const AttendanceModule = {
    * Builds the export CSV for one session: the template's header row,
    * then one row per given student (in the order given), with each
    * column filled according to its assigned field. "points" is the
-   * point value of that student's attendance code for this session
-   * (blank if nothing is recorded for them yet).
+   * point value of that student's attendance code for this session,
+   * with that session's infraction deducted (the infraction's point
+   * value is added, so a negative value lowers the points) — the same
+   * calculation as the Attendance score. Blank if nothing is recorded
+   * for them yet.
    */
   buildExportCsv(sessionId, students) {
     const tpl = this.settings.exportTemplate;
@@ -338,7 +341,10 @@ const AttendanceModule = {
         if (!field) return "";
         if (field === "points") {
           const record = this.getRecord(student.id, sessionId);
-          return record.code ? this.settings.points[record.code] ?? 0 : "";
+          if (!record.code) return "";
+          let pts = this.settings.points[record.code] ?? 0;
+          if (record.infraction) pts += this.settings.infractionPoints[record.infraction] ?? 0;
+          return Math.round(pts * 100) / 100; // avoids results like 0.7999999999999999
         }
         const value = student[field];
         return value == null ? "" : value;
