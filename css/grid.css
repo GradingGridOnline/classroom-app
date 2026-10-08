@@ -180,13 +180,13 @@ table.rubric-bank-grid td > input:focus {
 
 /* ===== Cyberpunk theme: neon portrait palette =====
    Based on the teal / neon-pink / amber-glow image: teal page, pastel pink cards,
-   neon blue column headers (black text) over lighter blue rows, amber menu bars
+   neon blue column headers (black text) over lighter blue rows, black menu bars
    (black text), and cyan / pink neon outlines and glows. Text is black or white
    depending on the background behind it.
    Colors to tweak: --green (main accent: buttons, selected items), --marker
    (neon pink outlines and hover borders), --th-bg / --td-bg (table header and row
    blue, set in the table-colors block near the top of this file), and the amber
-   (#ffb13b) used for the menu bars below. The main panel is a blue-green gradient
+   (black) used for the menu bars below. The main panel is a blue-green gradient
    (see ".card" below: change the three colors to adjust it); text on it is near-black. */
 [data-theme="cyberpunk"] {
   --paper: #c4eeee;
@@ -247,10 +247,10 @@ table.rubric-bank-grid td > input:focus {
   border-right-color: #19e6e6;
 }
 
-/* Menu / tab bars: amber glow with black text and a neon pink underline */
+/* Menu / tab bars: black with white text and a neon pink underline */
 [data-theme="cyberpunk"] .main-tab-row,
 [data-theme="cyberpunk"] .reportcard-mode-row {
-  background: #ffb13b;
+  background: #000000;
   border-top-color: #000;
   border-bottom: 3px solid #ff5c93;
   box-shadow: 0 6px 14px rgba(255, 92, 147, 0.35);
@@ -260,14 +260,18 @@ table.rubric-bank-grid td > input:focus {
 }
 [data-theme="cyberpunk"] .main-tab-row .tab-btn,
 [data-theme="cyberpunk"] .reportcard-mode-row .tab-btn {
-  color: #000;
+  color: #ffffff;
+}
+[data-theme="cyberpunk"] .main-tab-row .tab-btn:hover,
+[data-theme="cyberpunk"] .reportcard-mode-row .tab-btn:hover {
+  color: #19e6e6;
 }
 [data-theme="cyberpunk"] .main-tab-row .tab-btn-active,
 [data-theme="cyberpunk"] .reportcard-mode-row .tab-btn-active {
-  color: #000;
+  color: #ffffff;
   font-weight: 700;
-  border-bottom-color: #000;
-  text-shadow: none;
+  border-bottom-color: #ff5c93;
+  text-shadow: 0 0 8px rgba(255, 92, 147, 0.8);
 }
 
 /* Table headers: black text on the neon blue */
