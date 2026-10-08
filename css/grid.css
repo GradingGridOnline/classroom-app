@@ -300,3 +300,11 @@ table.rubric-bank-grid td > input:focus {
   border-color: #ff2bd6;
   box-shadow: 0 0 12px rgba(255, 43, 214, 0.7);
 }
+
+/* Text boxes inside the blue header row (attendance dates, weight boxes) keep dark text on their light background */
+[data-theme="cyberpunk"] .attendance-table thead th input,
+[data-theme="cyberpunk"] .attendance-table thead th select,
+[data-theme="cyberpunk"] .rubric-active-grid th input,
+[data-theme="cyberpunk"] .rubric-bank-grid th input {
+  color: #1b1230;
+}
