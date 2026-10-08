@@ -11,8 +11,8 @@
   --td-bg: color-mix(in srgb, var(--th-bg) 45%, #ffffff);
 }
 [data-theme="cyberpunk"] {
-  --th-bg: #ff6f9f; /* neon pink column headers */
-  --td-bg: color-mix(in srgb, var(--th-bg) 17%, #ffffff); /* a bit lighter pink for the rows */
+  --th-bg: #35b9e0; /* neon sky-blue column headers */
+  --td-bg: color-mix(in srgb, var(--th-bg) 17%, #ffffff); /* a bit lighter blue for the rows */
 }
 [data-theme="basic"] {
   --th-bg: #d0d9e2;
@@ -180,12 +180,12 @@ table.rubric-bank-grid td > input:focus {
 
 /* ===== Cyberpunk theme: neon portrait palette =====
    Based on the teal / neon-pink / amber-glow image: teal page, pastel pink cards,
-   neon pink column headers (black text) over lighter pink rows, amber menu bars
+   neon blue column headers (black text) over lighter blue rows, amber menu bars
    (black text), and cyan / pink neon outlines and glows. Text is black or white
    depending on the background behind it.
    Colors to tweak: --green (main accent: buttons, selected items), --marker
    (neon pink outlines and hover borders), --th-bg / --td-bg (table header and row
-   pink, set in the table-colors block near the top of this file), and the amber
+   blue, set in the table-colors block near the top of this file), and the amber
    (#ffb13b) used for the menu bars below. */
 [data-theme="cyberpunk"] {
   --paper: #f7e6f1;
@@ -268,7 +268,7 @@ table.rubric-bank-grid td > input:focus {
   text-shadow: none;
 }
 
-/* Table headers: black text on the neon pink */
+/* Table headers: black text on the neon blue */
 [data-theme="cyberpunk"] .attendance-table thead th,
 [data-theme="cyberpunk"] .attendance-table thead th *:not(input):not(select):not(button):not(.weight-total-box),
 [data-theme="cyberpunk"] .attendance-table tfoot td,
@@ -285,7 +285,7 @@ table.rubric-bank-grid td > input:focus {
 [data-theme="cyberpunk"] .rubric-active-grid th,
 [data-theme="cyberpunk"] .rubric-points-grid th,
 [data-theme="cyberpunk"] .rubric-bank-grid th {
-  border-color: #b23a69;
+  border-color: #1a7fa0;
 }
 /* Text boxes inside the header row (attendance dates, weight boxes) keep dark text on their light background */
 [data-theme="cyberpunk"] .attendance-table thead th input,
@@ -294,7 +294,7 @@ table.rubric-bank-grid td > input:focus {
 [data-theme="cyberpunk"] .rubric-bank-grid th input {
   color: #14202b;
 }
-/* Buttons sitting in the pink footer row (Export to LMS) keep a light background */
+/* Buttons sitting in the blue footer row (Export to LMS) keep a light background */
 [data-theme="cyberpunk"] .attendance-table tfoot .btn-ghost {
   background: #ffffff;
 }
