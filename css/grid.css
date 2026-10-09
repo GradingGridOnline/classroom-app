@@ -401,3 +401,9 @@ table.rubric-bank-grid td > input:focus {
   width: 1%;
   min-width: 7rem;
 }
+
+/* Multi-source item cells */
+.score-composite { font-weight: 700; text-align: center; }
+.score-source-detail { margin-top: 4px; font-size: 0.8em; }
+.score-source-line { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.score-source-line input.scoring-score-input { width: 4.5em; }

@@ -1712,7 +1712,7 @@ const ScoringModule = {
    * blank manual entry). The caller is responsible for handling "E"
    * (exempt) before reaching this — it isn't a Score Sources concept.
    */
-  computeItemEffectiveScore(studentId, item) {
+  itemSourceBreakdown(studentId, item) {
     const sourcesCfg = this.getItemScoreSources(item.id);
     const sources = []; // { weight, points } — points are on the item's own 0-maxPoints scale
     let configuredWeight = 0; // every source with a weight above 0, whether or not it has a score yet
@@ -1721,7 +1721,7 @@ const ScoringModule = {
       configuredWeight += sourcesCfg.manualWeight;
       const rec = this.getRecord(studentId, item.id);
       if (rec !== "" && rec !== "E") {
-        sources.push({ weight: sourcesCfg.manualWeight, points: Number(rec) });
+        sources.push({ key: "manual", label: "Manual", weight: sourcesCfg.manualWeight, points: Number(rec) });
       }
     }
 
@@ -1730,6 +1730,7 @@ const ScoringModule = {
       configuredWeight += weight;
       const tool = this.findTool(toolId);
       if (!tool) return;
+      const label = tool.name;
       if (tool.type === "testbank") {
         // A Test & Quiz Bank contributes one chosen test/quiz's score. If
         // the test has a maximum, the score is scaled to this item's own
@@ -1739,7 +1740,7 @@ const ScoringModule = {
         const value = test ? this.testScore(toolId, testId, studentId) : null;
         if (value === null) return;
         const testPoints = test.maxPoints > 0 ? (value / test.maxPoints) * item.maxPoints : value;
-        sources.push({ weight, points: testPoints });
+        sources.push({ key: toolId, label, weight, points: testPoints });
         return;
       }
       if (tool.type === "presentation") {
@@ -1749,7 +1750,9 @@ const ScoringModule = {
         if (!entry || !entry.group) return;
         const sum = this.computePresentationSum(toolId, projectId, entry.group);
         if (sum === null) return;
-        sources.push({ weight, points: this._scaleToItem(sum, project.totalColumn, item) });
+        const pPoints = this._scaleToItem(sum, project.totalColumn, item);
+        if (pPoints === null) return;
+        sources.push({ key: toolId, label, weight, points: pPoints });
         return;
       }
       const sum = this._trackerSumForStudent(tool, studentId);
@@ -1757,14 +1760,20 @@ const ScoringModule = {
       const cfg = this.getTableConfig(tool.id);
       const points = this._scaleToItem(sum, { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id) }, item);
       if (points === null) return;
-      sources.push({ weight, points });
+      sources.push({ key: toolId, label, weight, points });
     });
 
+    sources.forEach((src) => {
+      src.contribution = (src.points * src.weight) / 100; // points × its percentage
+    });
+    return { sources, configuredWeight };
+  },
+
+  /** The composite score for one student on one item: every source's points × its percentage, added together. Percentages are NOT capped — two sources at 100% give 200% of the score. Null when no source has a score yet. */
+  computeItemEffectiveScore(studentId, item) {
+    const { sources } = this.itemSourceBreakdown(studentId, item);
     if (sources.length === 0) return null;
-    // Each source's points are multiplied by its percentage and added together.
-    // (If the percentages add up to more than 100 they're scaled back to 100.)
-    const divisor = Math.max(100, configuredWeight);
-    return sources.reduce((sum, s) => sum + (s.points * s.weight) / divisor, 0);
+    return sources.reduce((sum, src) => sum + src.contribution, 0);
   },
 
   /** A scoring tool's total, rescaled to the item: sum ÷ tool maximum × item maximum (so a perfect tool score = the item's full points). A tool with no maximum set (plain "raw" mode) is used as-is. Returns null if "max" mode has no maximum yet. */

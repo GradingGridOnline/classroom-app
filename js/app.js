@@ -2457,7 +2457,7 @@ function buildItemScoreSourcesPanel(item) {
   manualRow.className = "weight-row";
   const manualLabel = document.createElement("span");
   manualLabel.className = "weight-label";
-  manualLabel.textContent = "Manual";
+  manualLabel.textContent = "Manual %";
   const manualInput = document.createElement("input");
   manualInput.type = "text";
   manualInput.inputMode = "numeric";
@@ -2470,6 +2470,12 @@ function buildItemScoreSourcesPanel(item) {
   manualRow.append(manualLabel, manualInput);
   panel.appendChild(manualRow);
 
+  const totalPct = sources.manualWeight + Object.values(sources.toolWeights).reduce((a, w) => a + (w || 0), 0);
+  const totalLine = document.createElement("p");
+  totalLine.className = "hint";
+  totalLine.textContent = `Sources add up to ${totalPct}% of this item's ${item.maxPoints} points` + (totalPct === 100 ? "" : totalPct > 100 ? " (more than 100 — extra is counted)" : " (less than 100)");
+  panel.appendChild(totalLine);
+
   if (ScoringModule.tools.length === 0) {
     const hint = document.createElement("p");
     hint.className = "hint";
@@ -2481,7 +2487,7 @@ function buildItemScoreSourcesPanel(item) {
       row.className = "weight-row";
       const label = document.createElement("span");
       label.className = "weight-label";
-      label.textContent = tool.name;
+      label.textContent = `${tool.name} %`;
       const input = document.createElement("input");
       input.type = "text";
       input.inputMode = "numeric";
@@ -2926,16 +2932,20 @@ function buildScoringStudentRow(student) {
         }
       });
 
-      td.appendChild(input);
-
       const itemSources = ScoringModule.getItemScoreSources(item.id);
       if (Object.values(itemSources.toolWeights).some((w) => w > 0)) {
-        const effective = ScoringModule.computeItemEffectiveScore(student.id, item);
-        const readout = document.createElement("div");
-        readout.className = "hint score-source-readout";
-        readout.dataset.itemId = item.id;
-        readout.textContent = effective === null ? "→ —" : `→ ${Math.round(effective * 10) / 10}`;
-        td.appendChild(readout);
+        // Several sources feed this item: show the composite score; with the Sources panel open, also each contributing source (manual included).
+        const composite = document.createElement("div");
+        composite.className = "score-composite";
+        composite.dataset.itemId = item.id;
+        const detail = document.createElement("div");
+        detail.className = "score-source-detail";
+        detail.dataset.itemId = item.id;
+        td.append(composite, detail);
+        td._manualInput = input;
+        fillItemCompositeCell(td, student.id, item);
+      } else {
+        td.appendChild(input);
       }
 
       tr.appendChild(td);
@@ -2960,6 +2970,54 @@ function fillRawPointsCell(td, studentId) {
 }
 
 /** A small two-line display: the points value on top, its equivalent percentage underneath in a lighter style. Either can be null/undefined, shown as "—". Used for Total Score and Attendance, now that both are points-first with percent as secondary context. */
+/** Fills a multi-source item cell: the composite score always; the per-source lines (manual input + each tool) only while that item's Sources panel is open. */
+function fillItemCompositeCell(td, studentId, item) {
+  const round = (n) => Math.round(n * 100) / 100;
+  const composite = td.querySelector(".score-composite");
+  const detail = td.querySelector(".score-source-detail");
+  const input = td._manualInput;
+  const effective = ScoringModule.computeItemEffectiveScore(studentId, item);
+  const exempt = ScoringModule.getRecord(studentId, item.id) === "E";
+  composite.textContent = exempt ? "E" : effective === null ? "—" : String(round(effective));
+  composite.title = `Combined score from all sources (item is out of ${item.maxPoints}). Open "Sources" to see each one.`;
+
+  detail.innerHTML = "";
+  if (!itemScoreSourcesOpen.has(item.id)) {
+    if (input.parentElement) input.remove();
+    return;
+  }
+  const { sources } = ScoringModule.itemSourceBreakdown(studentId, item);
+  const cfg = ScoringModule.getItemScoreSources(item.id);
+  const byKey = {};
+  sources.forEach((src) => (byKey[src.key] = src));
+
+  if (cfg.manualWeight > 0) {
+    const line = document.createElement("div");
+    line.className = "score-source-line";
+    const name = document.createElement("span");
+    name.textContent = `Manual ${cfg.manualWeight}%`;
+    line.append(name, input);
+    const m = byKey.manual;
+    const result = document.createElement("span");
+    result.className = "hint";
+    result.textContent = m ? `→ ${round(m.contribution)}` : "→ —";
+    line.appendChild(result);
+    detail.appendChild(line);
+  } else if (input.parentElement) {
+    input.remove();
+  }
+  Object.entries(cfg.toolWeights).forEach(([toolId, weight]) => {
+    if (!(weight > 0)) return;
+    const tool = ScoringModule.findTool(toolId);
+    if (!tool) return;
+    const src = byKey[toolId];
+    const line = document.createElement("div");
+    line.className = "score-source-line";
+    line.textContent = `${tool.name} ${weight}%: ${src ? `${round(src.points)} → ${round(src.contribution)}` : "—"}`;
+    detail.appendChild(line);
+  });
+}
+
 function buildPointsWithPercentCell(points, percent) {
   const wrap = document.createElement("div");
   const pointsLine = document.createElement("div");
@@ -2987,11 +3045,10 @@ function refreshScoringTotalCell(studentId) {
 
   // This item's own edit can shift its own blended Score Sources
   // readout (if it has one) — refresh whichever are in this row.
-  row.querySelectorAll(".score-source-readout").forEach((readoutEl) => {
-    const item = ScoringModule.findItem(readoutEl.dataset.itemId);
-    if (!item) return;
-    const effective = ScoringModule.computeItemEffectiveScore(studentId, item);
-    readoutEl.textContent = effective === null ? "→ —" : `→ ${Math.round(effective * 10) / 10}`;
+  row.querySelectorAll("td.scoring-item-cell").forEach((cell) => {
+    if (!cell._manualInput) return;
+    const item = ScoringModule.findItem(cell._manualInput.dataset.itemId);
+    if (item) fillItemCompositeCell(cell, studentId, item);
   });
 }
 
