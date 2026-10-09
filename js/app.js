@@ -3161,7 +3161,21 @@ function renderScoringToolView(tool, container) {
   renderFn(tool, container);
   // The name box sits at the bottom of the tool's Settings section (or at the bottom of the tab if it has none).
   const settingsSections = container.querySelectorAll(".attendance-settings");
-  const nameHost = settingsSections.length ? settingsSections[settingsSections.length - 1] : container;
+  let nameHost;
+  if (settingsSections.length) {
+    nameHost = settingsSections[settingsSections.length - 1];
+  } else {
+    // Tools without a Settings section of their own get one, so the name box always lives inside Settings.
+    nameHost = document.createElement("div");
+    nameHost.className = "attendance-settings";
+    const header = document.createElement("div");
+    header.className = "attendance-settings-header";
+    const heading = document.createElement("h3");
+    heading.textContent = `${tool.name} Settings`;
+    header.appendChild(heading);
+    nameHost.appendChild(header);
+    container.appendChild(nameHost);
+  }
   nameHost.appendChild(buildToolNameRow(tool));
   if (pendingToolNameFocus === tool.id) {
     pendingToolNameFocus = null;
@@ -3188,6 +3202,8 @@ function buildToolNameRow(tool) {
     input.value = tool.name;
     const btn = el.scoringModeRow.querySelector(`[data-scoring-mode="${tool.id}"]`);
     if (btn) btn.textContent = tool.name;
+    const settingsHeading = row.closest(".attendance-settings") && row.closest(".attendance-settings").querySelector("h3");
+    if (settingsHeading) settingsHeading.textContent = `${tool.name} Settings`;
     await saveScoringThen();
   });
   input.addEventListener("keydown", (e) => {
