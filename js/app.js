@@ -3159,7 +3159,10 @@ function renderScoringToolView(tool, container) {
     return;
   }
   renderFn(tool, container);
-  container.prepend(buildToolNameRow(tool));
+  // The name box sits at the bottom of the tool's Settings section (or at the bottom of the tab if it has none).
+  const settingsSections = container.querySelectorAll(".attendance-settings");
+  const nameHost = settingsSections.length ? settingsSections[settingsSections.length - 1] : container;
+  nameHost.appendChild(buildToolNameRow(tool));
   if (pendingToolNameFocus === tool.id) {
     pendingToolNameFocus = null;
     const nameBox = container.querySelector(".tool-name-input");
