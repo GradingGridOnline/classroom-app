@@ -565,3 +565,11 @@ table.source-grid.source-grid-over {
   color: #000000;
   text-shadow: none;
 }
+
+/* Main Scores tab: the yellow runs all the way to the left edge of the menu bar */
+[data-theme="cyberpunk"] #scoring-mode-row {
+  padding-left: 0;
+}
+[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn {
+  padding-left: 28px;
+}
