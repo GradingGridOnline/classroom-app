@@ -1714,9 +1714,11 @@ const ScoringModule = {
    */
   computeItemEffectiveScore(studentId, item) {
     const sourcesCfg = this.getItemScoreSources(item.id);
-    const sources = [];
+    const sources = []; // { weight, points } — points are on the item's own 0-maxPoints scale
+    let configuredWeight = 0; // every source with a weight above 0, whether or not it has a score yet
 
     if (sourcesCfg.manualWeight > 0) {
+      configuredWeight += sourcesCfg.manualWeight;
       const rec = this.getRecord(studentId, item.id);
       if (rec !== "" && rec !== "E") {
         sources.push({ weight: sourcesCfg.manualWeight, points: Number(rec) });
@@ -1725,6 +1727,7 @@ const ScoringModule = {
 
     Object.entries(sourcesCfg.toolWeights).forEach(([toolId, weight]) => {
       if (!(weight > 0)) return;
+      configuredWeight += weight;
       const tool = this.findTool(toolId);
       if (!tool) return;
       if (tool.type === "testbank") {
@@ -1741,22 +1744,53 @@ const ScoringModule = {
       }
       if (tool.type === "presentation") {
         const projectId = sourcesCfg.projectSelections[toolId];
-        const presContribution = projectId ? this._presentationContribution(tool, studentId, projectId) : null;
-        if (!presContribution) return;
-        sources.push({ weight, points: presContribution.value });
+        const project = projectId ? this.getPresentationProject(toolId, projectId) : null;
+        const entry = project && project.roster.find((e) => e.studentId === studentId);
+        if (!entry || !entry.group) return;
+        const sum = this.computePresentationSum(toolId, projectId, entry.group);
+        if (sum === null) return;
+        sources.push({ weight, points: this._scaleToItem(sum, project.totalColumn, item) });
         return;
       }
-      const contribution = this._toolContributionForStudent(tool, studentId);
-      if (!contribution) return;
-      const points = contribution.raw ? contribution.value : contribution.value * item.maxPoints;
+      const sum = this._trackerSumForStudent(tool, studentId);
+      if (sum === null) return;
+      const cfg = this.getTableConfig(tool.id);
+      const points = this._scaleToItem(sum, { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id) }, item);
+      if (points === null) return;
       sources.push({ weight, points });
     });
 
     if (sources.length === 0) return null;
-    const weightTotal = sources.reduce((sum, s) => sum + s.weight, 0);
-    if (weightTotal <= 0) return null;
-    const weightedSum = sources.reduce((sum, s) => sum + s.points * s.weight, 0);
-    return weightedSum / weightTotal;
+    // Each source's points are multiplied by its percentage and added together.
+    // (If the percentages add up to more than 100 they're scaled back to 100.)
+    const divisor = Math.max(100, configuredWeight);
+    return sources.reduce((sum, s) => sum + (s.points * s.weight) / divisor, 0);
+  },
+
+  /** A scoring tool's total, rescaled to the item: sum ÷ tool maximum × item maximum (so a perfect tool score = the item's full points). A tool with no maximum set (plain "raw" mode) is used as-is. Returns null if "max" mode has no maximum yet. */
+  _scaleToItem(sum, totalCfg, item) {
+    const max = Number(totalCfg && totalCfg.maxPoints) || 0;
+    if (totalCfg && totalCfg.mode === "max") {
+      if (!(max > 0)) return null;
+      return (sum / max) * item.maxPoints;
+    }
+    return sum;
+  },
+
+  /** A Progress Tracker's Total Score for one student (or their group), or null if unavailable. */
+  _trackerSumForStudent(tool, studentId) {
+    if (tool.type !== "table") return null;
+    const cfg = this.getTableConfig(tool.id);
+    if (!cfg) return null;
+    let rowKey;
+    if (cfg.firstColumn.mode === "groups") {
+      const groupNumber = this._studentGroupNumber(studentId);
+      if (!groupNumber) return null;
+      rowKey = String(groupNumber);
+    } else {
+      rowKey = studentId;
+    }
+    return this.computeTableScoreSum(tool.id, rowKey);
   },
 
   // ----- Scores -----
