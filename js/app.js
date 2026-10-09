@@ -1799,8 +1799,10 @@ function buildAttendanceStudentRow(student) {
       if (opt === record.infraction) o.selected = true;
       infractionSelect.appendChild(o);
     });
+    applyInfractionColor(infractionSelect, record.infraction);
     infractionSelect.addEventListener("change", async () => {
       AttendanceModule.setRecord(student.id, session.id, { infraction: infractionSelect.value });
+      applyInfractionColor(infractionSelect, infractionSelect.value);
       await saveAttendanceThen();
       refreshAttendanceStatsRow(student.id);
     });
@@ -1822,14 +1824,30 @@ function buildAttendanceStudentRow(student) {
   return tr;
 }
 
-// Fixed, literal colors for these three specific codes — independent
-// of any custom renaming, since the request was for exactly A/L/E.
-const ATTENDANCE_CODE_COLORS = { A: "#e57373", L: "#ffd54f", E: "#64b5f6" };
+// Highlight colours are chosen by palette name; the shade itself comes from the current theme (the .att-hl-* rules in css/grid.css).
+const ATTENDANCE_PALETTE = [
+  ["red", "Red"],
+  ["orange", "Orange"],
+  ["yellow", "Yellow"],
+  ["green", "Green"],
+  ["teal", "Teal"],
+  ["blue", "Blue"],
+  ["purple", "Purple"],
+  ["pink", "Pink"],
+  ["gray", "Gray"],
+];
+
+function applyHighlightClass(node, colorName) {
+  ATTENDANCE_PALETTE.forEach(([id]) => node.classList.remove(`att-hl-${id}`));
+  if (colorName) node.classList.add(`att-hl-${colorName}`);
+}
 
 function applyAttendanceCodeColor(select, code) {
-  const color = ATTENDANCE_CODE_COLORS[code];
-  select.style.backgroundColor = color || "";
-  select.style.color = color ? "#1a1a1a" : "";
+  applyHighlightClass(select, (AttendanceModule.settings.codeColors || {})[code]);
+}
+
+function applyInfractionColor(select, infraction) {
+  applyHighlightClass(select, (AttendanceModule.settings.infractionColors || {})[infraction]);
 }
 
 /** Orange at the configured absence limit, red beyond it, default color under it. */
@@ -1998,6 +2016,13 @@ function renderAttendanceSettings() {
         },
       ],
       fixedItems: ["P", "A"],
+      colors: {
+        get: (item) => (AttendanceModule.settings.codeColors || {})[item],
+        set: async (item, color) => {
+          AttendanceModule.setCodeColor(item, color);
+          await saveAttendanceThen(renderAttendance);
+        },
+      },
       addPlaceholder: "New participation type (e.g. Sick)",
       onRename: async (list) => {
         AttendanceModule.setParticipationTypes(list);
@@ -2027,6 +2052,13 @@ function renderAttendanceSettings() {
       items: AttendanceModule.settings.infractionOptions,
       points: AttendanceModule.settings.infractionPoints,
       fixedItems: [],
+      colors: {
+        get: (item) => (AttendanceModule.settings.infractionColors || {})[item],
+        set: async (item, color) => {
+          AttendanceModule.setInfractionColor(item, color);
+          await saveAttendanceThen(renderAttendance);
+        },
+      },
       addPlaceholder: "New infraction option",
       onRename: async (list) => {
         AttendanceModule.setInfractionOptions(list);
@@ -2140,6 +2172,30 @@ function buildEditableTypeList(config) {
       });
       li.appendChild(extraInput);
     });
+
+    if (config.colors) {
+      const colorSelect = document.createElement("select");
+      colorSelect.className = "attendance-color-select";
+      colorSelect.title = "Highlight colour (the shade follows the current theme)";
+      const noneOpt = document.createElement("option");
+      noneOpt.value = "";
+      noneOpt.textContent = "No colour";
+      colorSelect.appendChild(noneOpt);
+      ATTENDANCE_PALETTE.forEach(([id, label]) => {
+        const o = document.createElement("option");
+        o.value = id;
+        o.textContent = label;
+        o.className = `att-hl-${id}`;
+        colorSelect.appendChild(o);
+      });
+      colorSelect.value = config.colors.get(item) || "";
+      applyHighlightClass(colorSelect, colorSelect.value);
+      colorSelect.addEventListener("change", async () => {
+        applyHighlightClass(colorSelect, colorSelect.value);
+        await config.colors.set(item, colorSelect.value);
+      });
+      li.appendChild(colorSelect);
+    }
 
     if (!isFixed) {
       const removeBtn = document.createElement("button");

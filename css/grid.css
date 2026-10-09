@@ -447,3 +447,51 @@ table.source-grid.source-grid-over {
 .tool-name-row { margin: 0 0 8px; }
 .tool-name-row label { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
 .tool-name-row .tool-name-input { min-width: 14em; }
+
+/* ===== Attendance: thick separator under each student, frozen header, highlight colours ===== */
+
+/* Thick line under each student's third (memo) sub-row, i.e. at the bottom of their row */
+#attendance-table tbody td {
+  border-bottom: 4px solid var(--attendance-sep, #000);
+}
+[data-theme="cyberpunk"] { --attendance-sep: #0b1f2a; }
+[data-theme="tron-legacy"] { --attendance-sep: #19e6e6; }
+
+/* Frozen class headers: the table scrolls inside its box, so the header row stays put and
+   stops at the last student (it never sticks past the end of the table). */
+#attendance-panel .attendance-table-wrap {
+  max-height: 78vh;
+  overflow: auto;
+}
+#attendance-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background-clip: padding-box;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+#attendance-table thead th:first-child { z-index: 6; }
+
+/* Highlight palette — the shade follows the theme */
+:root {
+  --hl-red: #e57373; --hl-orange: #ffb74d; --hl-yellow: #ffd54f; --hl-green: #81c784; --hl-teal: #4db6ac;
+  --hl-blue: #64b5f6; --hl-purple: #ba68c8; --hl-pink: #f48fb1; --hl-gray: #b0bec5;
+}
+[data-theme="cyberpunk"] {
+  --hl-red: #ff5c6c; --hl-orange: #ff9f43; --hl-yellow: #ffe94d; --hl-green: #4dff9a; --hl-teal: #19e6e6;
+  --hl-blue: #5cb8ff; --hl-purple: #c58bff; --hl-pink: #ff5cb0; --hl-gray: #a9bcc6;
+}
+[data-theme="tron-legacy"] {
+  --hl-red: #ff4d4d; --hl-orange: #ff9a3c; --hl-yellow: #ffe14d; --hl-green: #39ff88; --hl-teal: #19e6e6;
+  --hl-blue: #4da3ff; --hl-purple: #a98bff; --hl-pink: #ff6fb5; --hl-gray: #8fa3ad;
+}
+.att-hl-red { background-color: var(--hl-red) !important; color: #1a1a1a !important; }
+.att-hl-orange { background-color: var(--hl-orange) !important; color: #1a1a1a !important; }
+.att-hl-yellow { background-color: var(--hl-yellow) !important; color: #1a1a1a !important; }
+.att-hl-green { background-color: var(--hl-green) !important; color: #1a1a1a !important; }
+.att-hl-teal { background-color: var(--hl-teal) !important; color: #1a1a1a !important; }
+.att-hl-blue { background-color: var(--hl-blue) !important; color: #1a1a1a !important; }
+.att-hl-purple { background-color: var(--hl-purple) !important; color: #1a1a1a !important; }
+.att-hl-pink { background-color: var(--hl-pink) !important; color: #1a1a1a !important; }
+.att-hl-gray { background-color: var(--hl-gray) !important; color: #1a1a1a !important; }
+.attendance-color-select { min-width: 7em; }

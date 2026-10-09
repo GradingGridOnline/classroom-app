@@ -46,6 +46,9 @@ function defaultAttendanceSettings() {
     participationCounts: { P: "1", A: "0", L: "1", E: "1" },
     absenceCounts: { P: "0", A: "1", L: "0", E: "0" },
     infractionPoints: { Sleeping: -0.2, "Phone use": -0.2, "Talking too much": -0.2 },
+    // Highlight colours, by palette name (red, orange, yellow, green, teal, blue, purple, pink, gray); the actual shade comes from the current theme.
+    codeColors: { A: "red", L: "yellow", E: "blue" },
+    infractionColors: {},
     termClassCount: 0,
     absenceLimit: null,
     exportTemplate: null,
@@ -80,6 +83,8 @@ const AttendanceModule = {
         participationCounts: { ...defaults.participationCounts, ...saved.participationCounts },
         absenceCounts: { ...defaults.absenceCounts, ...saved.absenceCounts },
         infractionPoints: { ...defaults.infractionPoints, ...saved.infractionPoints },
+        codeColors: saved.codeColors ? { ...saved.codeColors } : { ...defaults.codeColors },
+        infractionColors: { ...(saved.infractionColors || {}) },
         termClassCount:
           typeof saved.termClassCount === "number" ? saved.termClassCount : this.sessions.length,
         absenceLimit: typeof saved.absenceLimit === "number" ? saved.absenceLimit : null,
@@ -187,6 +192,11 @@ const AttendanceModule = {
       newAttended[t] = this.settings.participationCounts[t] ?? "1"; // a new type counts as a full class...
       newAbsent[t] = this.settings.absenceCounts[t] ?? "0"; // ...and no absence, until changed
     });
+    const newCodeColors = {};
+    cleaned.forEach((t) => {
+      if (this.settings.codeColors && this.settings.codeColors[t]) newCodeColors[t] = this.settings.codeColors[t];
+    });
+    this.settings.codeColors = newCodeColors;
     this.settings.participationTypes = cleaned;
     this.settings.points = newPoints;
     this.settings.participationCounts = newAttended;
@@ -246,8 +256,26 @@ const AttendanceModule = {
     cleaned.forEach((t) => {
       newPoints[t] = this.settings.infractionPoints[t] ?? -0.2;
     });
+    const newInfColors = {};
+    cleaned.forEach((t) => {
+      if (this.settings.infractionColors && this.settings.infractionColors[t]) newInfColors[t] = this.settings.infractionColors[t];
+    });
+    this.settings.infractionColors = newInfColors;
     this.settings.infractionOptions = cleaned;
     this.settings.infractionPoints = newPoints;
+  },
+
+  /** Sets (or, with "", clears) a participation type's highlight colour (a palette name). */
+  setCodeColor(type, color) {
+    if (!this.settings.codeColors) this.settings.codeColors = {};
+    if (color) this.settings.codeColors[type] = color;
+    else delete this.settings.codeColors[type];
+  },
+
+  setInfractionColor(infraction, color) {
+    if (!this.settings.infractionColors) this.settings.infractionColors = {};
+    if (color) this.settings.infractionColors[infraction] = color;
+    else delete this.settings.infractionColors[infraction];
   },
 
   setInfractionPointValue(infraction, value) {
