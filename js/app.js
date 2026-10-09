@@ -2435,6 +2435,7 @@ function buildScoringHeaderRows() {
   const rawPointsTh = document.createElement("th");
   rawPointsTh.rowSpan = 2;
   rawPointsTh.textContent = "Raw Points";
+  rawPointsTh.title = "Points earned / maximum possible — every scoring item's max points plus Attendance";
   row1.appendChild(rawPointsTh);
 
   return { row1, row2 };
@@ -2944,10 +2945,18 @@ function buildScoringStudentRow(student) {
   // ----- Raw Points (unweighted sum of all earned points across categories) -----
   const rawPointsTd = document.createElement("td");
   rawPointsTd.className = "attendance-stat-cell scoring-rawpoints-cell";
-  rawPointsTd.textContent = String(ScoringModule.totalRawPoints(student.id));
+  fillRawPointsCell(rawPointsTd, student.id);
   tr.appendChild(rawPointsTd);
 
   return tr;
+}
+
+/** Raw Points cell: "earned / possible" with the percent underneath. Hover for the items / Attendance split. */
+function fillRawPointsCell(td, studentId) {
+  const sum = ScoringModule.rawPointsSummary(studentId);
+  td.innerHTML = "";
+  td.appendChild(buildPointsWithPercentCell(`${sum.earned} / ${sum.possible}`, sum.percent));
+  td.title = `Scoring items: ${sum.items.earned} / ${sum.items.possible}\nAttendance: ${sum.attendance.earned} / ${sum.attendance.possible}`;
 }
 
 /** A small two-line display: the points value on top, its equivalent percentage underneath in a lighter style. Either can be null/undefined, shown as "—". Used for Total Score and Attendance, now that both are points-first with percent as secondary context. */
@@ -2974,7 +2983,7 @@ function refreshScoringTotalCell(studentId) {
     );
   }
   const rawCell = row.querySelector(".scoring-rawpoints-cell");
-  if (rawCell) rawCell.textContent = String(ScoringModule.totalRawPoints(studentId));
+  if (rawCell) fillRawPointsCell(rawCell, studentId);
 
   // This item's own edit can shift its own blended Score Sources
   // readout (if it has one) — refresh whichever are in this row.

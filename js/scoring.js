@@ -1780,18 +1780,34 @@ const ScoringModule = {
     return { earned, possible, percent: possible > 0 ? Math.round((earned / possible) * 100) : null };
   },
 
-  /** Raw sum of all earned points across all categories (excludes exempt and not-yet-recorded items), using each item's blended Score Sources result. */
-  totalRawPoints(studentId) {
-    let total = 0;
+  /** Raw Points: accumulated points earned / the maximum possible. Possible = the max points of EVERY non-exempt item in every category (Scoring Settings) plus Attendance's possible points; earned = what the student has so far (blended Score Sources included) plus Attendance's earned points. */
+  rawPointsSummary(studentId) {
+    const r2 = (n) => Math.round(n * 100) / 100;
+    let itemsEarned = 0;
+    let itemsPossible = 0;
     this.categories.forEach((category) => {
       category.items.forEach((item) => {
-        const rec = this.getRecord(studentId, item.id);
-        if (rec === "E") return;
+        if (this.getRecord(studentId, item.id) === "E") return;
+        itemsPossible += Number(item.maxPoints) || 0;
         const effective = this.computeItemEffectiveScore(studentId, item);
-        if (effective !== null) total += effective;
+        if (effective !== null) itemsEarned += effective;
       });
     });
-    return total;
+    const att = window.AttendanceModule ? window.AttendanceModule.rawPoints(studentId) : { earned: 0, possible: 0 };
+    const earned = r2(itemsEarned + att.earned);
+    const possible = r2(itemsPossible + att.possible);
+    return {
+      earned,
+      possible,
+      percent: possible > 0 ? (earned / possible) * 100 : null,
+      items: { earned: r2(itemsEarned), possible: r2(itemsPossible) },
+      attendance: att,
+    };
+  },
+
+  /** Earned raw points (items + Attendance). */
+  totalRawPoints(studentId) {
+    return this.rawPointsSummary(studentId).earned;
   },
 
   /** The weighted average percent (0-100) across categories plus Attendance, normalized by the sum of weights actually entered — "how well are they doing, relative to what's been weighted so far." Used for the secondary percentage shown under Total Score/Attendance, and by Student Consultation's own Percent mode. */

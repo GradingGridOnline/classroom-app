@@ -372,6 +372,22 @@ const AttendanceModule = {
     });
   },
 
+  /** Attendance raw points: { earned, possible }. Possible = the highest point value per class, times every non-exempt class. Infraction deductions count against earned. */
+  rawPoints(studentId) {
+    const maxPerSession = Math.max(0, ...Object.values(this.settings.points || {}));
+    let earned = 0;
+    let classes = 0;
+    this.sessions.forEach((s) => {
+      const rec = this.getRecord(studentId, s.id);
+      if (rec.code && rec.code.toUpperCase() === "E") return;
+      classes++;
+      if (!rec.code) return;
+      earned += this.settings.points[rec.code] ?? 0;
+      if (rec.infraction) earned += this.settings.infractionPoints[rec.infraction] ?? 0;
+    });
+    return { earned: Math.round(earned * 100) / 100, possible: Math.round(classes * maxPerSession * 100) / 100 };
+  },
+
   stats(studentId) {
     let attended = 0;
     let absences = 0;
