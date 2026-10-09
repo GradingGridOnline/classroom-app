@@ -418,3 +418,9 @@ table.source-grid td.source-grid-wide { padding: 2px; }
 table.source-grid input { width: 100%; box-sizing: border-box; border: 0; border-radius: 0; background: transparent; color: #000; text-align: center; margin: 0; height: 100%; }
 table.source-grid select { width: 100%; }
 table.source-grid-mini { margin-top: 4px; font-size: 0.85em; }
+
+/* Sources grids: long names wrap; the number box always stays wide enough to type in */
+table.source-grid { min-width: 9.5em; table-layout: auto; }
+table.source-grid td.source-grid-name { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+table.source-grid td.source-grid-value { width: 4.5em; min-width: 4.5em; }
+table.source-grid td.source-grid-value input { min-width: 3.6em; width: 100%; }
