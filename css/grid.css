@@ -495,3 +495,15 @@ table.source-grid.source-grid-over {
 .att-hl-pink { background-color: var(--hl-pink) !important; color: #1a1a1a !important; }
 .att-hl-gray { background-color: var(--hl-gray) !important; color: #1a1a1a !important; }
 .attendance-color-select { min-width: 7em; }
+
+/* Attendance: every other class column is a touch lighter (classes 2, 4, 6 …) */
+#attendance-table tbody td.attendance-session-cell:nth-child(2n + 7) {
+  background: color-mix(in srgb, var(--td-bg) 70%, #ffffff);
+}
+#attendance-table thead th.session-header-cell:nth-child(2n + 7) {
+  background: color-mix(in srgb, var(--th-bg) 82%, #ffffff);
+}
+#attendance-table tbody td.attendance-session-cell:nth-child(2n + 7) > input,
+#attendance-table tbody td.attendance-session-cell:nth-child(2n + 7) > select:not([class*="att-hl-"]) {
+  background-color: transparent;
+}
