@@ -390,3 +390,14 @@ table.rubric-bank-grid td > input:focus {
     color: #000000 !important;
   }
 }
+
+/* Main Scores: Raw Points column grows to keep "earned / possible" on one line */
+.scoring-rawpoints-cell,
+.scoring-rawpoints-cell .score-points-line,
+.scoring-rawpoints-cell .score-percent-line {
+  white-space: nowrap;
+}
+.scoring-rawpoints-cell {
+  width: 1%;
+  min-width: 7rem;
+}
