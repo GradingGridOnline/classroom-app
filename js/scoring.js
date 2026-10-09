@@ -5,11 +5,12 @@
 //   removable. Each has { id, name, items }. The number of items is a
 //   count setting (like Attendance's term class count), not an "add
 //   item" button — set it and that many item-columns appear.
-// - items: { id, name, maxPoints }.
+// - items: { id, name, maxPoints, weight }. `weight` is the item's share of
+//   the Total Score; a category's weight is the sum of its items' weights.
 // - records: sparse map "studentId|itemId" -> "" (blank), "E"
 //   (exempt), or a numeric string (points earned, 0-maxPoints).
-// - weights: percentage weight per category id, plus one for
-//   "attendance" — pulled from AttendanceModule's percent score
+// - weights: only { attendance } now (category weights come from the items); older files' per-category weights are
+//   split across their items when loaded. Attendance — pulled from AttendanceModule's percent score
 //   rather than stored here.
 // - tools: extra tabs alongside "Main Scores" (the score-entry screen
 //   above), added/removed from Main Scores' own Settings. Each is
@@ -81,6 +82,7 @@ const ScoringModule = {
       this.weights = { ...defaultScoringWeights(this.categories), ...(data.weights || {}) };
       this.tools = Array.isArray(data.tools) ? data.tools : [];
       this._renameLegacyTools();
+      this._migrateCategoryWeightsToItems();
     } else {
       this.categories = [];
       this.records = {};
@@ -91,6 +93,25 @@ const ScoringModule = {
     if (!this.presentationMigrated) await this._migrateLegacyPresentationCalc(courseId);
     await RubricBankModule.ensureLoaded();
     this._mergeLegacyRubricBanks();
+  },
+
+  /** Files from before item-level weights: split each category's weight across its items in proportion to their max points (so Total Score doesn't change). Only done for categories whose items have no weights yet. */
+  _migrateCategoryWeightsToItems() {
+    this.categories.forEach((category) => {
+      const items = category.items || [];
+      const needs = items.length > 0 && items.every((i) => typeof i.weight !== "number");
+      if (needs) {
+        const catWeight = Number(this.weights[category.id]) || 0;
+        const maxSum = items.reduce((sum, i) => sum + (Number(i.maxPoints) || 0), 0);
+        items.forEach((i) => {
+          i.weight = catWeight > 0 && maxSum > 0 ? Math.round(((catWeight * (Number(i.maxPoints) || 0)) / maxSum) * 100) / 100 : 0;
+        });
+      } else {
+        items.forEach((i) => {
+          if (typeof i.weight !== "number") i.weight = 0;
+        });
+      }
+    });
   },
 
   /** Older data kept a rubricBank inside each project. Move those into the shared bank (ids are kept, so active-rubric references still work). */
@@ -205,6 +226,7 @@ const ScoringModule = {
           id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           name: `Item ${n}`,
           maxPoints: 10,
+          weight: 0,
         });
       }
     } else if (count < category.items.length) {
@@ -234,6 +256,24 @@ const ScoringModule = {
   setItemMaxPoints(itemId, points) {
     const item = this.findItem(itemId);
     if (item) item.maxPoints = Math.max(0, Number(points) || 0);
+  },
+
+  setItemWeight(itemId, weight) {
+    const item = this.findItem(itemId);
+    if (item) item.weight = Math.max(0, Number(weight) || 0);
+  },
+
+  /** A category's weight: the sum of its items' weights. */
+  categoryWeight(categoryId) {
+    const category = this.findCategory(categoryId);
+    if (!category) return 0;
+    return Math.round(category.items.reduce((sum, i) => sum + (Number(i.weight) || 0), 0) * 100) / 100;
+  },
+
+  /** Sum of every item's weight plus Attendance's. */
+  totalWeight() {
+    const items = this.categories.reduce((sum, c) => sum + this.categoryWeight(c.id), 0);
+    return Math.round((items + (this.weights.attendance || 0)) * 100) / 100;
   },
 
   // ----- Per-student, per-item records -----
@@ -1859,12 +1899,15 @@ const ScoringModule = {
     let weightTotal = 0;
 
     this.categories.forEach((category) => {
-      const weight = this.weights[category.id] || 0;
-      if (weight <= 0) return;
-      const { percent } = this.categoryScore(studentId, category.id);
-      if (percent === null) return; // nothing recorded yet in this category — excluded, not zeroed
-      weightedSum += percent * weight;
-      weightTotal += weight;
+      category.items.forEach((item) => {
+        const weight = Number(item.weight) || 0;
+        if (weight <= 0 || !(item.maxPoints > 0)) return;
+        if (this.getRecord(studentId, item.id) === "E") return;
+        const effective = this.computeItemEffectiveScore(studentId, item);
+        if (effective === null) return; // nothing recorded yet — excluded, not zeroed
+        weightedSum += (effective / item.maxPoints) * 100 * weight;
+        weightTotal += weight;
+      });
     });
 
     const attendanceWeight = this.weights.attendance || 0;
@@ -1880,9 +1923,9 @@ const ScoringModule = {
   },
 
   /**
-   * The actual Total Score, in points: each category's percent (as a
-   * 0-1 fraction) times its own weight, summed with Attendance's the
-   * same way — NOT normalized by the sum of weights, unlike
+   * The actual Total Score, in points: each item's score (as a 0-1
+   * fraction of its max) times the item's own weight, summed with
+   * Attendance's the same way — NOT normalized by the sum of weights, unlike
    * weightedPercent. So with weights set to sum to 100 (the Scoring
    * Settings weight-total box turns green there), a perfect score in
    * everything gives exactly 100 points. A category or Attendance
@@ -1897,12 +1940,15 @@ const ScoringModule = {
     let any = false;
 
     this.categories.forEach((category) => {
-      const weight = this.weights[category.id] || 0;
-      if (weight <= 0) return;
-      const { percent } = this.categoryScore(studentId, category.id);
-      if (percent === null) return;
-      total += (percent / 100) * weight;
-      any = true;
+      category.items.forEach((item) => {
+        const weight = Number(item.weight) || 0;
+        if (weight <= 0 || !(item.maxPoints > 0)) return;
+        if (this.getRecord(studentId, item.id) === "E") return;
+        const effective = this.computeItemEffectiveScore(studentId, item);
+        if (effective === null) return;
+        total += (effective / item.maxPoints) * weight; // item score as a fraction × the item's weight
+        any = true;
+      });
     });
 
     const attendanceWeight = this.weights.attendance || 0;

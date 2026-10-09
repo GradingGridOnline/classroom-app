@@ -2398,7 +2398,7 @@ function buildScoringHeaderRows() {
     const th = document.createElement("th");
     th.className = "category-header-cell";
     th.colSpan = Math.max(1, category.items.length);
-    th.textContent = `${category.name} (${ScoringModule.weights[category.id] || 0}%)`;
+    th.textContent = `${category.name} (${ScoringModule.categoryWeight(category.id)}%)`;
     row1.appendChild(th);
 
     category.items.forEach((item) => {
@@ -2409,7 +2409,8 @@ function buildScoringHeaderRows() {
       nameLine.textContent = item.name;
       const pointsLine = document.createElement("div");
       pointsLine.className = "item-points-label";
-      pointsLine.textContent = `/${item.maxPoints}`;
+      pointsLine.textContent = `/${item.maxPoints} · ${Number(item.weight) || 0}%`;
+      pointsLine.title = `Out of ${item.maxPoints} points; worth ${Number(item.weight) || 0}% of the Total Score`;
 
       itemTh.append(nameLine, pointsLine);
 
@@ -2581,11 +2582,11 @@ function renderScoringSettings() {
       return;
     }
     const lines = ScoringModule.categories
-      .map((c) => `${c.name}: ${ScoringModule.weights[c.id] || 0}`)
+      .map((c) => `${c.name}: ${ScoringModule.categoryWeight(c.id)}`)
       .concat(`Attendance: ${ScoringModule.weights.attendance || 0}`);
     const p = document.createElement("p");
     p.className = "hint";
-    p.textContent = "Category weights — " + lines.join(", ");
+    p.textContent = "Weights (sum of each category's items) — " + lines.join(", ");
     el.scoringSettingsBody.appendChild(p);
     el.scoringSettingsBody.appendChild(buildWeightTotalBox());
     return;
@@ -2615,6 +2616,12 @@ function renderScoringSettings() {
       await saveScoringThen(renderScoring);
     });
     topRow.appendChild(nameInput);
+
+    const catWeightEl = document.createElement("span");
+    catWeightEl.className = "category-weight-sum";
+    catWeightEl.textContent = `Weight: ${ScoringModule.categoryWeight(category.id)}%`;
+    catWeightEl.title = "The sum of this category's item weights";
+    topRow.appendChild(catWeightEl);
 
     const countLabel = document.createElement("label");
     countLabel.textContent = "Items:";
@@ -2668,7 +2675,24 @@ function renderScoringSettings() {
           await saveScoringThen(renderScoring); // total scores depend on this
         });
 
-        itemRow.append(itemNameInput, itemPointsInput);
+        const itemWeightInput = document.createElement("input");
+        itemWeightInput.type = "text";
+        itemWeightInput.inputMode = "decimal";
+        itemWeightInput.className = "point-value-input item-weight-input";
+        itemWeightInput.value = Number(item.weight) || 0;
+        itemWeightInput.title = "Weight: this item's share (%) of the Total Score";
+        itemWeightInput.addEventListener("change", async () => {
+          ScoringModule.setItemWeight(item.id, itemWeightInput.value);
+          await saveScoringThen(renderScoring);
+        });
+
+        const ptsLabel = document.createElement("span");
+        ptsLabel.className = "hint";
+        ptsLabel.textContent = "pts";
+        const wtLabel = document.createElement("span");
+        wtLabel.className = "hint";
+        wtLabel.textContent = "weight %";
+        itemRow.append(itemNameInput, itemPointsInput, ptsLabel, itemWeightInput, wtLabel);
         itemsList.appendChild(itemRow);
       });
       li.appendChild(itemsList);
@@ -2699,21 +2723,12 @@ function renderScoringSettings() {
 
   if (ScoringModule.categories.length === 0) return;
 
-  // ----- Edit mode: category weights -----
+  // ----- Edit mode: Attendance weight + the overall total (category weights are the sums of their items' weights) -----
   const wrap = document.createElement("div");
   wrap.className = "attendance-settings-block";
   const heading = document.createElement("h4");
-  heading.textContent = "Category weights";
+  heading.textContent = "Attendance weight";
   wrap.appendChild(heading);
-
-  ScoringModule.categories.forEach((category) => {
-    wrap.appendChild(
-      buildWeightRow(category.name, ScoringModule.weights[category.id], async (value) => {
-        ScoringModule.setWeight(category.id, value);
-        await saveScoringThen(renderScoring);
-      })
-    );
-  });
 
   wrap.appendChild(
     buildWeightRow("Attendance", ScoringModule.weights.attendance, async (value) => {
@@ -2728,9 +2743,7 @@ function renderScoringSettings() {
 
 /** Green at exactly 100, red over 100, neutral otherwise. */
 function buildWeightTotalBox() {
-  const total =
-    ScoringModule.categories.reduce((sum, c) => sum + (ScoringModule.weights[c.id] || 0), 0) +
-    (ScoringModule.weights.attendance || 0);
+  const total = ScoringModule.totalWeight();
 
   const box = document.createElement("div");
   box.className = "weight-total-box";
@@ -2773,18 +2786,10 @@ function buildScoringToolsManageBlock() {
     ScoringModule.tools.forEach((tool) => {
       const li = document.createElement("li");
 
-      const nameInput = document.createElement("input");
-      nameInput.type = "text";
-      nameInput.value = tool.name;
-      nameInput.title = "Rename this tool's tab";
-      nameInput.addEventListener("change", async () => {
-        ScoringModule.renameTool(tool.id, nameInput.value);
-        await saveScoringThen(() => {
-          renderScoringToolTabs(); // tab label needs the new name too
-          showScoringMode(scoringMode);
-        });
-      });
-      li.appendChild(nameInput);
+      const nameText = document.createElement("span");
+      nameText.textContent = tool.name;
+      nameText.title = "Rename it on the tool's own tab";
+      li.appendChild(nameText);
 
       const typeLabel = document.createElement("span");
       typeLabel.className = "hint";
@@ -2839,6 +2844,7 @@ function buildScoringToolsManageBlock() {
       }
       menu.hidden = true;
       await saveScoringThen(() => {
+        pendingToolNameFocus = tool.id; // the new tool's name box takes focus right away
         renderScoringToolTabs();
         showScoringMode(tool.id);
       });
@@ -3153,6 +3159,40 @@ function renderScoringToolView(tool, container) {
     return;
   }
   renderFn(tool, container);
+  container.prepend(buildToolNameRow(tool));
+  if (pendingToolNameFocus === tool.id) {
+    pendingToolNameFocus = null;
+    const nameBox = container.querySelector(".tool-name-input");
+    if (nameBox) setTimeout(() => { nameBox.focus(); nameBox.select(); }, 0);
+  }
+}
+
+let pendingToolNameFocus = null;
+
+/** The tool's name box, at the top of its own tab. Renaming updates the tab label right away. */
+function buildToolNameRow(tool) {
+  const row = document.createElement("div");
+  row.className = "tool-name-row";
+  const label = document.createElement("label");
+  label.textContent = "Tool name:";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "tool-name-input";
+  input.value = tool.name;
+  input.title = "Name this scoring tool — it's the tab's label and what Sources lists";
+  input.addEventListener("change", async () => {
+    ScoringModule.renameTool(tool.id, input.value);
+    input.value = tool.name;
+    const btn = el.scoringModeRow.querySelector(`[data-scoring-mode="${tool.id}"]`);
+    if (btn) btn.textContent = tool.name;
+    await saveScoringThen();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur();
+  });
+  label.appendChild(input);
+  row.appendChild(label);
+  return row;
 }
 
 /**
