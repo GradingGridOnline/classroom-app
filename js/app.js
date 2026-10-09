@@ -2845,6 +2845,7 @@ function buildScoringToolsManageBlock() {
       menu.hidden = true;
       await saveScoringThen(() => {
         pendingToolNameFocus = tool.id; // the new tool's name box takes focus right away
+        scoringToolSettingsEditing.set(tool.id, true); // a new tool opens with its settings open, ready to name
         renderScoringToolTabs();
         showScoringMode(tool.id);
       });
@@ -3173,10 +3174,20 @@ function renderScoringToolView(tool, container) {
     const heading = document.createElement("h3");
     heading.textContent = `${tool.name} Settings`;
     header.appendChild(heading);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "btn btn-ghost btn-small";
+    toggle.textContent = scoringToolSettingsEditing.get(tool.id) ? "Done Editing" : "Edit Settings";
+    toggle.addEventListener("click", () => {
+      scoringToolSettingsEditing.set(tool.id, !scoringToolSettingsEditing.get(tool.id));
+      renderScoringToolView(tool, container);
+    });
+    header.appendChild(toggle);
     nameHost.appendChild(header);
     container.appendChild(nameHost);
   }
-  nameHost.appendChild(buildToolNameRow(tool));
+  // The rename box only shows while the tool's settings are being edited.
+  if (scoringToolSettingsEditing.get(tool.id)) nameHost.appendChild(buildToolNameRow(tool));
   if (pendingToolNameFocus === tool.id) {
     pendingToolNameFocus = null;
     const nameBox = container.querySelector(".tool-name-input");
