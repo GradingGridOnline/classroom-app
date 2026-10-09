@@ -1,7 +1,7 @@
 // ===== Roster module =====
 // Handles the student list for whichever course is currently open.
 // Each student is { id, classNumber, name, schoolId, pronunciation,
-// email, excludeFromSeating, excludeFromScoring }.
+// email, notes, excludeFromSeating, excludeFromScoring }.
 // Stored as one file per course: roster-<courseId>.json
 //
 // classNumber (1-MAX_STUDENTS) is a stable roll-call number that
@@ -27,6 +27,7 @@ const RosterModule = {
     this._backfillClassNumbers();
     this._backfillExclusionFlags();
     this._backfillEmail();
+    this._backfillNotes();
     return this.students;
   },
 
@@ -56,6 +57,13 @@ const RosterModule = {
   _backfillEmail() {
     this.students.forEach((s) => {
       if (typeof s.email !== "string") s.email = "";
+    });
+  },
+
+  /** Older saved rosters (from before the Notes column existed) get an empty note. */
+  _backfillNotes() {
+    this.students.forEach((s) => {
+      if (typeof s.notes !== "string") s.notes = "";
     });
   },
 
@@ -94,6 +102,7 @@ const RosterModule = {
       schoolId: fields.schoolId || "",
       pronunciation: fields.pronunciation || "",
       email: fields.email || "",
+      notes: fields.notes || "",
       excludeFromSeating: false,
       excludeFromScoring: false,
     };
@@ -154,6 +163,7 @@ const RosterModule = {
       schoolId: s.schoolId || "",
       pronunciation: s.pronunciation || "",
       email: s.email || "",
+      notes: s.notes || "",
       excludeFromSeating: false,
       excludeFromScoring: false,
     }));

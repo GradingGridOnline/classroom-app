@@ -745,8 +745,36 @@ function renderRoster() {
     actionTd.appendChild(removeBtn);
     tr.appendChild(actionTd);
 
+    tr.appendChild(makeNotesCell(student));
+
     el.rosterTbody.appendChild(tr);
   });
+}
+
+/** Notes: a wide one-line box that grows into a big text area while it has focus, then shrinks back to showing just the first line. */
+function makeNotesCell(student) {
+  const td = document.createElement("td");
+  td.className = "roster-notes-cell";
+  const area = document.createElement("textarea");
+  area.className = "roster-notes-input";
+  area.rows = 1;
+  area.spellcheck = true;
+  area.placeholder = "Notes";
+  area.value = student.notes || "";
+  area.addEventListener("input", () => {
+    RosterModule.updateStudent(student.id, { notes: area.value });
+    area.style.height = "auto";
+    area.style.height = Math.max(area.scrollHeight, 160) + "px"; // keeps growing with long notes
+  });
+  area.addEventListener("focus", () => {
+    area.style.height = Math.max(area.scrollHeight, 160) + "px";
+  });
+  area.addEventListener("blur", () => {
+    area.style.height = ""; // back to the one-line size (the CSS shows the first line)
+    area.scrollTop = 0;
+  });
+  td.appendChild(area);
+  return td;
 }
 
 function makeEditableCell(student, field) {

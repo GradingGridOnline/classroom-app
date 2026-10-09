@@ -507,3 +507,61 @@ table.source-grid.source-grid-over {
 #attendance-table tbody td.attendance-session-cell:nth-child(2n + 7) > select:not([class*="att-hl-"]) {
   background-color: transparent;
 }
+
+/* ===== Roster: Notes column ===== */
+.roster-notes-th { width: 38%; min-width: 16em; }
+.roster-table td.roster-notes-cell { padding: 0; vertical-align: top; }
+.roster-notes-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 2.4em;              /* collapsed: a single line */
+  resize: none;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  padding: 7px 8px;
+  white-space: pre;           /* collapsed: only the first line shows */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.roster-notes-input:focus {
+  height: 10em;               /* expanded while typing (the script grows it further for long notes) */
+  white-space: pre-wrap;
+  overflow: auto;
+  border-color: var(--line);
+  background: var(--paper);
+}
+[data-theme="cyberpunk"] .roster-notes-input:focus { background: #f5fdff; color: #06141c; }
+
+/* ===== Cyberpunk: yellow course title + yellow toolbar buttons ===== */
+[data-theme="cyberpunk"] #course-detail-title {
+  color: #ffe94d;
+  text-shadow: 0 0 10px rgba(255, 233, 77, 0.6), 0 0 2px #000;
+}
+/* Control buttons (everything except the Save buttons, which are .btn-primary): yellow text on black */
+[data-theme="cyberpunk"] .panel-toolbar .btn-ghost,
+[data-theme="cyberpunk"] .panel-toolbar-buttons .btn-ghost,
+[data-theme="cyberpunk"] .attendance-settings-header .btn-ghost {
+  background: #000000;
+  color: #ffe94d;
+}
+/* Hover: same glowing outline as before; yellow fill with black text */
+[data-theme="cyberpunk"] .panel-toolbar .btn-ghost:hover,
+[data-theme="cyberpunk"] .panel-toolbar-buttons .btn-ghost:hover,
+[data-theme="cyberpunk"] .attendance-settings-header .btn-ghost:hover {
+  background: #ffe94d;
+  color: #000000;
+}
+
+/* Scoring: the Main Scores tab stands out — yellow with black text */
+[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn,
+[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn:hover,
+[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn.tab-btn-active {
+  background: #ffe94d;
+  color: #000000;
+  text-shadow: none;
+}
