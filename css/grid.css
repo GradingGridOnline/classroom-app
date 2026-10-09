@@ -542,19 +542,19 @@ table.source-grid.source-grid-over {
   color: #ffe94d;
   text-shadow: 0 0 10px rgba(255, 233, 77, 0.6), 0 0 2px #000;
 }
-/* Control buttons (everything except the Save buttons, which are .btn-primary): yellow text on black */
+/* Control buttons (everything except the Save buttons, which are .btn-primary): yellow text, clear background, faint outline as before */
 [data-theme="cyberpunk"] .panel-toolbar .btn-ghost,
 [data-theme="cyberpunk"] .panel-toolbar-buttons .btn-ghost,
 [data-theme="cyberpunk"] .attendance-settings-header .btn-ghost {
-  background: #000000;
+  background: transparent;
   color: #ffe94d;
 }
-/* Hover: same glowing outline as before; yellow fill with black text */
+/* Hover: same glowing outline as before; the button turns black (text stays yellow) */
 [data-theme="cyberpunk"] .panel-toolbar .btn-ghost:hover,
 [data-theme="cyberpunk"] .panel-toolbar-buttons .btn-ghost:hover,
 [data-theme="cyberpunk"] .attendance-settings-header .btn-ghost:hover {
-  background: #ffe94d;
-  color: #000000;
+  background: #000000;
+  color: #ffe94d;
 }
 
 /* Scoring: the Main Scores tab stands out — yellow with black text */
