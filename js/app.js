@@ -2455,8 +2455,8 @@ function buildItemScoreSourcesPanel(item) {
 
   const totalPct = sources.manualWeight + Object.values(sources.toolWeights).reduce((sum, w) => sum + (w || 0), 0);
   const grid = document.createElement("table");
-  grid.className = "source-grid" + (totalPct < 100 ? " source-grid-short" : "");
-  grid.title = totalPct < 100 ? `Sources add up to ${totalPct}% — the border turns black at 100%` : `Sources add up to ${totalPct}%`;
+  grid.className = "source-grid" + (totalPct === 100 ? " source-grid-full" : totalPct > 100 ? " source-grid-over" : "");
+  grid.title = `Sources add up to ${totalPct}% (green at exactly 100, red above 100)`;
   const gridBody = document.createElement("tbody");
   grid.appendChild(gridBody);
   const addGridRow = (name, inputEl) => {
@@ -2992,7 +2992,9 @@ function fillItemCompositeCell(td, studentId, item) {
 
   detail.innerHTML = "";
   if (!itemScoreSourcesOpen.has(item.id)) {
-    if (input.parentElement) input.remove();
+    // Collapsed: just the composite, plus the manual entry box whenever Manual's percentage is above 0.
+    if (ScoringModule.getItemScoreSources(item.id).manualWeight > 0) detail.appendChild(input);
+    else if (input.parentElement) input.remove();
     return;
   }
   const { sources } = ScoringModule.itemSourceBreakdown(studentId, item);

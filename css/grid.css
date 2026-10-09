@@ -424,3 +424,9 @@ table.source-grid { min-width: 9.5em; table-layout: auto; }
 table.source-grid td.source-grid-name { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
 table.source-grid td.source-grid-value { width: 4.5em; min-width: 4.5em; }
 table.source-grid td.source-grid-value input { min-width: 3.6em; width: 100%; }
+
+/* Border colour: black below 100%, green at exactly 100%, red above 100% */
+table.source-grid.source-grid-short { border-color: #000; }
+table.source-grid.source-grid-full { border-color: #00a000; }
+table.source-grid.source-grid-over { border-color: #e00000; }
+.score-source-detail > input.scoring-score-input { width: 100%; box-sizing: border-box; margin-top: 3px; }
