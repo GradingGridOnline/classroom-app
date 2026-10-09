@@ -407,3 +407,14 @@ table.rubric-bank-grid td > input:focus {
 .score-source-detail { margin-top: 4px; font-size: 0.8em; }
 .score-source-line { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .score-source-line input.scoring-score-input { width: 4.5em; }
+
+/* Sources grids: two columns (source name | value), spreadsheet style */
+table.source-grid { border-collapse: collapse; width: 100%; margin: 4px 0; border: 2px solid #000; background: #fff; color: #000; }
+table.source-grid.source-grid-short { border-color: #e00000; }
+table.source-grid td { border: 1px solid #000; padding: 0; height: 24px; }
+table.source-grid td.source-grid-name { padding: 0 6px; text-align: left; white-space: nowrap; font-weight: 600; }
+table.source-grid td.source-grid-value { width: 4.5em; text-align: center; }
+table.source-grid td.source-grid-wide { padding: 2px; }
+table.source-grid input { width: 100%; box-sizing: border-box; border: 0; border-radius: 0; background: transparent; color: #000; text-align: center; margin: 0; height: 100%; }
+table.source-grid select { width: 100%; }
+table.source-grid-mini { margin-top: 4px; font-size: 0.85em; }

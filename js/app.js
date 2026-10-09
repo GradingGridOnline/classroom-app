@@ -2453,11 +2453,32 @@ function buildItemScoreSourcesPanel(item) {
   const sources = ScoringModule.getItemScoreSources(item.id);
   const panel = document.createElement("div");
 
-  const manualRow = document.createElement("div");
-  manualRow.className = "weight-row";
-  const manualLabel = document.createElement("span");
-  manualLabel.className = "weight-label";
-  manualLabel.textContent = "Manual %";
+  const totalPct = sources.manualWeight + Object.values(sources.toolWeights).reduce((sum, w) => sum + (w || 0), 0);
+  const grid = document.createElement("table");
+  grid.className = "source-grid" + (totalPct < 100 ? " source-grid-short" : "");
+  grid.title = totalPct < 100 ? `Sources add up to ${totalPct}% — the border turns black at 100%` : `Sources add up to ${totalPct}%`;
+  const gridBody = document.createElement("tbody");
+  grid.appendChild(gridBody);
+  const addGridRow = (name, inputEl) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("td");
+    th.className = "source-grid-name";
+    th.textContent = name;
+    const td = document.createElement("td");
+    td.className = "source-grid-value";
+    td.appendChild(inputEl);
+    tr.append(th, td);
+    gridBody.appendChild(tr);
+  };
+  const addGridWideRow = (node) => {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.className = "source-grid-wide";
+    td.appendChild(node);
+    tr.appendChild(td);
+    gridBody.appendChild(tr);
+  };
   const manualInput = document.createElement("input");
   manualInput.type = "text";
   manualInput.inputMode = "numeric";
@@ -2467,14 +2488,8 @@ function buildItemScoreSourcesPanel(item) {
     ScoringModule.setItemManualWeight(item.id, manualInput.value);
     await saveScoringThen(renderScoring);
   });
-  manualRow.append(manualLabel, manualInput);
-  panel.appendChild(manualRow);
-
-  const totalPct = sources.manualWeight + Object.values(sources.toolWeights).reduce((a, w) => a + (w || 0), 0);
-  const totalLine = document.createElement("p");
-  totalLine.className = "hint";
-  totalLine.textContent = `Sources add up to ${totalPct}% of this item's ${item.maxPoints} points` + (totalPct === 100 ? "" : totalPct > 100 ? " (more than 100 — extra is counted)" : " (less than 100)");
-  panel.appendChild(totalLine);
+  addGridRow("Manual", manualInput);
+  panel.appendChild(grid);
 
   if (ScoringModule.tools.length === 0) {
     const hint = document.createElement("p");
@@ -2483,11 +2498,6 @@ function buildItemScoreSourcesPanel(item) {
     panel.appendChild(hint);
   } else {
     ScoringModule.tools.forEach((tool) => {
-      const row = document.createElement("div");
-      row.className = "weight-row";
-      const label = document.createElement("span");
-      label.className = "weight-label";
-      label.textContent = `${tool.name} %`;
       const input = document.createElement("input");
       input.type = "text";
       input.inputMode = "numeric";
@@ -2497,8 +2507,7 @@ function buildItemScoreSourcesPanel(item) {
         ScoringModule.setItemToolWeight(item.id, tool.id, input.value);
         await saveScoringThen(renderScoring);
       });
-      row.append(label, input);
-      panel.appendChild(row);
+      addGridRow(tool.name, input);
 
       if (tool.type === "testbank") {
         const testSelect = document.createElement("select");
@@ -2519,7 +2528,7 @@ function buildItemScoreSourcesPanel(item) {
           ScoringModule.setItemTestSelection(item.id, tool.id, testSelect.value);
           await saveScoringThen(renderScoring);
         });
-        panel.appendChild(testSelect);
+        addGridWideRow(testSelect);
       } else if (tool.type === "presentation") {
         const projectSelect = document.createElement("select");
         projectSelect.style.width = "100%";
@@ -2539,7 +2548,7 @@ function buildItemScoreSourcesPanel(item) {
           ScoringModule.setItemProjectSelection(item.id, tool.id, projectSelect.value);
           await saveScoringThen(renderScoring);
         });
-        panel.appendChild(projectSelect);
+        addGridWideRow(projectSelect);
       }
     });
   }
@@ -2991,18 +3000,24 @@ function fillItemCompositeCell(td, studentId, item) {
   const byKey = {};
   sources.forEach((src) => (byKey[src.key] = src));
 
+  const grid = document.createElement("table");
+  grid.className = "source-grid source-grid-mini";
+  const body = document.createElement("tbody");
+  grid.appendChild(body);
+  const addLine = (name, valueNode) => {
+    const tr = document.createElement("tr");
+    const left = document.createElement("td");
+    left.className = "source-grid-name";
+    left.textContent = name;
+    const right = document.createElement("td");
+    right.className = "source-grid-value";
+    right.appendChild(valueNode);
+    tr.append(left, right);
+    body.appendChild(tr);
+  };
+
   if (cfg.manualWeight > 0) {
-    const line = document.createElement("div");
-    line.className = "score-source-line";
-    const name = document.createElement("span");
-    name.textContent = `Manual ${cfg.manualWeight}%`;
-    line.append(name, input);
-    const m = byKey.manual;
-    const result = document.createElement("span");
-    result.className = "hint";
-    result.textContent = m ? `→ ${round(m.contribution)}` : "→ —";
-    line.appendChild(result);
-    detail.appendChild(line);
+    addLine("Manual", input);
   } else if (input.parentElement) {
     input.remove();
   }
@@ -3011,11 +3026,11 @@ function fillItemCompositeCell(td, studentId, item) {
     const tool = ScoringModule.findTool(toolId);
     if (!tool) return;
     const src = byKey[toolId];
-    const line = document.createElement("div");
-    line.className = "score-source-line";
-    line.textContent = `${tool.name} ${weight}%: ${src ? `${round(src.points)} → ${round(src.contribution)}` : "—"}`;
-    detail.appendChild(line);
+    const span = document.createElement("span");
+    span.textContent = src ? String(round(src.points)) : "—";
+    addLine(tool.name, span);
   });
+  detail.appendChild(grid);
 }
 
 function buildPointsWithPercentCell(points, percent) {
