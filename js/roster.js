@@ -156,6 +156,14 @@ const RosterModule = {
       return null;
     };
 
+    // Notes survive an upload: a student whose name matches someone already on the roster keeps that student's notes.
+    const nameKey = (name) => String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+    const oldNotes = new Map();
+    this.students.forEach((old) => {
+      const key = nameKey(old.name);
+      if (key && old.notes && !oldNotes.has(key)) oldNotes.set(key, old.notes);
+    });
+
     this.students = students.map((s, i) => ({
       id: `student-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       classNumber: provided[i] || assignNext(),
@@ -163,7 +171,7 @@ const RosterModule = {
       schoolId: s.schoolId || "",
       pronunciation: s.pronunciation || "",
       email: s.email || "",
-      notes: s.notes || "",
+      notes: s.notes || oldNotes.get(nameKey(s.name)) || "",
       excludeFromSeating: false,
       excludeFromScoring: false,
     }));
