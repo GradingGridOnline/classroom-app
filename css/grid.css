@@ -557,23 +557,6 @@ table.source-grid.source-grid-over {
   color: #ffe94d;
 }
 
-/* Scoring: the Main Scores tab stands out — yellow with black text */
-[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn,
-[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn:hover,
-[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn.tab-btn-active {
-  background: #ffe94d;
-  color: #000000;
-  text-shadow: none;
-}
-
-/* Main Scores tab: the yellow runs all the way to the left edge of the menu bar */
-[data-theme="cyberpunk"] #scoring-mode-row {
-  padding-left: 0;
-}
-[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn {
-  padding-left: 28px;
-}
-
 /* ===== Seating chart: the Unseated column always shows, even when empty ===== */
 .unseated-panel {
   align-self: stretch;
@@ -591,20 +574,16 @@ table.source-grid.source-grid-over {
   opacity: 0.75;
 }
 
-/* ===== Cyberpunk: selected Main Scores tab text is neon pink ===== */
-[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn.tab-btn-active {
-  color: #ff2e93;
-  font-weight: 800;
-  text-shadow: 0 0 6px rgba(255, 92, 147, 0.75), 0 0 1px rgba(0, 0, 0, 0.6);
+/* ===== Scoring: "Main Scores" is its own large button, separate from the tool-tab menu ===== */
+.scoring-main-row {
+  margin: 0 0 14px;
 }
-
-/* ===== Scoring: "Main Scores" is its own large button (every theme) ===== */
-#scoring-mode-row #scoring-mode-entry-btn {
+#scoring-mode-entry-btn {
+  font-family: inherit;
   font-size: 1.2rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  padding: 14px 30px;
-  margin: 6px 26px 6px 0;
+  padding: 14px 34px;
   border: 0;
   border-radius: 8px;
   background: var(--green);
@@ -612,21 +591,24 @@ table.source-grid.source-grid-over {
   opacity: 0.72;
   cursor: pointer;
 }
-#scoring-mode-row #scoring-mode-entry-btn:hover { opacity: 1; }
-#scoring-mode-row #scoring-mode-entry-btn.tab-btn-active {
+#scoring-mode-entry-btn:hover { opacity: 1; }
+#scoring-mode-entry-btn.tab-btn-active {
   opacity: 1;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 35%, transparent);
 }
-#scoring-mode-row { align-items: center; }
-[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn { opacity: 1; margin: 0 26px 0 0; border-radius: 0; padding: 16px 30px 16px 28px; box-shadow: none; }
-[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn,
-[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn:hover {
+/* Cyberpunk: yellow with black text; neon pink text and a glow while it's the open screen */
+[data-theme="cyberpunk"] #scoring-mode-entry-btn,
+[data-theme="cyberpunk"] #scoring-mode-entry-btn:hover {
   background: #ffe94d;
   color: #000000;
+  opacity: 1;
   text-shadow: none;
 }
-[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn.tab-btn-active {
+[data-theme="cyberpunk"] #scoring-mode-entry-btn.tab-btn-active {
   color: #ff2e93;
   font-weight: 800;
   text-shadow: 0 0 6px rgba(255, 92, 147, 0.75), 0 0 1px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 2px #ff5c93, 0 0 14px rgba(255, 92, 147, 0.7);
 }
+/* The tool-tab bar below it only shows when there are tools; restore the normal bar padding in Cyberpunk */
+#scoring-mode-row[hidden] { display: none; }

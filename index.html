@@ -281,8 +281,12 @@
             <button id="save-scoring-btn" class="btn btn-primary">Save Scoring</button>
           </div>
 
-          <div class="tab-row reportcard-mode-row" id="scoring-mode-row">
-            <button id="scoring-mode-entry-btn" class="tab-btn tab-btn-active" data-scoring-mode="entry">Main Scores</button>
+          <!-- Main Scores: its own large button, separate from the tool tabs below -->
+          <div class="scoring-main-row" id="scoring-main-row">
+            <button id="scoring-mode-entry-btn" class="tab-btn-active" data-scoring-mode="entry">Main Scores</button>
+          </div>
+
+          <div class="tab-row reportcard-mode-row" id="scoring-mode-row" hidden>
             <!-- scoring tool tabs (Progress Tracker, Presentation Calc) get added here by app.js -->
           </div>
 

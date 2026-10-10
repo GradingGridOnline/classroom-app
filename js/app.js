@@ -3202,7 +3202,7 @@ function showScoringMode(mode) {
   document.querySelectorAll(".scoring-mode-view").forEach((view) => {
     view.hidden = view.id !== `scoring-mode-${mode}-view`;
   });
-  document.querySelectorAll("#scoring-mode-row .tab-btn").forEach((btn) => {
+  document.querySelectorAll("#scoring-mode-row .tab-btn, #scoring-mode-entry-btn").forEach((btn) => {
     btn.classList.toggle("tab-btn-active", btn.dataset.scoringMode === mode);
   });
   const renderFn = SCORING_MODE_RENDERERS[mode];
@@ -3213,10 +3213,15 @@ el.scoringModeRow.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-scoring-mode]");
   if (btn) showScoringMode(btn.dataset.scoringMode);
 });
+document.getElementById("scoring-main-row").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-scoring-mode]");
+  if (btn) showScoringMode(btn.dataset.scoringMode);
+});
 
 /** Rebuilds the tool tab buttons and their view containers from ScoringModule.tools — call after loading a course's scoring data, and after adding/removing a tool. Safe to call repeatedly: previously-built tool buttons/views are removed first. */
 function renderScoringToolTabs() {
   el.scoringModeRow.querySelectorAll("[data-dynamic-tool]").forEach((btn) => btn.remove());
+  el.scoringModeRow.hidden = ScoringModule.tools.length === 0; // the tool-tab bar only shows when there are tools
   el.scoringPanel.querySelectorAll(".scoring-tool-view").forEach((view) => view.remove());
 
   ScoringModule.tools.forEach((tool) => {
