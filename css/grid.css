@@ -597,3 +597,36 @@ table.source-grid.source-grid-over {
   font-weight: 800;
   text-shadow: 0 0 6px rgba(255, 92, 147, 0.75), 0 0 1px rgba(0, 0, 0, 0.6);
 }
+
+/* ===== Scoring: "Main Scores" is its own large button (every theme) ===== */
+#scoring-mode-row #scoring-mode-entry-btn {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 14px 30px;
+  margin: 6px 26px 6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--green);
+  color: var(--paper);
+  opacity: 0.72;
+  cursor: pointer;
+}
+#scoring-mode-row #scoring-mode-entry-btn:hover { opacity: 1; }
+#scoring-mode-row #scoring-mode-entry-btn.tab-btn-active {
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 35%, transparent);
+}
+#scoring-mode-row { align-items: center; }
+[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn { opacity: 1; margin: 0 26px 0 0; border-radius: 0; padding: 16px 30px 16px 28px; box-shadow: none; }
+[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn,
+[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn:hover {
+  background: #ffe94d;
+  color: #000000;
+  text-shadow: none;
+}
+[data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn.tab-btn-active {
+  color: #ff2e93;
+  font-weight: 800;
+  text-shadow: 0 0 6px rgba(255, 92, 147, 0.75), 0 0 1px rgba(0, 0, 0, 0.6);
+}

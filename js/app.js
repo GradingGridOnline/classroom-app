@@ -2483,14 +2483,14 @@ function buildScoringHeaderRows() {
 
   const attendanceTh = document.createElement("th");
   attendanceTh.rowSpan = 2;
-  attendanceTh.textContent = `Attendance (${ScoringModule.weights.attendance || 0}%)`;
+  attendanceTh.textContent = `Attendance (${ScoringModule.weights.attendance || 0})`;
   row1.appendChild(attendanceTh);
 
   ScoringModule.categories.forEach((category) => {
     const th = document.createElement("th");
     th.className = "category-header-cell";
     th.colSpan = Math.max(1, category.items.length);
-    th.textContent = `${category.name} (${ScoringModule.categoryWeight(category.id)}%)`;
+    th.textContent = `${category.name} (${ScoringModule.categoryWeight(category.id)})`;
     row1.appendChild(th);
 
     category.items.forEach((item) => {
@@ -2501,8 +2501,8 @@ function buildScoringHeaderRows() {
       nameLine.textContent = item.name;
       const pointsLine = document.createElement("div");
       pointsLine.className = "item-points-label";
-      pointsLine.textContent = `/${item.maxPoints} · ${Number(item.weight) || 0}%`;
-      pointsLine.title = `Out of ${item.maxPoints} points; worth ${Number(item.weight) || 0}% of the Total Score`;
+      pointsLine.textContent = `/${item.maxPoints} · ${Number(item.weight) || 0}`;
+      pointsLine.title = `Out of ${item.maxPoints} points; worth ${Number(item.weight) || 0} of the Total Score`;
 
       itemTh.append(nameLine, pointsLine);
 
@@ -2711,7 +2711,7 @@ function renderScoringSettings() {
 
     const catWeightEl = document.createElement("span");
     catWeightEl.className = "category-weight-sum";
-    catWeightEl.textContent = `Weight: ${ScoringModule.categoryWeight(category.id)}%`;
+    catWeightEl.textContent = `Weight: ${ScoringModule.categoryWeight(category.id)}`;
     catWeightEl.title = "The sum of this category's item weights";
     topRow.appendChild(catWeightEl);
 
@@ -2772,7 +2772,7 @@ function renderScoringSettings() {
         itemWeightInput.inputMode = "decimal";
         itemWeightInput.className = "point-value-input item-weight-input";
         itemWeightInput.value = Number(item.weight) || 0;
-        itemWeightInput.title = "Weight: this item's share (%) of the Total Score";
+        itemWeightInput.title = "Weight: this item's share of the Total Score";
         itemWeightInput.addEventListener("change", async () => {
           ScoringModule.setItemWeight(item.id, itemWeightInput.value);
           await saveScoringThen(renderScoring);
@@ -2783,7 +2783,7 @@ function renderScoringSettings() {
         ptsLabel.textContent = "pts";
         const wtLabel = document.createElement("span");
         wtLabel.className = "hint";
-        wtLabel.textContent = "weight %";
+        wtLabel.textContent = "weight";
         itemRow.append(itemNameInput, itemPointsInput, ptsLabel, itemWeightInput, wtLabel);
         itemsList.appendChild(itemRow);
       });
@@ -3134,15 +3134,13 @@ function fillItemCompositeCell(td, studentId, item) {
   detail.appendChild(grid);
 }
 
-function buildPointsWithPercentCell(points, percent) {
+function buildPointsWithPercentCell(points) {
+  // Points only — the percentage line that used to sit underneath has been removed.
   const wrap = document.createElement("div");
   const pointsLine = document.createElement("div");
   pointsLine.className = "score-points-line";
   pointsLine.textContent = points === null || points === undefined ? "—" : String(points);
-  const percentLine = document.createElement("div");
-  percentLine.className = "hint score-percent-line";
-  percentLine.textContent = percent === null || percent === undefined ? "—" : `${Math.round(percent)}%`;
-  wrap.append(pointsLine, percentLine);
+  wrap.appendChild(pointsLine);
   return wrap;
 }
 
