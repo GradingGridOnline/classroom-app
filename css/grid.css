@@ -612,3 +612,13 @@ table.source-grid.source-grid-over {
 }
 /* The tool-tab bar below it only shows when there are tools; restore the normal bar padding in Cyberpunk */
 #scoring-mode-row[hidden] { display: none; }
+
+/* Main Scores button and the tool tabs sit on one line */
+.scoring-nav-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 18px;
+}
+.scoring-nav-line .scoring-main-row { margin: 0; flex: 0 0 auto; }
+.scoring-nav-line #scoring-mode-row { flex: 1 1 auto; margin: 0; min-width: 0; align-self: stretch; }
