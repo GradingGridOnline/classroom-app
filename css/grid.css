@@ -573,3 +573,27 @@ table.source-grid.source-grid-over {
 [data-theme="cyberpunk"] #scoring-mode-row #scoring-mode-entry-btn {
   padding-left: 28px;
 }
+
+/* ===== Seating chart: the Unseated column always shows, even when empty ===== */
+.unseated-panel {
+  align-self: stretch;
+  box-sizing: border-box;
+  min-height: 220px;
+  padding: 10px 12px;
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+}
+.unseated-empty {
+  list-style: none;
+  padding: 18px 8px;
+  text-align: center;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+/* ===== Cyberpunk: selected Main Scores tab text is neon pink ===== */
+[data-theme="cyberpunk"] .reportcard-mode-row #scoring-mode-entry-btn.tab-btn-active {
+  color: #ff2e93;
+  font-weight: 800;
+  text-shadow: 0 0 6px rgba(255, 92, 147, 0.75), 0 0 1px rgba(0, 0, 0, 0.6);
+}

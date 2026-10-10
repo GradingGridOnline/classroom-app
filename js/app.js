@@ -987,6 +987,14 @@ function renderSeating() {
     el.unseatedList.appendChild(li);
   });
 
+  if (unseated.length === 0) {
+    // The column stays put even when nobody is waiting to be seated.
+    const empty = document.createElement("li");
+    empty.className = "unseated-empty";
+    empty.textContent = RosterModule.students.length === 0 ? "No students on the roster yet" : "Everyone is seated";
+    el.unseatedList.appendChild(empty);
+  }
+
   // ----- Grid -----
   el.seatingGrid.innerHTML = "";
   el.seatingGrid.style.gridTemplateColumns = `repeat(${SeatingModule.cols}, 1fr)`;
