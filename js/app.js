@@ -127,12 +127,22 @@ let consultationDisplayMode = "percent"; // "percent" or "points" — Total Scor
 // scoringSettingsEditing, just one map since there can be several tools).
 const scoringToolSettingsEditing = new Map();
 
+let initPromise = null;
+
 async function main() {
   ThemeModule.initLocal();
   renderThemeList();
 
   storage = new GoogleDriveProvider(APP_CONFIG);
-  await storage.init();
+  // Show the Sign in button right away so it's always on the main page,
+  // even if Google's script is slow or fails to load on mobile.
+  el.signInBtn.hidden = false;
+  try {
+    initPromise = storage.init();
+    await initPromise;
+  } catch (err) {
+    el.status.textContent = err.message;
+  }
   renderAuth();
 
   if (storage.isSignedIn()) {
@@ -286,6 +296,11 @@ function renderAuth() {
 el.signInBtn.addEventListener("click", async () => {
   el.status.textContent = "Signing in…";
   try {
+    // Make sure Google's script has loaded; retry init if it failed earlier.
+    if (!storage.tokenClient) {
+      initPromise = storage.init();
+    }
+    await initPromise;
     await storage.signIn();
     renderAuth();
     await ThemeModule.syncFromDrive();
