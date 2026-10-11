@@ -291,7 +291,13 @@ el.signInBtn.addEventListener("click", async () => {
     await ThemeModule.syncFromDrive();
     renderThemeList();
   } catch (err) {
-    el.status.textContent = `Sign-in failed: ${err.message}`;
+    const m = err.message;
+    el.status.textContent =
+      m === "popup_blocked"
+        ? "Sign-in popup was blocked. Allow pop-ups for this site, and open it in Safari/Chrome (not an in-app browser), then try again."
+        : m === "popup_closed"
+        ? "Sign-in window was closed before finishing. Tap Sign in and try again."
+        : `Sign-in failed: ${m}`;
   }
 });
 

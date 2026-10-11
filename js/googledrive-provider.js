@@ -26,6 +26,20 @@ class GoogleDriveProvider extends StorageProvider {
       client_id: this.config.google.clientId,
       scope: this.config.google.scopes,
       callback: () => {}, // overridden per-call in _requestToken()
+      // Fires when the popup can't open (blocked, common on mobile) or is
+      // closed before finishing. Without this the sign-in promise never
+      // settles and the page just looks frozen.
+      error_callback: (err) => {
+        if (this._pendingReject) {
+          const msg =
+            err && err.type === "popup_failed_to_open"
+              ? "popup_blocked"
+              : err && err.type === "popup_closed"
+              ? "popup_closed"
+              : (err && err.type) || "sign_in_error";
+          this._pendingReject(new Error(msg));
+        }
+      },
     });
 
     // Restore a still-valid token from a previous page load first —
@@ -47,7 +61,7 @@ class GoogleDriveProvider extends StorageProvider {
     // more aggressively than Chrome) and just leaves you signed out,
     // same as today.
     try {
-      await this._requestToken({ prompt: "" });
+      await this._requestToken({ prompt: "" }, 4000);
       await this._loadUserEmail();
     } catch (e) {
       // No existing session to restore — normal, not an error.
@@ -149,19 +163,31 @@ class GoogleDriveProvider extends StorageProvider {
     }
   }
 
-  _requestToken({ prompt }) {
+  _requestToken({ prompt }, timeoutMs = 0) {
     return new Promise((resolve, reject) => {
+      let timer = null;
+      const done = (fn, v) => {
+        if (timer) clearTimeout(timer);
+        this._pendingReject = null;
+        fn(v);
+      };
+      this._pendingReject = (e) => done(reject, e);
+      if (timeoutMs) timer = setTimeout(() => done(reject, new Error("timeout")), timeoutMs);
       this.tokenClient.callback = (response) => {
         if (response.error) {
-          reject(new Error(response.error));
+          done(reject, new Error(response.error));
           return;
         }
         this.accessToken = response.access_token;
         this.tokenExpiresAt = Date.now() + (Number(response.expires_in) || 3600) * 1000 - 60000;
         this._saveTokenToStorage();
-        resolve();
+        done(resolve);
       };
-      this.tokenClient.requestAccessToken({ prompt });
+      try {
+        this.tokenClient.requestAccessToken({ prompt });
+      } catch (e) {
+        done(reject, e);
+      }
     });
   }
 
@@ -169,9 +195,9 @@ class GoogleDriveProvider extends StorageProvider {
     if (this.isSignedIn()) return this.accessToken;
     // Try a silent refresh (no prompt) before falling back to interactive.
     try {
-      await this._requestToken({ prompt: "" });
+      await this._requestToken({ prompt: "" }, 4000);
     } catch {
-      await this._requestToken({ prompt: "consent" });
+      await this._requestToken({ prompt: "consent" }, 120000);
     }
     return this.accessToken;
   }
