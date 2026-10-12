@@ -737,3 +737,12 @@ table.source-grid.source-grid-over {
   left: 6px;
   right: auto;
 }
+
+/* Course box grows to fit all three lines (course / period / time) instead of clipping the last one */
+.seating-print-box-right {
+  height: auto;
+  min-height: 17mm;
+  overflow: visible;
+  padding-bottom: 5px;
+}
+.seating-print-box-row .seating-print-box { height: auto; }
