@@ -746,3 +746,77 @@ table.source-grid.source-grid-over {
   padding-bottom: 5px;
 }
 .seating-print-box-row .seating-print-box { height: auto; }
+
+/* =====================================================================
+   Tron: Legacy — poster palette
+   storm-teal sky fading to near-black, glowing cyan light-lines, amber
+   suit-lines. Everything is driven from the variables right here.
+   ===================================================================== */
+[data-theme="tron-legacy"] {
+  --paper: #061b24;
+  --card: #0a2833;
+  --ink: #e4fbff;
+  --ink-soft: #7db5c2;
+  --green: #45d8ee;        /* light-line cyan */
+  --green-dark: #9cf1fb;   /* beam highlight */
+  --marker: #ff9a1f;       /* suit amber */
+  --line: #15586b;
+  --th-bg: #03121a;
+  --td-bg: #0c3140;
+  --attendance-sep: #45d8ee;
+  --card-shadow: 0 0 0 1px rgba(69, 216, 238, 0.28), 0 0 34px rgba(69, 216, 238, 0.10);
+  --glow: 0 0 10px rgba(69, 216, 238, 0.65);
+  --focus-glow: 0 0 0 2px rgba(69, 216, 238, 0.35), 0 0 14px rgba(69, 216, 238, 0.45);
+}
+
+/* Sky: dark storm at the top, teal haze through the middle, black at the bottom. */
+[data-theme="tron-legacy"] body {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 52%, rgba(46, 170, 190, 0.38), transparent 70%),
+    linear-gradient(to bottom, #04141b 0%, #0a3340 38%, #0b4452 52%, #051c25 78%, #020a0e 100%);
+  background-attachment: fixed;
+  background-color: #03101a;
+}
+
+/* Floor grid: faint cyan lines */
+[data-theme="tron-legacy"] body::before {
+  background-image:
+    repeating-linear-gradient(to bottom, rgba(69, 216, 238, 0.06) 0px, rgba(69, 216, 238, 0.06) 1px, transparent 1px, transparent 40px),
+    repeating-linear-gradient(to right, rgba(69, 216, 238, 0.06) 0px, rgba(69, 216, 238, 0.06) 1px, transparent 1px, transparent 40px);
+}
+
+/* Text boxes: deep teal fill, amber line (like the suit trim) */
+[data-theme="tron-legacy"] input:not([type="checkbox"]),
+[data-theme="tron-legacy"] select,
+[data-theme="tron-legacy"] textarea {
+  background: #0d3745;
+  border: 1px solid #d98a1c;
+  color: var(--ink);
+}
+
+[data-theme="tron-legacy"] .attendance-table thead th,
+[data-theme="tron-legacy"] .category-header-cell,
+[data-theme="tron-legacy"] .attendance-table tfoot td {
+  background: #03121a;
+}
+
+[data-theme="tron-legacy"] .btn-primary:hover { box-shadow: 0 0 16px rgba(69, 216, 238, 0.85); }
+[data-theme="tron-legacy"] .roster-table input:hover,
+[data-theme="tron-legacy"] .roster-table input:focus { background: rgba(69, 216, 238, 0.08); }
+[data-theme="tron-legacy"] .course-name:hover { text-shadow: 0 0 8px rgba(69, 216, 238, 0.75); }
+[data-theme="tron-legacy"] .theme-item-active,
+[data-theme="tron-legacy"] .tab-btn-active { text-shadow: 0 0 6px rgba(69, 216, 238, 0.7); }
+[data-theme="tron-legacy"] .header h1,
+[data-theme="tron-legacy"] .section-header h2 { text-shadow: 0 0 10px rgba(69, 216, 238, 0.5); }
+
+[data-theme="tron-legacy"] .desk-occupied { border-color: #45d8ee; box-shadow: 0 0 8px rgba(69, 216, 238, 0.45); }
+[data-theme="tron-legacy"] .desk-occupied:hover { border-color: var(--marker); box-shadow: 0 0 12px rgba(255, 154, 31, 0.65); }
+[data-theme="tron-legacy"] .desk-empty:not(.desk-grouped) { border-color: #2f9db3; }
+
+[data-theme="tron-legacy"] .weight-total-ok { border-color: #45d8ee; color: #45d8ee; box-shadow: 0 0 8px rgba(69, 216, 238, 0.45); }
+[data-theme="tron-legacy"] .weight-total-over { border-color: #ff5a1f; color: #ff5a1f; box-shadow: 0 0 8px rgba(255, 90, 31, 0.55); }
+
+/* Lock slider: poster-matched (cyan-mint / red-orange) */
+[data-theme="tron-legacy"] .desk-lock-btn { background: #04141b; }
+[data-theme="tron-legacy"] .desk-lock-btn.is-unlocked { color: #5cf0c8; border-color: #5cf0c8; box-shadow: 0 0 7px rgba(92,240,200,0.6), inset 0 0 5px rgba(92,240,200,0.2); }
+[data-theme="tron-legacy"] .desk-lock-btn.is-locked { color: #ff5a1f; border-color: #ff5a1f; box-shadow: 0 0 7px rgba(255,90,31,0.7), inset 0 0 5px rgba(255,90,31,0.22); }
