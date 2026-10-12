@@ -820,3 +820,11 @@ table.source-grid.source-grid-over {
 [data-theme="tron-legacy"] .desk-lock-btn { background: #04141b; }
 [data-theme="tron-legacy"] .desk-lock-btn.is-unlocked { color: #5cf0c8; border-color: #5cf0c8; box-shadow: 0 0 7px rgba(92,240,200,0.6), inset 0 0 5px rgba(92,240,200,0.2); }
 [data-theme="tron-legacy"] .desk-lock-btn.is-locked { color: #ff5a1f; border-color: #ff5a1f; box-shadow: 0 0 7px rgba(255,90,31,0.7), inset 0 0 5px rgba(255,90,31,0.22); }
+
+/* Tron: Legacy — alternating attendance columns are darker than their neighbours */
+[data-theme="tron-legacy"] #attendance-table tbody td.attendance-session-cell:nth-child(2n + 7) {
+  background: color-mix(in srgb, var(--td-bg) 62%, #000000);
+}
+[data-theme="tron-legacy"] #attendance-table thead th.session-header-cell:nth-child(2n + 7) {
+  background: color-mix(in srgb, var(--th-bg) 55%, #000000);
+}
