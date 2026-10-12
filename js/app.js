@@ -1413,7 +1413,10 @@ function buildDeskElement(r, c) {
     const lockBtn = document.createElement("button");
     lockBtn.type = "button";
     lockBtn.className = "desk-lock-btn";
-    lockBtn.textContent = locked ? "🔒" : "🔓";
+    lockBtn.classList.add(locked ? "is-locked" : "is-unlocked");
+    lockBtn.setAttribute("role", "switch");
+    lockBtn.setAttribute("aria-checked", locked ? "true" : "false");
+    lockBtn.textContent = locked ? "locked" : "unlocked";
     lockBtn.title = locked ? "Unlock this desk" : "Lock this desk (protects it from Clear Seating and Auto-Fill)";
     lockBtn.addEventListener("click", (e) => {
       e.stopPropagation();
