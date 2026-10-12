@@ -666,3 +666,46 @@ table.source-grid.source-grid-over {
   box-shadow: 0 0 6px rgba(211, 48, 47, 0.55);
 }
 .desk-lock-btn.is-locked::before { left: 41px; }
+
+/* ===== Desk lock slider: per-theme looks ===== */
+/* Basic: soft, flat, paper-friendly */
+[data-theme="basic"] .desk-lock-btn { font-family: var(--font-body); box-shadow: none; }
+[data-theme="basic"] .desk-lock-btn.is-unlocked { background: #3f8f5f; border-color: #2d6e47; box-shadow: inset 0 1px 2px rgba(0,0,0,0.18); }
+[data-theme="basic"] .desk-lock-btn.is-locked { background: #b9452f; border-color: #8f3322; box-shadow: inset 0 1px 2px rgba(0,0,0,0.22); }
+
+/* Cyberpunk: clear track, neon outline + glow, mono caps, angular corners */
+[data-theme="cyberpunk"] .desk-lock-btn,
+[data-theme="tron-legacy"] .desk-lock-btn {
+  background: transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 400;
+  border-width: 1px;
+  border-style: solid;
+}
+[data-theme="cyberpunk"] .desk-lock-btn {
+  font-family: "Share Tech Mono", monospace;
+  border-radius: 2px;
+}
+[data-theme="cyberpunk"] .desk-lock-btn::before { border-radius: 1px; background: currentColor; box-shadow: 0 0 6px currentColor; }
+[data-theme="cyberpunk"] .desk-lock-btn.is-unlocked { color: #1fd10a; background: rgba(57,255,20,0.10); border-color: #39ff14; box-shadow: 0 0 8px rgba(57,255,20,0.7), inset 0 0 6px rgba(57,255,20,0.25); text-shadow: 0 0 4px rgba(57,255,20,0.8); }
+[data-theme="cyberpunk"] .desk-lock-btn.is-locked { color: #ff2a6d; background: rgba(255,42,109,0.10); border-color: #ff2a6d; box-shadow: 0 0 8px rgba(255,42,109,0.75), inset 0 0 6px rgba(255,42,109,0.25); text-shadow: 0 0 4px rgba(255,42,109,0.8); }
+
+/* Tron Legacy: dark glass track, thin light-line glow, Chakra Petch caps */
+[data-theme="tron-legacy"] .desk-lock-btn {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 600;
+  border-radius: 8px;
+  background: #07161a;
+}
+[data-theme="tron-legacy"] .desk-lock-btn::before { background: currentColor; box-shadow: 0 0 6px currentColor; }
+[data-theme="tron-legacy"] .desk-lock-btn.is-unlocked { color: #3dffa0; border-color: #3dffa0; box-shadow: 0 0 7px rgba(61,255,160,0.6), inset 0 0 5px rgba(61,255,160,0.2); }
+[data-theme="tron-legacy"] .desk-lock-btn.is-locked { color: #ff4a3d; border-color: #ff4a3d; box-shadow: 0 0 7px rgba(255,74,61,0.65), inset 0 0 5px rgba(255,74,61,0.2); }
+[data-theme="cyberpunk"] .desk-lock-btn,
+[data-theme="tron-legacy"] .desk-lock-btn { width: 66px; font-size: 0.44rem; letter-spacing: 0.03em; }
+[data-theme="cyberpunk"] .desk-lock-btn.is-unlocked,
+[data-theme="tron-legacy"] .desk-lock-btn.is-unlocked { padding-left: 14px; }
+[data-theme="cyberpunk"] .desk-lock-btn.is-locked,
+[data-theme="tron-legacy"] .desk-lock-btn.is-locked { padding-right: 14px; }
+[data-theme="cyberpunk"] .desk-lock-btn.is-locked::before,
+[data-theme="tron-legacy"] .desk-lock-btn.is-locked::before { left: 51px; }
