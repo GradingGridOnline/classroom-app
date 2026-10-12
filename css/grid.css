@@ -717,3 +717,23 @@ table.source-grid.source-grid-over {
 #settings-section .periods-table { width: 100%; max-width: 760px; }
 #settings-section .periods-table input[type="text"] { width: 100%; min-width: 160px; }
 #settings-section .periods-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+
+
+/* Printed seating chart: smaller course box, with name / period / time on separate 1.5-spaced lines */
+.seating-print-box-right {
+  flex: 1;
+  padding-top: 14px;
+}
+.seating-print-box-right .seating-print-box-content p {
+  margin: 0;
+  font-size: 0.65rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seating-print-box-right .seating-print-box-label {
+  font-size: 0.6rem;
+  left: 6px;
+  right: auto;
+}

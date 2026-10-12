@@ -1305,7 +1305,7 @@ function buildSeatingPrintSheet() {
   boxRow.appendChild(buildSeatingPrintBox("Lesson Contents"));
   boxRow.appendChild(buildSeatingPrintBox("Homework"));
   boxRow.appendChild(buildSeatingPrintBox("Date of Lesson"));
-  boxRow.appendChild(buildSeatingPrintCourseBox(courseName, periodLabel));
+  boxRow.appendChild(buildSeatingPrintCourseBox(courseName, course));
   sheet.appendChild(boxRow);
 
   return sheet;
@@ -1325,7 +1325,7 @@ function buildSeatingPrintBox(label) {
 }
 
 /** Bottom-right box: course name + period, pre-filled (unlike the other three, which are left blank for handwriting). */
-function buildSeatingPrintCourseBox(courseName, periodLabel) {
+function buildSeatingPrintCourseBox(courseName, course) {
   const box = document.createElement("div");
   box.className = "seating-print-box seating-print-box-right";
 
@@ -1339,10 +1339,19 @@ function buildSeatingPrintCourseBox(courseName, periodLabel) {
   const nameP = document.createElement("p");
   nameP.textContent = courseName;
   content.appendChild(nameP);
-  if (periodLabel) {
+  // Period name and its time go on separate lines, under the course name.
+  const period = course && course.periodId ? PeriodsModule.find(course.periodId) : null;
+  if (period) {
     const periodP = document.createElement("p");
-    periodP.textContent = periodLabel;
+    periodP.textContent = period.name;
     content.appendChild(periodP);
+    const time =
+      period.startTime && period.endTime ? `${period.startTime}–${period.endTime}` : period.startTime || period.endTime || "";
+    if (time) {
+      const timeP = document.createElement("p");
+      timeP.textContent = time;
+      content.appendChild(timeP);
+    }
   }
   box.appendChild(content);
 
