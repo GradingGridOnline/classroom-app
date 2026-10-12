@@ -709,3 +709,11 @@ table.source-grid.source-grid-over {
 [data-theme="tron-legacy"] .desk-lock-btn.is-locked { padding-right: 14px; }
 [data-theme="cyberpunk"] .desk-lock-btn.is-locked::before,
 [data-theme="tron-legacy"] .desk-lock-btn.is-locked::before { left: 51px; }
+
+/* ===== Global Settings page ===== */
+#settings-section .settings-block { margin: 0 0 28px; max-width: 760px; }
+#settings-section .settings-block h3 { margin: 0 0 10px; font-size: 1.05rem; }
+#settings-section .theme-list { max-width: 320px; }
+#settings-section .periods-table { width: 100%; max-width: 760px; }
+#settings-section .periods-table input[type="text"] { width: 100%; min-width: 160px; }
+#settings-section .periods-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }

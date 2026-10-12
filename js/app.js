@@ -108,7 +108,10 @@ const el = {
 
 
   settingsBtn: document.getElementById("settings-btn"),
-  settingsPanel: document.getElementById("settings-panel"),
+  settingsSection: document.getElementById("settings-section"),
+  settingsBackBtn: document.getElementById("settings-back-btn"),
+  savePeriodsBtn: document.getElementById("save-periods-btn"),
+  periodsStatus: document.getElementById("periods-status"),
   themeList: document.getElementById("theme-list"),
   periodsTbody: document.getElementById("periods-tbody"),
   addPeriodBtn: document.getElementById("add-period-btn"),
@@ -153,19 +156,28 @@ async function main() {
 
 // ===== Settings / theme =====
 
-el.settingsBtn.addEventListener("click", () => {
-  el.settingsPanel.hidden = !el.settingsPanel.hidden;
-});
+let settingsReturn = null; // which view was open before Settings
 
-document.addEventListener("click", (e) => {
-  if (
-    !el.settingsPanel.hidden &&
-    !el.settingsPanel.contains(e.target) &&
-    e.target !== el.settingsBtn
-  ) {
-    el.settingsPanel.hidden = true;
-  }
-});
+function openSettings() {
+  if (!el.settingsSection.hidden) return closeSettings();
+  settingsReturn = !el.courseDetailSection.hidden ? "detail" : "courses";
+  el.courseSection.hidden = true;
+  el.courseDetailSection.hidden = true;
+  el.settingsSection.hidden = false;
+  el.periodsStatus.textContent = "";
+  renderThemeList();
+  renderPeriodsList();
+}
+
+function closeSettings() {
+  el.settingsSection.hidden = true;
+  if (!storage.isSignedIn()) return;
+  if (settingsReturn === "detail") el.courseDetailSection.hidden = false;
+  else el.courseSection.hidden = false;
+}
+
+el.settingsBtn.addEventListener("click", openSettings);
+el.settingsBackBtn.addEventListener("click", closeSettings);
 
 function renderThemeList() {
   el.themeList.innerHTML = "";
@@ -193,8 +205,20 @@ function renderThemeList() {
 // ===== Settings / periods =====
 
 function savePeriodsThen(after) {
+  el.periodsStatus.textContent = "Unsaved changes — click Save Periods.";
   if (after) after();
 }
+
+el.savePeriodsBtn.addEventListener("click", async () => {
+  el.periodsStatus.textContent = "Saving…";
+  try {
+    await PeriodsModule.save();
+    await CoursesModule.save(); // in case removing a period cleared any course's period
+    el.periodsStatus.textContent = "Saved ✓";
+  } catch (err) {
+    el.periodsStatus.textContent = `Couldn't save: ${err.message}`;
+  }
+});
 
 function renderPeriodsList() {
   el.periodsTbody.innerHTML = "";
@@ -283,7 +307,8 @@ function renderAuth() {
   const signedIn = storage.isSignedIn();
   el.signInBtn.hidden = signedIn;
   el.signOutBtn.hidden = !signedIn;
-  el.courseSection.hidden = !signedIn;
+  el.courseSection.hidden = !signedIn || !el.settingsSection.hidden;
+  if (!signedIn) el.settingsSection.hidden = true;
   el.status.textContent = "";
 
   if (signedIn) {

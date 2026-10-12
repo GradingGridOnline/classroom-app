@@ -29,25 +29,6 @@
         <div class="settings-wrap">
           <button id="settings-btn" class="btn btn-ghost btn-small" aria-label="Settings" title="Settings">⚙ Settings</button>
           <button id="sign-out-btn" class="btn btn-ghost btn-small" hidden>Sign out</button>
-          <div id="settings-panel" class="settings-panel" hidden>
-            <h3>Theme</h3>
-            <ul id="theme-list" class="theme-list"></ul>
-
-            <h3>Periods</h3>
-            <p class="hint">Manage the period names and time slots courses can be assigned to.</p>
-            <table class="periods-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Start</th>
-                  <th>End</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="periods-tbody"></tbody>
-            </table>
-            <button id="add-period-btn" class="btn btn-ghost btn-small">+ Add Period</button>
-          </div>
         </div>
       </div>
     </header>
@@ -348,6 +329,40 @@
               </div>
               <span id="printcard-status" class="result"></span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Global Settings page ===== -->
+      <section id="settings-section" class="app-section" hidden>
+        <div class="section-header">
+          <h2>Global Settings</h2>
+          <button id="settings-back-btn" class="btn btn-ghost btn-small" type="button">← Back</button>
+        </div>
+
+        <div class="settings-block">
+          <h3>Theme</h3>
+          <ul id="theme-list" class="theme-list"></ul>
+        </div>
+
+        <div class="settings-block">
+          <h3>Periods</h3>
+          <p class="hint">Manage the period names and time slots courses can be assigned to.</p>
+          <table class="periods-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Start</th>
+                <th>End</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="periods-tbody"></tbody>
+          </table>
+          <div class="periods-actions">
+            <button id="add-period-btn" class="btn btn-ghost btn-small" type="button">+ Add Period</button>
+            <button id="save-periods-btn" class="btn btn-primary btn-small" type="button">Save Periods</button>
+            <span id="periods-status" class="status"></span>
           </div>
         </div>
       </section>
