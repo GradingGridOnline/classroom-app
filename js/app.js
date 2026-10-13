@@ -7014,3 +7014,69 @@ document.getElementById("update-template-btn").addEventListener("click", async (
 });
 
 main();
+
+// ===== Save button inside every Settings panel =====
+// Attendance Settings, Scoring Settings and every scoring tool's Settings get their own
+// Save button (next to Edit Settings), so you don't have to scroll back up to the main
+// Save button. It does exactly what that button does. The panels are rebuilt often, so
+// buttons are added by watching for new settings headers.
+(function setupSettingsSaveButtons() {
+  const messages = {}; // panelId -> { text, until }
+
+  async function saveFor(panelId) {
+    if (panelId === "attendance-panel") {
+      await AttendanceModule.save();
+    } else {
+      await RubricBankModule.save();
+      await ScoringModule.save();
+    }
+  }
+
+  function showMsg(panelId, text, ms) {
+    messages[panelId] = { text, until: Date.now() + ms };
+    document.querySelectorAll(`#${panelId} .settings-save-status`).forEach((s) => (s.textContent = text));
+    setTimeout(() => {
+      if (messages[panelId] && messages[panelId].until <= Date.now()) {
+        document.querySelectorAll(`#${panelId} .settings-save-status`).forEach((s) => (s.textContent = ""));
+      }
+    }, ms + 50);
+  }
+
+  function addSaveButton(header) {
+    if (header.querySelector(".settings-save-btn")) return;
+    const panel = header.closest("#attendance-panel, #scoring-panel");
+    if (!panel) return;
+    const panelId = panel.id;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-primary btn-small settings-save-btn";
+    btn.textContent = "Save";
+    btn.addEventListener("click", async () => {
+      showMsg(panelId, "Saving…", 30000);
+      try {
+        await saveFor(panelId);
+        showMsg(panelId, "Saved ✓", 3000);
+      } catch (err) {
+        showMsg(panelId, `Save failed: ${err.message}`, 8000);
+      }
+    });
+    const status = document.createElement("span");
+    status.className = "status settings-save-status";
+    const m = messages[panelId];
+    if (m && m.until > Date.now()) status.textContent = m.text;
+
+    header.appendChild(btn);
+    header.appendChild(status);
+  }
+
+  function scan() {
+    document.querySelectorAll(".attendance-settings-header").forEach(addSaveButton);
+  }
+
+  const target = document.getElementById("course-detail-section");
+  if (target) {
+    new MutationObserver(scan).observe(target, { childList: true, subtree: true });
+    scan();
+  }
+})();

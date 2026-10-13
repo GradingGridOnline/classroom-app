@@ -828,3 +828,8 @@ table.source-grid.source-grid-over {
 [data-theme="tron-legacy"] #attendance-table thead th.session-header-cell:nth-child(2n + 7) {
   background: color-mix(in srgb, var(--th-bg) 55%, #000000);
 }
+
+/* Settings headers: title on the left; Edit Settings, Save and the status message grouped on the right */
+.attendance-settings-header { gap: 10px; }
+.attendance-settings-header h3 { margin-right: auto; }
+.attendance-settings-header .settings-save-status { font-size: 0.85rem; min-width: 0; }
