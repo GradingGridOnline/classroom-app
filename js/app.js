@@ -2029,6 +2029,12 @@ document.getElementById("att-seating-session").addEventListener("change", (e) =>
   renderAttendanceSeatingView();
 });
 
+document.getElementById("att-seating-date").addEventListener("change", (e) => {
+  if (!attendanceSeatingSessionId) return;
+  AttendanceModule.setSessionDate(attendanceSeatingSessionId, e.target.value);
+  renderAttendance(); // keeps the Table's date box and the Class list in step
+});
+
 document.getElementById("att-seating-present-btn").addEventListener("click", () => {
   if (!attendanceSeatingSessionId) return;
   AttendanceModule.markAllPresent(attendanceSeatingSessionId, RosterModule.students.map((s) => s.id));
@@ -2112,6 +2118,9 @@ function renderAttendanceSeatingView() {
   grid.innerHTML = "";
   unseatedBox.innerHTML = "";
   const session = sessions.find((x) => x.id === attendanceSeatingSessionId);
+  const dateInput = document.getElementById("att-seating-date");
+  dateInput.value = (session && session.date) || "";
+  dateInput.disabled = !session;
   if (!session) {
     grid.textContent = "No classes yet — set the number of classes in Attendance Settings.";
     return;
