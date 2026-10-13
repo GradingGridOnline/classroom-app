@@ -2035,6 +2035,11 @@ document.getElementById("att-seating-date").addEventListener("change", (e) => {
   renderAttendance(); // keeps the Table's date box and the Class list in step
 });
 
+document.getElementById("att-seating-export-btn").addEventListener("click", () => {
+  const session = AttendanceModule.sessions.find((x) => x.id === attendanceSeatingSessionId);
+  if (session) exportAttendanceSession(session);
+});
+
 document.getElementById("att-seating-present-btn").addEventListener("click", () => {
   if (!attendanceSeatingSessionId) return;
   AttendanceModule.markAllPresent(attendanceSeatingSessionId, RosterModule.students.map((s) => s.id));
@@ -2594,6 +2599,19 @@ function downloadCsv(content, filename) {
   URL.revokeObjectURL(url);
 }
 
+/** Downloads the LMS-export CSV for one class (used by the Table's footer buttons and the Seating Grid's Export button). */
+function exportAttendanceSession(session) {
+  try {
+    const csv = AttendanceModule.buildExportCsv(session.id, RosterModule.students);
+    const course = CoursesModule.find(RosterModule.currentCourseId);
+    // Course name + "Attendance" + class number, with characters that aren't allowed in file names removed.
+    const safeName = (course ? course.name : "Course").replace(/[\\/:*?"<>|]/g, "").trim() || "Course";
+    downloadCsv(csv, `${safeName} Attendance ${session.number}.csv`);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 function buildAttendanceFooterRow() {
   const tr = document.createElement("tr");
 
@@ -2617,17 +2635,7 @@ function buildAttendanceFooterRow() {
     exportBtn.type = "button";
     exportBtn.className = "btn btn-ghost btn-small";
     exportBtn.textContent = "Export";
-    exportBtn.addEventListener("click", () => {
-      try {
-        const csv = AttendanceModule.buildExportCsv(session.id, RosterModule.students);
-        const course = CoursesModule.find(RosterModule.currentCourseId);
-        // Course name + "Attendance" + class number, with characters that aren't allowed in file names removed.
-        const safeName = (course ? course.name : "Course").replace(/[\\/:*?"<>|]/g, "").trim() || "Course";
-        downloadCsv(csv, `${safeName} Attendance ${session.number}.csv`);
-      } catch (err) {
-        alert(err.message);
-      }
-    });
+    exportBtn.addEventListener("click", () => exportAttendanceSession(session));
     td.appendChild(exportBtn);
     tr.appendChild(td);
   });
