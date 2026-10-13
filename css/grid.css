@@ -833,3 +833,30 @@ table.source-grid.source-grid-over {
 .attendance-settings-header { gap: 10px; }
 .attendance-settings-header h3 { margin-right: auto; }
 .attendance-settings-header .settings-save-status { font-size: 0.85rem; min-width: 0; }
+
+/* Tron: Legacy — Score Sources grids: dark cells, light text (the black text was unreadable on dark) */
+[data-theme="tron-legacy"] table.source-grid,
+[data-theme="tron-legacy"] table.source-grid td,
+[data-theme="tron-legacy"] table.source-grid th {
+  background: #082630 !important;
+  color: var(--ink) !important;
+  border-color: #45d8ee;
+}
+[data-theme="tron-legacy"] table.source-grid td.source-grid-value,
+[data-theme="tron-legacy"] table.source-grid td.source-grid-wide {
+  background: #0d3745 !important;
+}
+[data-theme="tron-legacy"] table.source-grid input,
+[data-theme="tron-legacy"] table.source-grid select {
+  background: transparent !important;
+  color: var(--ink) !important;
+  border: 0;
+}
+[data-theme="tron-legacy"] table.source-grid.source-grid-short { border-color: #45d8ee; }
+[data-theme="tron-legacy"] table.source-grid.source-grid-full { border-color: #39ff14; }
+[data-theme="tron-legacy"] table.source-grid.source-grid-over { border-color: #ff2a2a; }
+[data-theme="tron-legacy"] .score-source-detail > input.scoring-score-input,
+[data-theme="tron-legacy"] .score-source-line input.scoring-score-input,
+[data-theme="tron-legacy"] .scoring-score-input {
+  color: var(--ink) !important;
+}
