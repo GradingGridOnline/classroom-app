@@ -1412,8 +1412,15 @@ function buildDeskElement(r, c) {
       nameEl.appendChild(pronEl);
     }
     const textEl = document.createElement("span");
+    textEl.className = "desk-student-name";
     textEl.textContent = student.name || "(unnamed)";
     nameEl.appendChild(textEl);
+    if (student.schoolId) {
+      const idEl = document.createElement("span");
+      idEl.className = "desk-schoolid-tag";
+      idEl.textContent = student.schoolId;
+      nameEl.appendChild(idEl);
+    }
   } else {
     nameEl.textContent = !active ? "" : label ? label : "+";
   }

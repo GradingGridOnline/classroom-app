@@ -916,3 +916,25 @@ table.source-grid td.source-grid-name.source-grid-long { white-space: normal; }
 .attendance-seating-unseated h4 { margin: 14px 0 6px; }
 .att-seat-unseated-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 .attendance-seating-toolbar input[type="date"] { min-width: 10em; }
+
+/* ===== Seating chart (teacher's editing view): bigger text, much bigger class numbers =====
+   Sizes follow each desk's width (cqw), so they stay readable whatever the grid size. */
+#seating-grid .desk { container-type: inline-size; padding: 20px 4px 18px; }
+#seating-grid .desk-name { gap: 2px; }
+#seating-grid .desk-classnumber-tag {
+  font-size: clamp(1.4rem, 28cqw, 2.6rem);
+  font-weight: 800;
+  line-height: 1;
+  opacity: 1;
+  color: var(--green-dark);
+}
+#seating-grid .desk-pronunciation-tag { font-size: clamp(0.72rem, 10cqw, 1rem); opacity: 0.9; }
+#seating-grid .desk-student-name { font-size: clamp(0.85rem, 13cqw, 1.3rem); font-weight: 700; line-height: 1.15; }
+#seating-grid .desk-schoolid-tag { font-size: clamp(0.7rem, 9cqw, 0.95rem); font-weight: 400; opacity: 0.85; }
+/* Desks grow taller instead of clipping when a narrow desk holds all four lines */
+#seating-grid .desk { min-height: min-content; overflow: hidden; }
+#seating-grid .desk-classnumber-tag { font-size: clamp(1.1rem, 26cqw, 2.6rem); }
+#seating-grid .desk-pronunciation-tag { font-size: clamp(0.6rem, 10cqw, 1rem); }
+#seating-grid .desk-student-name { font-size: clamp(0.72rem, 13cqw, 1.3rem); }
+#seating-grid .desk-schoolid-tag { font-size: clamp(0.6rem, 9cqw, 0.95rem); }
+#seating-grid .desk { aspect-ratio: auto; min-height: 9.5rem; }
