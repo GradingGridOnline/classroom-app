@@ -2613,7 +2613,7 @@ function buildItemScoreSourcesPanel(item) {
   const addGridRow = (name, inputEl) => {
     const tr = document.createElement("tr");
     const th = document.createElement("td");
-    th.className = "source-grid-name";
+    th.className = "source-grid-name" + (String(name).length > 45 ? " source-grid-long" : "");
     th.textContent = name;
     const td = document.createElement("td");
     td.className = "source-grid-value";
@@ -3166,7 +3166,7 @@ function fillItemCompositeCell(td, studentId, item) {
   const addLine = (name, valueNode) => {
     const tr = document.createElement("tr");
     const left = document.createElement("td");
-    left.className = "source-grid-name";
+    left.className = "source-grid-name" + (String(name).length > 45 ? " source-grid-long" : "");
     left.textContent = name;
     const right = document.createElement("td");
     right.className = "source-grid-value";

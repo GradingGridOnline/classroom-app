@@ -860,3 +860,17 @@ table.source-grid.source-grid-over {
 [data-theme="tron-legacy"] .scoring-score-input {
   color: var(--ink) !important;
 }
+
+/* Scoring sources box: opens wide so each source name fits on one line (only very long names wrap) */
+table.source-grid {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+table.source-grid td.source-grid-name {
+  white-space: nowrap;
+  max-width: 34em;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+table.source-grid td.source-grid-name.source-grid-long { white-space: normal; }
