@@ -1711,6 +1711,7 @@ function renderAttendance() {
   tfoot.appendChild(buildAttendanceFooterRow());
   el.attendanceTable.appendChild(tfoot);
 
+  renderAttendanceSeatingView();
   renderAttendanceSettings();
 }
 
@@ -1857,65 +1858,70 @@ function buildAttendanceStudentRow(student) {
   AttendanceModule.sessions.forEach((session) => {
     const td = document.createElement("td");
     td.className = "attendance-session-cell";
-    const record = AttendanceModule.getRecord(student.id, session.id);
-
-    const codeSelect = document.createElement("select");
-    codeSelect.className = "attendance-code-select";
-    const blankOpt = document.createElement("option");
-    blankOpt.value = "";
-    blankOpt.textContent = "—";
-    codeSelect.appendChild(blankOpt);
-    AttendanceModule.settings.participationTypes.forEach((type) => {
-      const opt = document.createElement("option");
-      opt.value = type;
-      opt.textContent = type;
-      if (type === record.code) opt.selected = true;
-      codeSelect.appendChild(opt);
-    });
-    applyAttendanceCodeColor(codeSelect, record.code);
-    codeSelect.addEventListener("change", async () => {
-      AttendanceModule.setRecord(student.id, session.id, { code: codeSelect.value });
-      applyAttendanceCodeColor(codeSelect, codeSelect.value);
-      await saveAttendanceThen();
-      refreshAttendanceStatsRow(student.id);
-    });
-
-    const infractionSelect = document.createElement("select");
-    infractionSelect.className = "attendance-infraction-select";
-    const noneOpt = document.createElement("option");
-    noneOpt.value = "";
-    noneOpt.textContent = "No infraction";
-    infractionSelect.appendChild(noneOpt);
-    AttendanceModule.settings.infractionOptions.forEach((opt) => {
-      const o = document.createElement("option");
-      o.value = opt;
-      o.textContent = opt;
-      if (opt === record.infraction) o.selected = true;
-      infractionSelect.appendChild(o);
-    });
-    applyInfractionColor(infractionSelect, record.infraction);
-    infractionSelect.addEventListener("change", async () => {
-      AttendanceModule.setRecord(student.id, session.id, { infraction: infractionSelect.value });
-      applyInfractionColor(infractionSelect, infractionSelect.value);
-      await saveAttendanceThen();
-      refreshAttendanceStatsRow(student.id);
-    });
-
-    const memoInput = document.createElement("input");
-    memoInput.type = "text";
-    memoInput.className = "attendance-memo-input";
-    memoInput.placeholder = "Memo";
-    memoInput.value = record.memo || "";
-    memoInput.addEventListener("change", async () => {
-      AttendanceModule.setRecord(student.id, session.id, { memo: memoInput.value });
-      await saveAttendanceThen();
-    });
-
-    td.append(codeSelect, infractionSelect, memoInput);
+    td.append(...buildAttendanceRecordControls(student, session));
     tr.appendChild(td);
   });
 
   return tr;
+}
+
+/** The three recording controls (code, infraction, memo) for one student in one class — shared by the Table and the Seating Grid. */
+function buildAttendanceRecordControls(student, session) {
+  const record = AttendanceModule.getRecord(student.id, session.id);
+
+  const codeSelect = document.createElement("select");
+  codeSelect.className = "attendance-code-select";
+  const blankOpt = document.createElement("option");
+  blankOpt.value = "";
+  blankOpt.textContent = "—";
+  codeSelect.appendChild(blankOpt);
+  AttendanceModule.settings.participationTypes.forEach((type) => {
+    const opt = document.createElement("option");
+    opt.value = type;
+    opt.textContent = type;
+    if (type === record.code) opt.selected = true;
+    codeSelect.appendChild(opt);
+  });
+  applyAttendanceCodeColor(codeSelect, record.code);
+  codeSelect.addEventListener("change", async () => {
+    AttendanceModule.setRecord(student.id, session.id, { code: codeSelect.value });
+    applyAttendanceCodeColor(codeSelect, codeSelect.value);
+    await saveAttendanceThen();
+    refreshAttendanceStatsRow(student.id);
+  });
+
+  const infractionSelect = document.createElement("select");
+  infractionSelect.className = "attendance-infraction-select";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "No infraction";
+  infractionSelect.appendChild(noneOpt);
+  AttendanceModule.settings.infractionOptions.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt;
+    if (opt === record.infraction) o.selected = true;
+    infractionSelect.appendChild(o);
+  });
+  applyInfractionColor(infractionSelect, record.infraction);
+  infractionSelect.addEventListener("change", async () => {
+    AttendanceModule.setRecord(student.id, session.id, { infraction: infractionSelect.value });
+    applyInfractionColor(infractionSelect, infractionSelect.value);
+    await saveAttendanceThen();
+    refreshAttendanceStatsRow(student.id);
+  });
+
+  const memoInput = document.createElement("input");
+  memoInput.type = "text";
+  memoInput.className = "attendance-memo-input";
+  memoInput.placeholder = "Memo";
+  memoInput.value = record.memo || "";
+  memoInput.addEventListener("change", async () => {
+    AttendanceModule.setRecord(student.id, session.id, { memo: memoInput.value });
+    await saveAttendanceThen();
+  });
+
+  return [codeSelect, infractionSelect, memoInput];
 }
 
 // Highlight colours are chosen by palette name; the shade itself comes from the current theme (the .att-hl-* rules in css/grid.css).
@@ -1994,6 +2000,158 @@ function refreshAttendanceStatsRow(studentId) {
 /** Applies a local change's follow-up UI update (e.g. a re-render). Persistence to Google Drive happens only via the explicit "Save Attendance" button — kept as a function (rather than inlining every call site) so that button is the one place that actually saves. */
 function saveAttendanceThen(after) {
   if (after) after();
+}
+
+// ----- Attendance: Seating Grid view (alternate way to record attendance) -----
+
+let attendanceView = "table"; // "table" | "seating"
+let attendanceSeatingSessionId = null;
+
+function setAttendanceView(view) {
+  attendanceView = view;
+  const seating = view === "seating";
+  document.getElementById("attendance-seating-view").hidden = !seating;
+  document.getElementById("attendance-table-wrap").hidden = seating;
+  const tb = document.getElementById("att-view-table-btn");
+  const sb = document.getElementById("att-view-seating-btn");
+  tb.classList.toggle("btn-primary", !seating);
+  tb.classList.toggle("btn-ghost", seating);
+  sb.classList.toggle("btn-primary", seating);
+  sb.classList.toggle("btn-ghost", !seating);
+  renderAttendance(); // both views read the same records, so re-render to show the latest
+}
+
+document.getElementById("att-view-table-btn").addEventListener("click", () => setAttendanceView("table"));
+document.getElementById("att-view-seating-btn").addEventListener("click", () => setAttendanceView("seating"));
+
+document.getElementById("att-seating-session").addEventListener("change", (e) => {
+  attendanceSeatingSessionId = e.target.value;
+  renderAttendanceSeatingView();
+});
+
+document.getElementById("att-seating-present-btn").addEventListener("click", () => {
+  if (!attendanceSeatingSessionId) return;
+  AttendanceModule.markAllPresent(attendanceSeatingSessionId, RosterModule.students.map((s) => s.id));
+  renderAttendance();
+});
+
+/** Which class the grid opens on: the first class with nothing recorded yet (the next one to take), else the last class. */
+function defaultAttendanceSeatingSession() {
+  const sessions = AttendanceModule.sessions;
+  if (sessions.length === 0) return null;
+  const empty = sessions.find((sess) =>
+    RosterModule.students.every((st) => {
+      const rec = AttendanceModule.getRecord(st.id, sess.id);
+      return !rec.code && !rec.infraction && !rec.memo;
+    })
+  );
+  return (empty || sessions[sessions.length - 1]).id;
+}
+
+/** One student's card: class #, pronunciation, name, school ID, plus the three recording controls for the chosen class. */
+function buildAttendanceSeatCard(student, session) {
+  const card = document.createElement("div");
+  card.className = "att-seat-card";
+  card.dataset.studentId = student.id;
+
+  const top = document.createElement("div");
+  top.className = "att-seat-top";
+  if (student.classNumber) {
+    const num = document.createElement("span");
+    num.className = "att-seat-number";
+    num.textContent = `#${student.classNumber}`;
+    top.appendChild(num);
+  }
+  const info = document.createElement("div");
+  info.className = "att-seat-info";
+  if (student.pronunciation) {
+    const pron = document.createElement("div");
+    pron.className = "att-seat-pron";
+    pron.textContent = student.pronunciation;
+    info.appendChild(pron);
+  }
+  const name = document.createElement("div");
+  name.className = "att-seat-name";
+  name.textContent = student.name || "(unnamed)";
+  info.appendChild(name);
+  if (student.schoolId) {
+    const sid = document.createElement("div");
+    sid.className = "att-seat-id";
+    sid.textContent = student.schoolId;
+    info.appendChild(sid);
+  }
+  top.appendChild(info);
+  card.appendChild(top);
+
+  const controls = buildAttendanceRecordControls(student, session);
+  // Keep the Score / Attended / Absences numbers in the (hidden) table current too.
+  controls.forEach((c) => c.addEventListener("change", () => refreshAttendanceStatsRow(student.id)));
+  controls.forEach((c) => card.appendChild(c));
+  return card;
+}
+
+function renderAttendanceSeatingView() {
+  const grid = document.getElementById("attendance-seating-grid");
+  const unseatedBox = document.getElementById("attendance-seating-unseated");
+  const sessionSelect = document.getElementById("att-seating-session");
+  if (!grid || attendanceView !== "seating") return;
+
+  // Class picker
+  const sessions = AttendanceModule.sessions;
+  if (!sessions.some((x) => x.id === attendanceSeatingSessionId)) {
+    attendanceSeatingSessionId = defaultAttendanceSeatingSession();
+  }
+  sessionSelect.innerHTML = "";
+  sessions.forEach((sess) => {
+    const opt = document.createElement("option");
+    opt.value = sess.id;
+    opt.textContent = `Class ${sess.number}${sess.date ? " — " + sess.date : ""}`;
+    if (sess.id === attendanceSeatingSessionId) opt.selected = true;
+    sessionSelect.appendChild(opt);
+  });
+  grid.innerHTML = "";
+  unseatedBox.innerHTML = "";
+  const session = sessions.find((x) => x.id === attendanceSeatingSessionId);
+  if (!session) {
+    grid.textContent = "No classes yet — set the number of classes in Attendance Settings.";
+    return;
+  }
+
+  // Desk grid, same layout as the Seating Chart tab
+  grid.style.gridTemplateColumns = `repeat(${SeatingModule.cols}, minmax(170px, 1fr))`;
+  for (let r = 0; r < SeatingModule.rows; r++) {
+    for (let c = 0; c < SeatingModule.cols; c++) {
+      if (!SeatingModule.isActive(r, c)) {
+        const gap = document.createElement("div");
+        gap.className = "att-seat-gap";
+        grid.appendChild(gap);
+        continue;
+      }
+      const studentId = SeatingModule.studentAt(r, c);
+      const student = studentId ? RosterModule.students.find((s) => s.id === studentId) : null;
+      if (student) {
+        grid.appendChild(buildAttendanceSeatCard(student, session));
+      } else {
+        const empty = document.createElement("div");
+        empty.className = "att-seat-card att-seat-empty";
+        empty.textContent = "empty desk";
+        grid.appendChild(empty);
+      }
+    }
+  }
+
+  // Anyone not at a desk still needs marking
+  const seatedIds = SeatingModule.seatedStudentIds();
+  const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+  if (unseated.length > 0) {
+    const heading = document.createElement("h4");
+    heading.textContent = "Not seated";
+    unseatedBox.appendChild(heading);
+    const row = document.createElement("div");
+    row.className = "att-seat-unseated-row";
+    unseated.forEach((st) => row.appendChild(buildAttendanceSeatCard(st, session)));
+    unseatedBox.appendChild(row);
+  }
 }
 
 el.toggleAttendanceSettingsBtn.addEventListener("click", () => {
