@@ -938,3 +938,43 @@ table.source-grid td.source-grid-name.source-grid-long { white-space: normal; }
 #seating-grid .desk-student-name { font-size: clamp(0.72rem, 13cqw, 1.3rem); }
 #seating-grid .desk-schoolid-tag { font-size: clamp(0.6rem, 9cqw, 0.95rem); }
 #seating-grid .desk { aspect-ratio: auto; min-height: 9.5rem; }
+
+/* ===== Global text size (Settings → Text size) ===== */
+html[data-textsize="small"] { font-size: 87.5%; }
+html[data-textsize="large"] { font-size: 118%; }
+
+/* ===== Desk label menu + label bank ===== */
+.desk-label-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 11rem;
+  max-width: 18rem;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--green);
+  border-radius: var(--radius-small);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.desk-label-menu-item {
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: var(--radius-small);
+}
+.desk-label-menu-item:hover { background: color-mix(in srgb, var(--green) 18%, transparent); }
+.desk-label-menu-active { font-weight: 700; color: var(--green-dark); }
+.desk-label-menu-custom { border-top: 1px solid var(--line); margin-top: 3px; }
+.desk-label-menu-remove { color: #d3302f; }
+.desk-label-menu-hint { padding: 6px 10px; font-size: 0.8rem; color: var(--ink-soft); }
+.label-bank-list { list-style: none; margin: 0 0 10px; padding: 0; max-width: 420px; }
+.label-bank-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.label-bank-add { display: flex; gap: 8px; align-items: center; max-width: 420px; }
+.label-bank-add input { flex: 1; }
+#seating-settings { margin-top: 24px; }

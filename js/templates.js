@@ -169,6 +169,7 @@ const TemplatesModule = {
         active: this._clone(seating.active || {}),
         groups: this._clone(seating.groups || {}),
         labels: this._clone(seating.labels || {}),
+        labelBank: [...(seating.labelBank || [])],
         showGroupsInPopout: seating.showGroupsInPopout !== false,
       };
     }

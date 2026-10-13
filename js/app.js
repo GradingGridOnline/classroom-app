@@ -179,7 +179,30 @@ function closeSettings() {
 el.settingsBtn.addEventListener("click", openSettings);
 el.settingsBackBtn.addEventListener("click", closeSettings);
 
+function renderTextSizeList() {
+  const list = document.getElementById("textsize-list");
+  if (!list) return;
+  list.innerHTML = "";
+  TEXT_SIZES.forEach((size) => {
+    const li = document.createElement("li");
+    li.className = "theme-item";
+    if (size.id === ThemeModule.textSize) li.classList.add("theme-item-active");
+    const label = document.createElement("span");
+    label.textContent = size.label;
+    const check = document.createElement("span");
+    check.className = "theme-check";
+    check.textContent = size.id === ThemeModule.textSize ? "✓" : "";
+    li.append(label, check);
+    li.addEventListener("click", async () => {
+      await ThemeModule.setTextSize(size.id);
+      renderTextSizeList();
+    });
+    list.appendChild(li);
+  });
+}
+
 function renderThemeList() {
+  renderTextSizeList();
   el.themeList.innerHTML = "";
   THEMES.forEach((theme) => {
     const li = document.createElement("li");
@@ -1053,6 +1076,7 @@ function renderSeating() {
 
   renderBanks();
   renderGroupList();
+  renderSeatingSettings();
 }
 
 /** Every seated student (active desk + occupied), with that desk's group number, ordered by group then class number. Ungrouped (0) sorts last. */
@@ -1489,15 +1513,150 @@ function buildDeskElement(r, c) {
     labelBtn.title = label ? `Label: "${label}" — click to edit or clear` : "Add a label to this desk";
     labelBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const next = prompt("Desk label (e.g. \"do not sit here\"). Leave blank to remove.", label);
-      if (next === null) return; // cancelled
-      SeatingModule.setLabel(r, c, next);
-      renderSeating();
+      openDeskLabelMenu(labelBtn, r, c, label);
     });
     desk.appendChild(labelBtn);
   }
 
   return desk;
+}
+
+/** Pop-up menu on a desk's label button: pick from the label bank, type a custom one, or remove the current label. */
+function closeDeskLabelMenu() {
+  const old = document.getElementById("desk-label-menu");
+  if (old) old.remove();
+}
+
+function openDeskLabelMenu(anchor, r, c, current) {
+  closeDeskLabelMenu();
+  const menu = document.createElement("div");
+  menu.id = "desk-label-menu";
+  menu.className = "desk-label-menu";
+
+  const choose = (text) => {
+    SeatingModule.setLabel(r, c, text);
+    closeDeskLabelMenu();
+    renderSeating();
+  };
+  const addItem = (text, onClick, extraClass) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "desk-label-menu-item" + (extraClass ? " " + extraClass : "");
+    b.textContent = text;
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      onClick();
+    });
+    menu.appendChild(b);
+    return b;
+  };
+
+  if (SeatingModule.labelBank.length === 0) {
+    const hint = document.createElement("div");
+    hint.className = "desk-label-menu-hint";
+    hint.textContent = "No labels in the bank yet — add some in Seating Settings below.";
+    menu.appendChild(hint);
+  }
+  SeatingModule.labelBank.forEach((text) => {
+    addItem(text, () => choose(text), text === current ? "desk-label-menu-active" : "");
+  });
+  addItem("Custom…", () => {
+    closeDeskLabelMenu();
+    const next = prompt("Desk label (e.g. \"do not sit here\"). Leave blank to remove.", current);
+    if (next === null) return;
+    SeatingModule.setLabel(r, c, next);
+    renderSeating();
+  }, "desk-label-menu-custom");
+  if (current) addItem("Remove label", () => choose(""), "desk-label-menu-remove");
+
+  document.body.appendChild(menu);
+  const rect = anchor.getBoundingClientRect();
+  const mw = menu.offsetWidth;
+  const mh = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(rect.right - mw, window.innerWidth - mw - 8)) + "px";
+  menu.style.top = (rect.bottom + mh + 8 > window.innerHeight ? Math.max(8, rect.top - mh - 4) : rect.bottom + 4) + "px";
+}
+
+document.addEventListener("click", (ev) => {
+  const menu = document.getElementById("desk-label-menu");
+  if (menu && !menu.contains(ev.target)) closeDeskLabelMenu();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") closeDeskLabelMenu();
+});
+
+// ----- Seating Settings: the label bank -----
+let seatingSettingsEditing = false;
+
+el.toggleSeatingSettingsBtn = document.getElementById("toggle-seating-settings-btn");
+el.seatingSettingsBody = document.getElementById("seating-settings-body");
+el.toggleSeatingSettingsBtn.addEventListener("click", () => {
+  seatingSettingsEditing = !seatingSettingsEditing;
+  el.toggleSeatingSettingsBtn.textContent = seatingSettingsEditing ? "Done Editing" : "Edit Settings";
+  renderSeatingSettings();
+});
+
+function renderSeatingSettings() {
+  const body = el.seatingSettingsBody;
+  body.innerHTML = "";
+  const heading = document.createElement("h4");
+  heading.textContent = "Label bank";
+  body.appendChild(heading);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = "Labels you can put on a desk: click a desk's 🏷 button, then choose one. Labelled desks are skipped by Auto-Fill.";
+  body.appendChild(hint);
+
+  if (!seatingSettingsEditing) {
+    const summary = document.createElement("p");
+    summary.className = "hint";
+    summary.textContent = SeatingModule.labelBank.length
+      ? SeatingModule.labelBank.join("  •  ")
+      : "No labels yet — click Edit Settings to add some.";
+    body.appendChild(summary);
+    return;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "label-bank-list";
+  SeatingModule.labelBank.forEach((text, i) => {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.textContent = text;
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "btn btn-ghost btn-small";
+    rm.textContent = "×";
+    rm.title = "Remove from the bank (desks already using it keep their label)";
+    rm.addEventListener("click", () => {
+      SeatingModule.removeBankLabel(i);
+      renderSeatingSettings();
+    });
+    li.append(span, rm);
+    list.appendChild(li);
+  });
+  body.appendChild(list);
+
+  const addRow = document.createElement("div");
+  addRow.className = "label-bank-add";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "New label, e.g. Do not sit here";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn btn-ghost btn-small";
+  addBtn.textContent = "+ Add label";
+  const add = () => {
+    if (SeatingModule.addBankLabel(input.value)) renderSeatingSettings();
+    else input.focus();
+  };
+  addBtn.addEventListener("click", add);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") add();
+  });
+  addRow.append(input, addBtn);
+  body.appendChild(addRow);
 }
 
 function renderBanks() {
@@ -7208,6 +7367,8 @@ main();
   async function saveFor(panelId) {
     if (panelId === "attendance-panel") {
       await AttendanceModule.save();
+    } else if (panelId === "seating-panel") {
+      await SeatingModule.save();
     } else {
       await RubricBankModule.save();
       await ScoringModule.save();
@@ -7226,7 +7387,7 @@ main();
 
   function addSaveButton(header) {
     if (header.querySelector(".settings-save-btn")) return;
-    const panel = header.closest("#attendance-panel, #scoring-panel");
+    const panel = header.closest("#attendance-panel, #scoring-panel, #seating-panel");
     if (!panel) return;
     const panelId = panel.id;
 

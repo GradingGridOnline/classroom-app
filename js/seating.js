@@ -46,6 +46,7 @@ const SeatingModule = {
   locks: {},
   groups: {},
   labels: {},
+  labelBank: [], // reusable label texts to pick from on a desk (Seating Settings)
   banks: SeatingModule_defaultBanks(),
   showGroupsInPopout: true,
   currentCourseId: null,
@@ -64,6 +65,7 @@ const SeatingModule = {
       this.locks = data.locks || {};
       this.groups = data.groups || {};
       this.labels = data.labels || {};
+      this.labelBank = Array.isArray(data.labelBank) ? data.labelBank.filter((t) => typeof t === "string" && t.trim()) : ["Do not sit here"];
       // Backward compatibility: charts saved before the "active desk"
       // system existed have no `active` map at all. Treat every
       // position that already has a seat, lock, or group as active,
@@ -90,6 +92,7 @@ const SeatingModule = {
       this.locks = {};
       this.groups = {};
       this.labels = {};
+      this.labelBank = ["Do not sit here"];
       this.banks = SeatingModule_defaultBanks();
       this.showGroupsInPopout = true;
     }
@@ -119,6 +122,7 @@ const SeatingModule = {
       locks: this.locks,
       groups: this.groups,
       labels: this.labels,
+      labelBank: this.labelBank,
       banks: this.banks,
       showGroupsInPopout: this.showGroupsInPopout,
     });
@@ -279,6 +283,17 @@ const SeatingModule = {
     } else {
       this.groups[key] = clamp(n, 1, MAX_GROUP);
     }
+  },
+
+  addBankLabel(text) {
+    const t = (text || "").trim();
+    if (!t || this.labelBank.includes(t)) return false;
+    this.labelBank.push(t);
+    return true;
+  },
+
+  removeBankLabel(index) {
+    this.labelBank.splice(index, 1);
   },
 
   getLabel(r, c) {
