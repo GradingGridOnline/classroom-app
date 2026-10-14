@@ -142,8 +142,6 @@ async function main() {
   renderThemeList();
 
   storage = new SupabaseProvider(APP_CONFIG);
-  // Show the sign-in form right away so it's always on the main page.
-  el.loginForm.hidden = false;
   try {
     initPromise = storage.init();
     await initPromise;
@@ -181,13 +179,18 @@ function openSettings() {
   el.courseDetailSection.hidden = true;
   el.settingsSection.hidden = false;
   el.periodsStatus.textContent = "";
+  updateAuthUI();
   renderThemeList();
   renderPeriodsList();
+  window.scrollTo(0, 0);
 }
 
 function closeSettings() {
   el.settingsSection.hidden = true;
-  if (!storage.isSignedIn()) return;
+  if (!storage || !storage.isSignedIn()) {
+    updateAuthUI();
+    return;
+  }
   if (settingsReturn === "detail") el.courseDetailSection.hidden = false;
   else el.courseSection.hidden = false;
 }
@@ -244,7 +247,9 @@ function renderThemeList() {
 // ===== Settings / periods =====
 
 function savePeriodsThen(after) {
-  el.periodsStatus.textContent = "Unsaved changes — click Save Periods.";
+  el.periodsStatus.textContent = window.GGOAutosave && window.GGOAutosave.enabled()
+    ? "Autosaving…"
+    : "Unsaved changes — click Save Periods.";
   if (after) after();
 }
 
@@ -342,21 +347,39 @@ el.addPeriodBtn.addEventListener("click", async () => {
   }
 });
 
-function renderAuth() {
-  const signedIn = storage.isSignedIn();
+/** Updates only the sign-in widgets (never changes which page is showing). */
+function updateAuthUI() {
+  const signedIn = !!storage && storage.isSignedIn();
+  const settingsOpen = !el.settingsSection.hidden;
   el.loginForm.hidden = signedIn;
   el.signOutBtn.hidden = !signedIn;
-  el.signOutBtn.title = signedIn ? `Signed in as ${storage.getUserName() || ""}` : "";
-  el.courseSection.hidden = !signedIn || !el.settingsSection.hidden;
-  if (!signedIn) el.settingsSection.hidden = true;
-  el.status.textContent = signedIn ? `Signed in as ${storage.getUserName() || ""}` : "";
+  el.settingsSection.classList.toggle("signed-out", !signedIn);
+  document.getElementById("signin-prompt").hidden = signedIn || settingsOpen;
+  if (signedIn) el.status.textContent = `Signed in as ${storage.getUserName() || ""}`;
+  else if (el.status.textContent.startsWith("Signed in as")) el.status.textContent = "";
+}
+
+/** Updates the widgets AND moves to the right page after signing in / out / on startup. */
+function renderAuth() {
+  updateAuthUI();
+  const signedIn = !!storage && storage.isSignedIn();
+  const settingsOpen = !el.settingsSection.hidden;
 
   if (signedIn) {
+    // Signing in from the Settings page: go on to the courses.
+    if (settingsOpen) {
+      el.settingsSection.hidden = true;
+      settingsReturn = "courses";
+    }
+    el.courseSection.hidden = false;
     showCourses();
   } else {
+    el.courseSection.hidden = true;
     el.courseDetailSection.hidden = true;
   }
 }
+
+document.getElementById("open-signin-btn").addEventListener("click", openSettings);
 
 async function ensureAuthReady() {
   if (!storage.client) {
@@ -418,6 +441,7 @@ el.resetPwBtn.addEventListener("click", async () => {
 });
 
 el.signOutBtn.addEventListener("click", async () => {
+  if (window.GGOAutosave) await window.GGOAutosave.flush(); // don't lose a last-second edit
   await storage.signOut();
   renderAuth();
 });
@@ -7406,6 +7430,172 @@ document.getElementById("update-template-btn").addEventListener("click", async (
     status.textContent = `Couldn't update the template: ${err.message}`;
   }
 });
+
+
+// ===== Autosave =====
+// Quietly saves whatever changed, a moment after you stop editing. It only
+// writes the files whose contents actually changed, one at a time, in the
+// background (the screen never waits on it). Each module's snapshot below
+// must list the same fields as that module's save() — add new fields to both.
+(function () {
+  const indicator = document.getElementById("autosave-indicator");
+  const toggle = document.getElementById("autosave-toggle");
+  const detail = document.getElementById("autosave-detail");
+  const POLL_MS = 600;
+
+  const MODULES = [
+    { name: "courses", mod: CoursesModule, scoped: false, snap: () => ({ courses: CoursesModule.courses, sortMode: CoursesModule.sortMode }) },
+    { name: "periods", mod: PeriodsModule, scoped: false, snap: () => ({ periods: PeriodsModule.periods }) },
+    { name: "templates", mod: TemplatesModule, scoped: false, snap: () => ({ templates: TemplatesModule.templates }) },
+    { name: "rubricbank", mod: RubricBankModule, scoped: false, snap: () => ({ rubrics: RubricBankModule.rubrics }) },
+    { name: "roster", mod: RosterModule, scoped: true, snap: () => ({ students: RosterModule.students }) },
+    {
+      name: "seating", mod: SeatingModule, scoped: true,
+      snap: () => ({
+        rows: SeatingModule.rows, cols: SeatingModule.cols, active: SeatingModule.active, seats: SeatingModule.seats,
+        locks: SeatingModule.locks, groups: SeatingModule.groups, labels: SeatingModule.labels,
+        labelBank: SeatingModule.labelBank, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
+      }),
+    },
+    {
+      name: "attendance", mod: AttendanceModule, scoped: true,
+      snap: () => ({ sessions: AttendanceModule.sessions, records: AttendanceModule.records, notes: AttendanceModule.notes, settings: AttendanceModule.settings }),
+    },
+    {
+      name: "scoring", mod: ScoringModule, scoped: true,
+      snap: () => ({
+        categories: ScoringModule.categories, records: ScoringModule.records, weights: ScoringModule.weights,
+        tools: ScoringModule.tools, presentationMigrated: ScoringModule.presentationMigrated,
+      }),
+    },
+    {
+      name: "reportcard", mod: ReportCardModule, scoped: true,
+      snap: () => ({
+        selectedItemIds: Array.from(ReportCardModule.selectedItemIds),
+        emailSubject: ReportCardModule.emailSubject, emailMessage: ReportCardModule.emailMessage,
+      }),
+    },
+  ];
+
+  let enabled = true;
+  try { enabled = localStorage.getItem("ggo-autosave") !== "off"; } catch (e) {}
+  toggle.checked = enabled;
+  toggle.addEventListener("change", () => {
+    enabled = toggle.checked;
+    try { localStorage.setItem("ggo-autosave", enabled ? "on" : "off"); } catch (e) {}
+    toggle.parentElement.lastChild.textContent = enabled ? " Autosave is on" : " Autosave is off — use the Save buttons";
+    if (enabled) flush();
+  });
+  toggle.parentElement.lastChild.textContent = enabled ? " Autosave is on" : " Autosave is off — use the Save buttons";
+
+  const baseline = new Map(); // name -> { course, json } : what is known to be saved
+  const lastSeen = new Map(); // name -> json at the previous poll (to wait until typing stops)
+  let loading = 0;            // loads in flight (data is half-swapped while loading — never save then)
+  let saving = false;
+  let retryAt = 0;
+  let fadeTimer = null;
+
+  const courseOf = (m) => (m.scoped ? m.mod.currentCourseId : "-");
+  const snapJson = (m) => JSON.stringify(m.snap());
+
+  // Remember "what's saved" right after a load or a manual save.
+  MODULES.forEach((m) => {
+    const origLoad = m.mod.load;
+    const origSave = m.mod.save;
+    m.mod.load = async function (...args) {
+      // About to switch course (or reload): first write any edit made in the last moment,
+      // while this module still holds the OLD course's data.
+      const b = baseline.get(m.name);
+      if (enabled && b && b.course != null && b.course === courseOf(m) && snapJson(m) !== b.json &&
+          typeof storage !== "undefined" && storage && storage.isSignedIn()) {
+        try { await this.save(); } catch (e) { /* the Save buttons still exist; don't block navigation */ }
+      }
+      loading++;
+      baseline.delete(m.name);
+      try {
+        const r = await origLoad.apply(this, args);
+        baseline.set(m.name, { course: courseOf(m), json: snapJson(m) });
+        lastSeen.delete(m.name);
+        return r;
+      } finally {
+        loading--;
+      }
+    };
+    m.mod.save = async function (...args) {
+      const before = { course: courseOf(m), json: snapJson(m) };
+      const r = await origSave.apply(this, args);
+      baseline.set(m.name, before);
+      return r;
+    };
+  });
+
+  function show(text, cls) {
+    clearTimeout(fadeTimer);
+    indicator.textContent = text;
+    indicator.className = "autosave-indicator" + (cls ? " " + cls : "");
+    if (!cls && text.startsWith("✓")) fadeTimer = setTimeout(() => indicator.classList.add("fade"), 2500);
+  }
+
+  function dirtyModules(requireStable) {
+    const out = [];
+    for (const m of MODULES) {
+      const b = baseline.get(m.name);
+      if (!b || b.course == null || b.course !== courseOf(m)) continue; // never loaded for this course -> never write
+      const cur = snapJson(m);
+      if (cur === b.json) { lastSeen.delete(m.name); continue; }
+      if (requireStable && lastSeen.get(m.name) !== cur) { lastSeen.set(m.name, cur); continue; }
+      out.push(m);
+    }
+    return out;
+  }
+
+  async function runSave(list) {
+    saving = true;
+    const t0 = performance.now();
+    show("Saving…");
+    try {
+      for (const m of list) await m.mod.save();
+      const secs = ((performance.now() - t0) / 1000).toFixed(2);
+      show("✓ Saved");
+      detail.textContent = `Last autosave ${new Date().toLocaleTimeString()} (${secs} s)`;
+      window.dispatchEvent(new CustomEvent("ggo-autosaved", { detail: { names: list.map((m) => m.name) } }));
+    } catch (err) {
+      retryAt = Date.now() + 5000;
+      show("Couldn't save — retrying", "err");
+      detail.textContent = `Autosave problem: ${err.message}`;
+    } finally {
+      saving = false;
+    }
+  }
+
+  function ready() {
+    return enabled && typeof storage !== "undefined" && storage && storage.isSignedIn() && loading === 0 && !saving && Date.now() >= retryAt;
+  }
+
+  function flush() {
+    if (ready()) {
+      const list = dirtyModules(false);
+      if (list.length) return runSave(list);
+    }
+    return Promise.resolve();
+  }
+
+  setInterval(() => {
+    if (!ready()) return;
+    const list = dirtyModules(true);
+    if (list.length) runSave(list);
+  }, POLL_MS);
+
+  // Leaving the tab or closing the page: save right now.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+  window.addEventListener("pagehide", flush);
+
+  window.addEventListener("ggo-autosaved", () => {
+    if (el.periodsStatus.textContent === "Autosaving…") el.periodsStatus.textContent = "Saved ✓";
+  });
+
+  window.GGOAutosave = { enabled: () => enabled, flush };
+})();
 
 main();
 

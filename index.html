@@ -16,7 +16,7 @@
     } catch (e) {}
   </script>
   <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/grid.css?v=20261010" />
+  <link rel="stylesheet" href="css/grid.css?v=20261015" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&family=Michroma&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -27,22 +27,16 @@
       <div class="header-row">
         <h1>GradingGridOnline</h1>
         <div class="settings-wrap">
+          <span id="autosave-indicator" class="autosave-indicator" aria-live="polite"></span>
           <button id="settings-btn" class="btn btn-ghost btn-small" aria-label="Settings" title="Settings">⚙ Settings</button>
-          <button id="sign-out-btn" class="btn btn-ghost btn-small" hidden>Sign out</button>
         </div>
       </div>
     </header>
 
     <main class="card">
-      <div class="auth-row">
-        <span id="auth-status" class="status"></span>
-        <form id="login-form" class="login-form" hidden>
-          <input id="login-email" type="email" placeholder="Email" autocomplete="email" required />
-          <input id="login-password" type="password" placeholder="Password (8+ characters)" autocomplete="current-password" minlength="8" required />
-          <button id="sign-in-btn" class="btn btn-primary" type="submit">Sign in</button>
-          <button id="sign-up-btn" class="btn btn-ghost" type="button">Create account</button>
-          <button id="reset-pw-btn" class="btn btn-ghost btn-small" type="button">Forgot password?</button>
-        </form>
+      <div id="signin-prompt" class="signin-prompt" hidden>
+        <p>Please sign in to see your courses.</p>
+        <button id="open-signin-btn" class="btn btn-primary" type="button">Sign in</button>
       </div>
 
       <!-- ===== Course list view ===== -->
@@ -372,6 +366,28 @@
         <div class="section-header">
           <h2>Global Settings</h2>
           <button id="settings-back-btn" class="btn btn-ghost btn-small" type="button">← Back</button>
+        </div>
+
+        <div class="settings-block" id="account-block">
+          <h3>Account</h3>
+          <div class="auth-row">
+            <span id="auth-status" class="status"></span>
+            <form id="login-form" class="login-form" hidden>
+              <input id="login-email" type="email" placeholder="Email" autocomplete="email" required />
+              <input id="login-password" type="password" placeholder="Password (8+ characters)" autocomplete="current-password" minlength="8" required />
+              <button id="sign-in-btn" class="btn btn-primary" type="submit">Sign in</button>
+              <button id="sign-up-btn" class="btn btn-ghost" type="button">Create account</button>
+              <button id="reset-pw-btn" class="btn btn-ghost btn-small" type="button">Forgot password?</button>
+            </form>
+            <button id="sign-out-btn" class="btn btn-ghost btn-small" type="button" hidden>Sign out</button>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <h3>Autosave</h3>
+          <p class="hint">Saves your changes automatically a moment after you stop editing. The Save buttons still work too.</p>
+          <label class="autosave-toggle"><input id="autosave-toggle" type="checkbox" checked /> Autosave is on</label>
+          <span id="autosave-detail" class="status"></span>
         </div>
 
         <div class="settings-block">

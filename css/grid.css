@@ -986,3 +986,18 @@ html[data-textsize="large"] { font-size: 118%; }
   .login-form input { max-width: none; flex-basis: 100%; }
 }
 .auth-row { flex-wrap: wrap; gap: 12px; }
+
+/* ===== Sign-in lives on the Settings page ===== */
+.signin-prompt { text-align: center; padding: 40px 12px; }
+.signin-prompt p { margin: 0 0 14px; font-size: 1.1rem; }
+#settings-section.signed-out .settings-block:not(#account-block) { display: none; }
+#account-block .auth-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#account-block .login-form { justify-content: flex-start; }
+.settings-wrap { display: flex; align-items: center; gap: 10px; }
+.autosave-indicator { font-size: 0.85rem; color: var(--ink-soft); min-width: 5rem; text-align: right; transition: opacity .4s; }
+.autosave-indicator.fade { opacity: 0; }
+.autosave-indicator.err { color: #c0392b; font-weight: 600; }
+.autosave-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; cursor: pointer; }
+
+/* Make hidden sign-in pieces really hide (display:flex would otherwise override [hidden]). */
+.login-form[hidden], #sign-out-btn[hidden], .signin-prompt[hidden] { display: none !important; }
