@@ -5,6 +5,11 @@ let currentMapping = null; // set while the mapping panel is open
 
 const el = {
   signInBtn: document.getElementById("sign-in-btn"),
+  loginForm: document.getElementById("login-form"),
+  loginEmail: document.getElementById("login-email"),
+  loginPassword: document.getElementById("login-password"),
+  signUpBtn: document.getElementById("sign-up-btn"),
+  resetPwBtn: document.getElementById("reset-pw-btn"),
   signOutBtn: document.getElementById("sign-out-btn"),
   status: document.getElementById("auth-status"),
 
@@ -136,10 +141,9 @@ async function main() {
   ThemeModule.initLocal();
   renderThemeList();
 
-  storage = new GoogleDriveProvider(APP_CONFIG);
-  // Show the Sign in button right away so it's always on the main page,
-  // even if Google's script is slow or fails to load on mobile.
-  el.signInBtn.hidden = false;
+  storage = new SupabaseProvider(APP_CONFIG);
+  // Show the sign-in form right away so it's always on the main page.
+  el.loginForm.hidden = false;
   try {
     initPromise = storage.init();
     await initPromise;
@@ -153,6 +157,18 @@ async function main() {
     renderThemeList();
   }
 }
+
+/** Called by the Supabase provider when someone arrives from a "reset password" email link. */
+window.onPasswordRecovery = async () => {
+  const pw = prompt("Choose a new password (at least 8 characters):");
+  if (!pw) return;
+  try {
+    await storage.updatePassword(pw);
+    el.status.textContent = "Password changed ✓";
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
 // ===== Settings / theme =====
 
@@ -328,11 +344,12 @@ el.addPeriodBtn.addEventListener("click", async () => {
 
 function renderAuth() {
   const signedIn = storage.isSignedIn();
-  el.signInBtn.hidden = signedIn;
+  el.loginForm.hidden = signedIn;
   el.signOutBtn.hidden = !signedIn;
+  el.signOutBtn.title = signedIn ? `Signed in as ${storage.getUserName() || ""}` : "";
   el.courseSection.hidden = !signedIn || !el.settingsSection.hidden;
   if (!signedIn) el.settingsSection.hidden = true;
-  el.status.textContent = "";
+  el.status.textContent = signedIn ? `Signed in as ${storage.getUserName() || ""}` : "";
 
   if (signedIn) {
     showCourses();
@@ -341,26 +358,62 @@ function renderAuth() {
   }
 }
 
-el.signInBtn.addEventListener("click", async () => {
+async function ensureAuthReady() {
+  if (!storage.client) {
+    initPromise = storage.init();
+  }
+  await initPromise;
+}
+
+el.loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
   el.status.textContent = "Signing in…";
   try {
-    // Make sure Google's script has loaded; retry init if it failed earlier.
-    if (!storage.tokenClient) {
-      initPromise = storage.init();
-    }
-    await initPromise;
-    await storage.signIn();
+    await ensureAuthReady();
+    await storage.signIn(el.loginEmail.value.trim(), el.loginPassword.value);
+    el.loginPassword.value = "";
     renderAuth();
     await ThemeModule.syncFromDrive();
     renderThemeList();
   } catch (err) {
-    const m = err.message;
-    el.status.textContent =
-      m === "popup_blocked"
-        ? "Sign-in popup was blocked. Allow pop-ups for this site, and open it in Safari/Chrome (not an in-app browser), then try again."
-        : m === "popup_closed"
-        ? "Sign-in window was closed before finishing. Tap Sign in and try again."
-        : `Sign-in failed: ${m}`;
+    el.status.textContent = `Sign-in failed: ${err.message}`;
+  }
+});
+
+el.signUpBtn.addEventListener("click", async () => {
+  const email = el.loginEmail.value.trim();
+  const password = el.loginPassword.value;
+  if (!email || password.length < 8) {
+    el.status.textContent = "Enter your email and a password of at least 8 characters, then click Create account.";
+    return;
+  }
+  el.status.textContent = "Creating account…";
+  try {
+    await ensureAuthReady();
+    const result = await storage.signUp(email, password);
+    if (result.needsConfirmation) {
+      el.status.textContent = "Account created. Check your email and click the confirmation link, then sign in here.";
+    } else {
+      el.loginPassword.value = "";
+      renderAuth();
+    }
+  } catch (err) {
+    el.status.textContent = `Couldn't create account: ${err.message}`;
+  }
+});
+
+el.resetPwBtn.addEventListener("click", async () => {
+  const email = el.loginEmail.value.trim();
+  if (!email) {
+    el.status.textContent = "Type your email above first, then click Forgot password.";
+    return;
+  }
+  try {
+    await ensureAuthReady();
+    await storage.resetPassword(email);
+    el.status.textContent = "If that email has an account, a reset link is on its way.";
+  } catch (err) {
+    el.status.textContent = `Couldn't send reset email: ${err.message}`;
   }
 });
 
@@ -7422,4 +7475,105 @@ main();
     new MutationObserver(scan).observe(target, { childList: true, subtree: true });
     scan();
   }
+})();
+
+
+// ===== Your data: backup export, restore, and one-time import from Google Drive =====
+(function setupDataTools() {
+  const status = document.getElementById("data-status");
+  const say = (t) => (status.textContent = t);
+
+  async function collectAll(provider, onProgress) {
+    const names = await provider.listFiles();
+    const files = {};
+    let n = 0;
+    for (const name of names) {
+      files[name] = await provider.loadFile(name);
+      n += 1;
+      if (onProgress) onProgress(n, names.length);
+    }
+    return files;
+  }
+
+  document.getElementById("export-all-btn").addEventListener("click", async () => {
+    say("Collecting your data…");
+    try {
+      const files = await collectAll(storage, (n, total) => say(`Collecting ${n} / ${total}…`));
+      const backup = { app: "GradingGridOnline", exportedAt: new Date().toISOString(), files };
+      const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `GradingGridOnline-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      say(`Backed up ${Object.keys(files).length} file(s) ✓`);
+    } catch (err) {
+      say(`Backup failed: ${err.message}`);
+    }
+  });
+
+  // Restore from a backup file
+  const restoreInput = document.createElement("input");
+  restoreInput.type = "file";
+  restoreInput.accept = "application/json,.json";
+  restoreInput.hidden = true;
+  document.body.appendChild(restoreInput);
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button";
+  restoreBtn.className = "btn btn-ghost btn-small";
+  restoreBtn.textContent = "Restore from backup file";
+  document.getElementById("import-drive-btn").after(restoreBtn);
+  restoreBtn.addEventListener("click", () => restoreInput.click());
+  restoreInput.addEventListener("change", async () => {
+    const file = restoreInput.files[0];
+    restoreInput.value = "";
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text());
+      const names = Object.keys((backup && backup.files) || {});
+      if (backup.app !== "GradingGridOnline" || names.length === 0) throw new Error("That doesn't look like a GradingGridOnline backup.");
+      if (!confirm(`Restore ${names.length} file(s)? Anything here with the same name will be replaced.`)) return;
+      let n = 0;
+      for (const name of names) {
+        await storage.saveFile(name, backup.files[name]);
+        n += 1;
+        say(`Restoring ${n} / ${names.length}…`);
+      }
+      say(`Restored ${names.length} file(s) ✓`);
+      await showCourses();
+    } catch (err) {
+      say(`Restore failed: ${err.message}`);
+    }
+  });
+
+  document.getElementById("import-drive-btn").addEventListener("click", async () => {
+    say("Opening Google sign-in…");
+    try {
+      const g = await storage.getGoogle();
+      await g.signIn();
+      const names = await g.listFiles();
+      if (names.length === 0) {
+        say("No data found in that Google Drive account.");
+        return;
+      }
+      if (!confirm(`Found ${names.length} file(s) in Google Drive. Import them? Anything here with the same name will be replaced.`)) {
+        say("");
+        return;
+      }
+      let n = 0;
+      for (const name of names) {
+        const data = await g.loadFile(name);
+        if (data !== null) await storage.saveFile(name, data);
+        n += 1;
+        say(`Importing ${n} / ${names.length}…`);
+      }
+      say(`Imported ${names.length} file(s) ✓`);
+      await showCourses();
+    } catch (err) {
+      say(err.message === "popup_blocked" ? "Google's pop-up was blocked — allow pop-ups and try again." : `Import failed: ${err.message}`);
+    }
+  });
 })();

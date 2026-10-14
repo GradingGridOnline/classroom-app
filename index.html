@@ -36,7 +36,13 @@
     <main class="card">
       <div class="auth-row">
         <span id="auth-status" class="status"></span>
-        <button id="sign-in-btn" class="btn btn-primary" hidden>Sign in with Google</button>
+        <form id="login-form" class="login-form" hidden>
+          <input id="login-email" type="email" placeholder="Email" autocomplete="email" required />
+          <input id="login-password" type="password" placeholder="Password (8+ characters)" autocomplete="current-password" minlength="8" required />
+          <button id="sign-in-btn" class="btn btn-primary" type="submit">Sign in</button>
+          <button id="sign-up-btn" class="btn btn-ghost" type="button">Create account</button>
+          <button id="reset-pw-btn" class="btn btn-ghost btn-small" type="button">Forgot password?</button>
+        </form>
       </div>
 
       <!-- ===== Course list view ===== -->
@@ -380,6 +386,16 @@
         </div>
 
         <div class="settings-block">
+          <h3>Your data</h3>
+          <p class="hint">Back up everything to a file you keep, or bring in your old courses from Google Drive (one time).</p>
+          <div class="periods-actions">
+            <button id="export-all-btn" class="btn btn-ghost btn-small" type="button">Export everything (backup)</button>
+            <button id="import-drive-btn" class="btn btn-ghost btn-small" type="button">Import from Google Drive</button>
+            <span id="data-status" class="status"></span>
+          </div>
+        </div>
+
+        <div class="settings-block">
           <h3>Periods</h3>
           <p class="hint">Manage the period names and time slots courses can be assigned to.</p>
           <table class="periods-table">
@@ -405,6 +421,8 @@
 
   <!-- Google Identity Services (sign-in) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Supabase client (sign-in + database) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <!-- SheetJS (reads .csv / .xlsx / .xls files) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- html2canvas + jsPDF (turn the printable report pages into PDFs for emailing) -->
@@ -414,6 +432,7 @@
   <script src="js/config.js"></script>
   <script src="js/storage/storage-provider.js"></script>
   <script src="js/storage/googledrive-provider.js"></script>
+  <script src="js/storage/supabase-provider.js"></script>
   <script src="js/theme.js"></script>
   <!-- Populated just before window.print() is called; hidden on screen, shown only when printing (see the @media print rule in style.css). -->
   <div id="print-area"></div>

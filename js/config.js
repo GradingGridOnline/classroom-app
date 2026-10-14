@@ -6,7 +6,14 @@ const APP_CONFIG = {
   // Which storage backend is active. This is here so a future migration
   // is a one-line change — see js/storage/storage-provider.js for how
   // to add a new backend.
-  storageProvider: "googledrive",
+  storageProvider: "supabase",
+
+  // Your Supabase project (Settings → API). The anon key is meant to be public —
+  // what protects your data is the Row Level Security set up by sql/supabase-setup.sql.
+  supabase: {
+    url: "https://sspkfmhmeewptibftkhk.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcGtmbWhtZWV3cHRpYmZ0a2hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5NTcxODgsImV4cCI6MjEwNzUzMzE4OH0.ju1yE7gvfe-9zM-sdbn-YsCPvWFkYw4sWvSIp3OZZOk",
+  },
 
   google: {
     clientId: "215852917712-bi50bgf8oikhvbmlsshktkbit72iep1n.apps.googleusercontent.com",

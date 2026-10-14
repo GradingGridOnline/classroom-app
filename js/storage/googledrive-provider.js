@@ -26,7 +26,33 @@ class GoogleDriveProvider extends StorageProvider {
       client_id: this.config.google.clientId,
       scope: this.config.google.scopes,
       callback: () => {}, // overridden per-call in _requestToken()
+      // Fires when the popup can't open (blocked, common on mobile) or is
+      // closed before finishing. Without this the sign-in promise never
+      // settles and the page just looks frozen.
+      error_callback: (err) => {
+        if (this._pendingReject) {
+          const msg =
+            err && err.type === "popup_failed_to_open"
+              ? "popup_blocked"
+              : err && err.type === "popup_closed"
+              ? "popup_closed"
+              : (err && err.type) || "sign_in_error";
+          this._pendingReject(new Error(msg));
+        }
+      },
     });
+
+    // Restore a still-valid token from a previous page load first —
+    // access tokens last about an hour, so a plain refresh within that
+    // window can reuse it directly instead of asking Google again.
+    // This matters because the silent re-auth attempt below relies on
+    // Google's own background session check, which some browsers
+    // (Safari in particular) block — without this cache, THAT was
+    // failing on every single reload and forcing you to pick your
+    // account again even though your token hadn't actually expired.
+    if (this._restoreSavedToken()) {
+      return;
+    }
 
     // Try to restore a session silently (no visible popup) — succeeds
     // if the browser still has an active Google session and you've
@@ -35,11 +61,30 @@ class GoogleDriveProvider extends StorageProvider {
     // more aggressively than Chrome) and just leaves you signed out,
     // same as today.
     try {
-      await this._requestToken({ prompt: "" });
+      await this._requestToken({ prompt: "" }, 4000);
       await this._loadUserEmail();
     } catch (e) {
       // No existing session to restore — normal, not an error.
     }
+  }
+
+  /** Sets up Google sign-in WITHOUT the silent re-auth attempt — used for the one-time "Import from Google Drive" (and Google Forms / Gmail features), where a button click triggers the sign-in. */
+  async initInteractive() {
+    if (this.tokenClient) return;
+    await this._waitForGoogleScript();
+    this.tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: this.config.google.clientId,
+      scope: this.config.google.scopes,
+      callback: () => {},
+      error_callback: (err) => {
+        if (this._pendingReject) {
+          const msg =
+            err && err.type === "popup_failed_to_open" ? "popup_blocked" : err && err.type === "popup_closed" ? "popup_closed" : (err && err.type) || "sign_in_error";
+          this._pendingReject(new Error(msg));
+        }
+      },
+    });
+    this._restoreSavedToken();
   }
 
   async signIn() {
@@ -54,6 +99,7 @@ class GoogleDriveProvider extends StorageProvider {
     this.accessToken = null;
     this.tokenExpiresAt = 0;
     this.userEmail = null;
+    this._clearSavedToken();
   }
 
   isSignedIn() {
@@ -136,18 +182,31 @@ class GoogleDriveProvider extends StorageProvider {
     }
   }
 
-  _requestToken({ prompt }) {
+  _requestToken({ prompt }, timeoutMs = 0) {
     return new Promise((resolve, reject) => {
+      let timer = null;
+      const done = (fn, v) => {
+        if (timer) clearTimeout(timer);
+        this._pendingReject = null;
+        fn(v);
+      };
+      this._pendingReject = (e) => done(reject, e);
+      if (timeoutMs) timer = setTimeout(() => done(reject, new Error("timeout")), timeoutMs);
       this.tokenClient.callback = (response) => {
         if (response.error) {
-          reject(new Error(response.error));
+          done(reject, new Error(response.error));
           return;
         }
         this.accessToken = response.access_token;
         this.tokenExpiresAt = Date.now() + (Number(response.expires_in) || 3600) * 1000 - 60000;
-        resolve();
+        this._saveTokenToStorage();
+        done(resolve);
       };
-      this.tokenClient.requestAccessToken({ prompt });
+      try {
+        this.tokenClient.requestAccessToken({ prompt });
+      } catch (e) {
+        done(reject, e);
+      }
     });
   }
 
@@ -155,9 +214,9 @@ class GoogleDriveProvider extends StorageProvider {
     if (this.isSignedIn()) return this.accessToken;
     // Try a silent refresh (no prompt) before falling back to interactive.
     try {
-      await this._requestToken({ prompt: "" });
+      await this._requestToken({ prompt: "" }, 4000);
     } catch {
-      await this._requestToken({ prompt: "consent" });
+      await this._requestToken({ prompt: "consent" }, 120000);
     }
     return this.accessToken;
   }
@@ -174,7 +233,49 @@ class GoogleDriveProvider extends StorageProvider {
     if (response.ok) {
       const info = await response.json();
       this.userEmail = info.email || null;
+      this._saveTokenToStorage();
     }
+  }
+
+  /** Caches the access token (and its expiry + the signed-in email) in localStorage, so a page reload within the token's ~1hr lifetime can reuse it instead of re-authenticating. The token only grants access to this app's own Drive scope (see the class comment above), so caching it locally carries the same risk as keeping any other short-lived bearer token in the browser. */
+  _saveTokenToStorage() {
+    try {
+      localStorage.setItem(
+        "ggo-auth",
+        JSON.stringify({
+          accessToken: this.accessToken,
+          tokenExpiresAt: this.tokenExpiresAt,
+          userEmail: this.userEmail,
+        })
+      );
+    } catch (e) {
+      // localStorage unavailable — fine, just falls back to re-authenticating every reload, same as before this cache existed.
+    }
+  }
+
+  /** Returns true and restores this.accessToken/tokenExpiresAt/userEmail if a still-valid cached token exists; otherwise leaves state untouched and returns false. */
+  _restoreSavedToken() {
+    try {
+      const raw = localStorage.getItem("ggo-auth");
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      if (!saved.accessToken || !saved.tokenExpiresAt || Date.now() >= saved.tokenExpiresAt) {
+        localStorage.removeItem("ggo-auth");
+        return false;
+      }
+      this.accessToken = saved.accessToken;
+      this.tokenExpiresAt = saved.tokenExpiresAt;
+      this.userEmail = saved.userEmail || null;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _clearSavedToken() {
+    try {
+      localStorage.removeItem("ggo-auth");
+    } catch (e) {}
   }
 
   async _findFileId(fileName, token) {

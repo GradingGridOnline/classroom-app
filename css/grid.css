@@ -978,3 +978,11 @@ html[data-textsize="large"] { font-size: 118%; }
 .label-bank-add { display: flex; gap: 8px; align-items: center; max-width: 420px; }
 .label-bank-add input { flex: 1; }
 #seating-settings { margin-top: 24px; }
+
+/* ===== Email / password sign-in form ===== */
+.login-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.login-form input { min-width: 14rem; flex: 1 1 14rem; max-width: 20rem; }
+@media (max-width: 600px) {
+  .login-form input { max-width: none; flex-basis: 100%; }
+}
+.auth-row { flex-wrap: wrap; gap: 12px; }
