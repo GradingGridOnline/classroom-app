@@ -1,30 +1,29 @@
 // ===== Email collection module =====
-// One file per course: emailcollect-<courseId>.json — just tracks
-// which Google Form (if any) is currently active for this course.
+// Collects students' email addresses with our own page (collect.html) instead
+// of a Google Form. One file per course: emailcollect-<courseId>.json — it just
+// remembers which collection (if any) is currently open for this course.
 //
 // Flow:
-//   1. createForm() makes a real Google Form (via the Forms API) with
-//      a "Student ID" dropdown (populated from the roster) and an
-//      "Email Address" question, publishes it, and remembers its ID.
-//   2. Students scan the QR code (built from the form's link) and
-//      submit their ID + email.
-//   3. syncResponses() reads every response via the Forms API,
-//      matches each one to a student by School ID, and returns the
-//      matches for the caller to write into the roster. The form is
-//      left active and reusable — its QR code keeps working, and
-//      syncing again later just re-reads whatever's been submitted
-//      since (a student who already matched just gets matched again).
-//   4. deleteForm() permanently deletes the form (via the Drive API,
-//      since a Form is just a Drive file) when the user is done
-//      collecting for good, or wants to start over with a new form.
-
-const FORMS_API_BASE = "https://forms.googleapis.com/v1/forms";
-const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3/files";
+//   1. createForm() saves a "collection" in Supabase: a random secret token
+//      plus the School IDs on the roster. The QR code points to
+//      collect.html?c=<token>.
+//   2. A student scans the QR code, must type a School ID that is on the
+//      list, and only then gets to enter their email. The server checks the
+//      ID (see sql/collect-setup.sql) — students never see the ID list.
+//   3. syncResponses() reads the saved answers, matches each to a student by
+//      School ID, and returns the matches for the caller to write into the
+//      roster. The collection stays open, so syncing again later just picks
+//      up whatever came in since. (It also refreshes the allowed-ID list from
+//      the current roster, so students added later can answer too.)
+//   4. deleteForm() closes the collection and deletes its answers — the QR
+//      code stops working.
+//
+// Nothing here uses Google any more.
 
 const EmailCollectModule = {
-  activeFormId: null,
-  activeFormUrl: null,
-  questionIds: null, // { studentId: "...", email: "..." } — set right after creating the form
+  activeFormId: null,  // the collection's token (named like this so app.js doesn't care how it works)
+  activeFormUrl: null, // the link inside the QR code
+  questionIds: null,   // unused now; kept so older code that reads it doesn't break
   currentCourseId: null,
 
   fileName(courseId) {
@@ -34,166 +33,112 @@ const EmailCollectModule = {
   async load(courseId) {
     this.currentCourseId = courseId;
     const data = await storage.loadFile(this.fileName(courseId));
-    if (data) {
-      this.activeFormId = data.activeFormId || null;
-      this.activeFormUrl = data.activeFormUrl || null;
-      this.questionIds = data.questionIds || null;
-    } else {
-      this.activeFormId = null;
-      this.activeFormUrl = null;
-      this.questionIds = null;
-    }
+    // Data from the old Google Form version has no "token" — treat it as "no active collection".
+    this.activeFormId = data && data.token ? data.token : null;
+    this.activeFormUrl = this.activeFormId ? this._urlFor(this.activeFormId) : null;
+    this.questionIds = null;
   },
 
   async save() {
     if (!this.currentCourseId) throw new Error("No course selected.");
-    await storage.saveFile(this.fileName(this.currentCourseId), {
-      activeFormId: this.activeFormId,
-      activeFormUrl: this.activeFormUrl,
-      questionIds: this.questionIds,
-    });
+    await storage.saveFile(this.fileName(this.currentCourseId), { token: this.activeFormId });
   },
 
   hasActiveForm() {
     return !!this.activeFormId;
   },
 
-  async _apiFetch(url, options = {}) {
-    const token = await storage.getAccessToken();
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Google API error (${response.status}): ${text.slice(0, 300)}`);
-    }
-    if (response.status === 204) return null; // no content (e.g. DELETE)
-    return response.json();
+  /** Same cleaning the server does: full-width -> normal, no spaces, lower-case. */
+  _norm(value) {
+    return String(value == null ? "" : value).trim().normalize("NFKC").replace(/\s+/g, "").toLowerCase();
   },
 
-  /** Creates, configures, and publishes a new Google Form for collecting emails from the given students' School IDs. */
+  _urlFor(token) {
+    return new URL(`collect.html?c=${encodeURIComponent(token)}`, location.href).href;
+  },
+
+  _newToken() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  },
+
+  _client() {
+    if (!storage || !storage.client) throw new Error("Not signed in.");
+    return storage.client;
+  },
+
+  _explain(error) {
+    const text = `${(error && (error.code || "")) } ${(error && error.message) || ""}`;
+    if (/PGRST205|42P01|schema cache|does not exist/i.test(text)) {
+      return new Error(
+        "The email-collection tables aren't set up in Supabase yet. Run collect-setup.sql in Supabase (SQL Editor), then try again."
+      );
+    }
+    return new Error((error && error.message) || "Something went wrong.");
+  },
+
+  _schoolIds(students) {
+    return Array.from(new Set(students.map((s) => this._norm(s.schoolId)).filter(Boolean)));
+  },
+
+  /** Opens a new collection for this course's roster and returns its QR link. */
   async createForm(students, courseName) {
-    const schoolIds = students.map((s) => String(s.schoolId || "").trim()).filter(Boolean);
-    if (schoolIds.length === 0) {
+    const ids = this._schoolIds(students);
+    if (ids.length === 0) {
       throw new Error("No students on the roster have a School ID yet — add those first.");
     }
+    const token = this._newToken();
+    const { error } = await this._client()
+      .from("collections")
+      .insert({ token, course_name: courseName || "Class", school_ids: ids });
+    if (error) throw this._explain(error);
 
-    // 1. Create the form (title only — Forms API requires items to be added separately).
-    const created = await this._apiFetch(FORMS_API_BASE, {
-      method: "POST",
-      body: JSON.stringify({
-        info: { title: `${courseName || "Class"} — Email Address Collection` },
-      }),
-    });
-    const formId = created.formId;
-
-    // 2. Add the two questions.
-    const batchResult = await this._apiFetch(`${FORMS_API_BASE}/${formId}:batchUpdate`, {
-      method: "POST",
-      body: JSON.stringify({
-        requests: [
-          {
-            createItem: {
-              item: {
-                title: "Student ID",
-                questionItem: {
-                  question: {
-                    required: true,
-                    choiceQuestion: {
-                      type: "DROP_DOWN",
-                      options: schoolIds.map((id) => ({ value: id })),
-                    },
-                  },
-                },
-              },
-              location: { index: 0 },
-            },
-          },
-          {
-            createItem: {
-              item: {
-                title: "Email Address",
-                questionItem: {
-                  question: { required: true, textQuestion: { paragraph: false } },
-                },
-              },
-              location: { index: 1 },
-            },
-          },
-        ],
-      }),
-    });
-
-    const studentIdQuestionId = batchResult.replies[0].createItem.questionId[0];
-    const emailQuestionId = batchResult.replies[1].createItem.questionId[0];
-
-    // 3. Publish it, so students can actually submit responses.
-    await this._apiFetch(`${FORMS_API_BASE}/${formId}:setPublishSettings`, {
-      method: "POST",
-      body: JSON.stringify({
-        publishSettings: {
-          publishState: { isPublished: true, isAcceptingResponses: true },
-        },
-      }),
-    });
-
-    // 4. Get the responder link to build the QR code from.
-    const formDetail = await this._apiFetch(`${FORMS_API_BASE}/${formId}`);
-
-    this.activeFormId = formId;
-    this.activeFormUrl = formDetail.responderUri;
-    this.questionIds = { studentId: studentIdQuestionId, email: emailQuestionId };
+    this.activeFormId = token;
+    this.activeFormUrl = this._urlFor(token);
     await this.save();
-
-    return { formId, url: this.activeFormUrl };
+    return { formId: token, url: this.activeFormUrl };
   },
 
   /**
-   * Reads every response from the active form and matches each to a
-   * student by School ID. The form is left active and reusable — its
-   * QR code keeps working, and syncing again later just re-reads
-   * whatever's been submitted since (already-matched students are
-   * simply matched again, overwriting the same email). Call
-   * deleteForm() when you're done collecting for good, or want to
-   * start fresh with a new form.
+   * Reads every saved answer and matches each to a student by School ID.
+   * Returns { matches: [{ studentId, email, schoolId }], unmatchedCount, totalResponses }.
    */
   async syncResponses(students) {
-    if (!this.activeFormId) throw new Error("There's no active form to sync from — click \"Collect Email Addresses\" first.");
+    if (!this.activeFormId) {
+      throw new Error('There\'s no active collection to sync from — click "Collect Email Addresses" first.');
+    }
+    const client = this._client();
 
-    const data = await this._apiFetch(`${FORMS_API_BASE}/${this.activeFormId}/responses`);
-    const responses = data.responses || [];
+    // Let students added since the QR code was made answer too.
+    const { error: updateError } = await client
+      .from("collections")
+      .update({ school_ids: this._schoolIds(students) })
+      .eq("token", this.activeFormId);
+    if (updateError) throw this._explain(updateError);
 
-    const matches = []; // { studentId, email, schoolId }
+    const { data, error } = await client
+      .from("collection_responses")
+      .select("school_id, email, submitted_at")
+      .eq("token", this.activeFormId)
+      .order("submitted_at", { ascending: true });
+    if (error) throw this._explain(error);
+
+    const matches = [];
     let unmatchedCount = 0;
-
-    responses.forEach((response) => {
-      const idAnswer = response.answers && response.answers[this.questionIds.studentId];
-      const emailAnswer = response.answers && response.answers[this.questionIds.email];
-      const schoolId = idAnswer && idAnswer.textAnswers && idAnswer.textAnswers.answers[0]
-        ? idAnswer.textAnswers.answers[0].value.trim()
-        : "";
-      const email = emailAnswer && emailAnswer.textAnswers && emailAnswer.textAnswers.answers[0]
-        ? emailAnswer.textAnswers.answers[0].value.trim()
-        : "";
-      if (!schoolId || !email) return;
-
-      const student = students.find((s) => String(s.schoolId || "").trim() === schoolId);
-      if (student) matches.push({ studentId: student.id, email, schoolId });
+    (data || []).forEach((row) => {
+      const student = students.find((s) => this._norm(s.schoolId) === row.school_id);
+      if (student) matches.push({ studentId: student.id, email: row.email, schoolId: row.school_id });
       else unmatchedCount++;
     });
-
-    return { matches, unmatchedCount, totalResponses: responses.length };
+    return { matches, unmatchedCount, totalResponses: (data || []).length };
   },
 
-  /** Permanently deletes the active form — its QR code stops working. Use this when you're done collecting for good, or want to start over with a fresh form/QR code. */
+  /** Closes the collection and deletes its answers — the QR code stops working. */
   async deleteForm() {
     if (!this.activeFormId) return;
-    await this._apiFetch(`${DRIVE_API_BASE}/${this.activeFormId}`, { method: "DELETE" });
+    const { error } = await this._client().from("collections").delete().eq("token", this.activeFormId);
+    if (error) throw this._explain(error);
     this.activeFormId = null;
     this.activeFormUrl = null;
     this.questionIds = null;
