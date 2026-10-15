@@ -3909,9 +3909,20 @@ function buildTablePreview(tool, cfg, container) {
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
+  const studentsMode = cfg.firstColumn.mode !== "groups";
+  if (studentsMode) {
+    const numTh = document.createElement("th");
+    numTh.textContent = "Class #";
+    headRow.appendChild(numTh);
+  }
   const firstTh = document.createElement("th");
   firstTh.textContent = cfg.firstColumn.name;
   headRow.appendChild(firstTh);
+  if (studentsMode) {
+    const idTh = document.createElement("th");
+    idTh.textContent = "School ID";
+    headRow.appendChild(idTh);
+  }
   cfg.columns.forEach((col) => {
     const th = document.createElement("th");
     th.textContent = maxMode && col.maxPoints > 0 ? `${col.name} (/${col.maxPoints})` : col.name;
@@ -3929,7 +3940,7 @@ function buildTablePreview(tool, cfg, container) {
   if (identityRows.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = cfg.columns.length + 2;
+    td.colSpan = cfg.columns.length + (studentsMode ? 4 : 2);
     td.className = "hint";
     td.textContent =
       cfg.firstColumn.mode === "groups"
@@ -4046,9 +4057,23 @@ function buildTablePreviewRows(tool, cfg, container, lineId, label) {
 
   const tr = document.createElement("tr");
   if (hasSubRows) tr.className = "tracker-parent-row";
+  const studentsMode = cfg.firstColumn.mode !== "groups";
+  const student = studentsMode ? ((window.RosterModule && RosterModule.students) || []).find((s) => s.id === lineId) : null;
+  if (studentsMode) {
+    const numTd = document.createElement("td");
+    numTd.className = "tracker-id-cell tracker-class-num";
+    numTd.textContent = student && student.classNumber !== undefined && student.classNumber !== null ? String(student.classNumber) : "";
+    tr.appendChild(numTd);
+  }
   const labelTd = document.createElement("td");
   labelTd.textContent = label;
   tr.appendChild(labelTd);
+  if (studentsMode) {
+    const idTd = document.createElement("td");
+    idTd.className = "tracker-id-cell";
+    idTd.textContent = student && student.schoolId ? String(student.schoolId) : "";
+    tr.appendChild(idTd);
+  }
 
   cfg.columns.forEach((col) => {
     const td = document.createElement("td");
@@ -4101,9 +4126,11 @@ function buildTablePreviewRows(tool, cfg, container, lineId, label) {
   cfg.subRows.forEach((sub) => {
     const subTr = document.createElement("tr");
     subTr.className = "tracker-sub-row";
+    if (studentsMode) subTr.appendChild(document.createElement("td")); // under Class #
     const subLabel = document.createElement("td");
     subLabel.textContent = sub.name;
     subTr.appendChild(subLabel);
+    if (studentsMode) subTr.appendChild(document.createElement("td")); // under School ID
     cfg.columns.forEach((col) => {
       const td = document.createElement("td");
       if (col.type === "test") {

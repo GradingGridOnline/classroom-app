@@ -1036,3 +1036,7 @@ html[data-textsize="large"] { font-size: 118%; }
 .tracker-box-switch.on { background: var(--green); border-color: var(--green-dark); }
 .tracker-box-switch.on .tracker-box-switch-thumb { transform: translateX(16px); }
 .tracker-box-switch:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+/* Progress Tracker (students mode): Class # and School ID columns */
+.scoring-table .tracker-id-cell { white-space: nowrap; text-align: center; }
+.scoring-table .tracker-class-num { font-weight: 700; }
