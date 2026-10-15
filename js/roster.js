@@ -172,9 +172,28 @@ const RosterModule = {
       pronunciation: s.pronunciation || "",
       email: s.email || "",
       notes: s.notes || oldNotes.get(nameKey(s.name)) || "",
+      extra: s.extra && typeof s.extra === "object" ? { ...s.extra } : {},
       excludeFromSeating: false,
       excludeFromScoring: false,
     }));
+  },
+
+  /** Names of the extra columns kept from an uploaded file (in the order they first appear). Empty if the roster was typed in by hand. */
+  customFieldNames() {
+    const names = [];
+    this.students.forEach((s) => {
+      Object.keys(s.extra || {}).forEach((key) => {
+        if (!names.includes(key)) names.push(key);
+      });
+    });
+    return names;
+  },
+
+  /** One student's value for a field: "schoolId", "name", or "extra:<column name>". */
+  fieldValue(student, field) {
+    if (field === "name") return student.name || "";
+    if (field && field.startsWith("extra:")) return (student.extra && student.extra[field.slice(6)]) || "";
+    return student.schoolId || "";
   },
 
   remainingSlots() {

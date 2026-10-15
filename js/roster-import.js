@@ -73,10 +73,19 @@ const RosterImport = {
    * into the suffix box. Left blank, nothing is appended and the
    * column's own values are used exactly as they appear in the file.
    * A blank email cell never gets the suffix appended to it alone.
+   * mapping.extraCols (optional): column indexes to keep as extra
+   * fields, stored on each student as extra: { "<column header>":
+   * value } — e.g. a nickname or section column that emails can later
+   * be matched by.
    */
   buildStudents(mapping) {
     const suffix = (mapping.emailSuffix || "").trim();
+    const extraLabels = this.extraLabels(mapping.extraCols || []);
     return this.rows.map((row) => {
+      const extra = {};
+      extraLabels.forEach(({ idx, label }) => {
+        extra[label] = String(row[idx] ?? "").trim();
+      });
       const rawEmail = mapping.email >= 0 ? String(row[mapping.email] ?? "").trim() : "";
       return {
         name: String(row[mapping.name] ?? "").trim(),
@@ -89,7 +98,20 @@ const RosterImport = {
             ? String(row[mapping.pronunciation] ?? "").trim()
             : "",
         email: rawEmail && suffix ? `${rawEmail}${suffix}` : rawEmail,
+        extra,
       };
+    });
+  },
+
+  /** Unique, readable names for the chosen extra columns (blank headers become "Column 3"; repeats get " (2)"). */
+  extraLabels(indexes) {
+    const used = new Set();
+    return indexes.map((idx) => {
+      const base = this.headers[idx] || `Column ${idx + 1}`;
+      let label = base;
+      for (let n = 2; used.has(label); n++) label = `${base} (${n})`;
+      used.add(label);
+      return { idx, label };
     });
   },
 };

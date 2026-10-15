@@ -16,7 +16,7 @@
     } catch (e) {}
   </script>
   <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/grid.css?v=20261015" />
+  <link rel="stylesheet" href="css/grid.css?v=20261016" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Share+Tech+Mono&family=Michroma&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -151,6 +151,13 @@
               <label>Email suffix to append (optional)</label>
               <input type="text" id="map-email-suffix" placeholder="e.g. @university.edu — leave blank to use the column as-is" />
             </div>
+            <div class="mapping-row mapping-extra">
+              <label>Other columns to keep (optional)</label>
+              <div class="map-extra-box">
+                <div id="map-extra-list" class="map-extra-list"></div>
+                <p class="hint">Tick any columns you might want to match students by when collecting email addresses (a nickname, a section, another ID...). They're kept with each student and appear as choices in Email collection settings below the roster.</p>
+              </div>
+            </div>
             <div class="mapping-buttons">
               <button id="confirm-import-btn" class="btn btn-primary">Import (replaces current roster)</button>
               <button id="cancel-import-btn" class="btn btn-ghost">Cancel</button>
@@ -171,6 +178,26 @@
             </thead>
             <tbody id="roster-tbody"></tbody>
           </table>
+
+          <div class="attendance-settings" id="email-settings">
+            <div class="attendance-settings-header">
+              <h3>Email collection settings</h3>
+              <button id="toggle-email-settings-btn" class="btn btn-ghost btn-small" type="button">Edit Settings</button>
+            </div>
+            <div id="email-settings-body" hidden>
+              <p class="hint">What students type on the QR-code page before they can enter their email. The form's list follows the roster automatically: add a student or upload a new roster and they can answer straight away; replace a student and the old value stops working.</p>
+              <div class="mapping-row">
+                <label for="email-match-field">Students identify themselves with</label>
+                <select id="email-match-field"></select>
+              </div>
+              <div class="mapping-row">
+                <label for="email-match-label">Wording students see</label>
+                <input type="text" id="email-match-label" class="email-match-label" maxlength="40" />
+              </div>
+              <p id="email-match-note" class="hint"></p>
+              <p id="email-settings-status" class="status"></p>
+            </div>
+          </div>
 
           <p id="roster-status" class="result"></p>
         </div>

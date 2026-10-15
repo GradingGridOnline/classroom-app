@@ -1001,3 +1001,15 @@ html[data-textsize="large"] { font-size: 118%; }
 
 /* Make hidden sign-in pieces really hide (display:flex would otherwise override [hidden]). */
 .login-form[hidden], #sign-out-btn[hidden], .signin-prompt[hidden] { display: none !important; }
+
+
+/* ===== Email collection settings + extra CSV columns ===== */
+#email-settings { margin-top: 24px; }
+#email-settings .mapping-row label { width: 230px; flex: none; }
+.email-match-label { flex: 1; font-family: inherit; font-size: 0.9rem; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--ink); }
+.mapping-extra { align-items: flex-start; }
+.map-extra-box { flex: 1; }
+.map-extra-list { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.map-extra-list label { width: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--ink); cursor: pointer; }
+.map-extra-list .none { color: var(--ink-soft); font-size: 0.9rem; }
+@media (max-width: 640px) { #email-settings .mapping-row { flex-direction: column; align-items: stretch; gap: 4px; } #email-settings .mapping-row label { width: auto; } }

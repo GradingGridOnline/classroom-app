@@ -366,6 +366,8 @@ function renderAuth() {
   const settingsOpen = !el.settingsSection.hidden;
 
   if (signedIn) {
+    // Get Google's sign-in ready in the background (no popup) so the email buttons can open it instantly.
+    try { if (storage.getGoogle) Promise.resolve(storage.getGoogle()).catch(() => {}); } catch (e) { /* optional warm-up; never block sign-in */ }
     // Signing in from the Settings page: go on to the courses.
     if (settingsOpen) {
       el.settingsSection.hidden = true;
@@ -826,6 +828,7 @@ async function openCourseDetail(course) {
   try {
     await EmailCollectModule.load(course.id);
     renderEmailCollectButtons();
+    renderEmailSettings();
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't load email collection state: ${err.message}`;
   }
@@ -1032,6 +1035,19 @@ function openMappingPanel(headers, rowCount) {
   el.mapEmail.value = String(guess.email);
   el.mapEmailSuffix.value = "";
 
+  // Optional extra columns to keep (later usable to match students by when collecting emails).
+  const extraList = document.getElementById("map-extra-list");
+  extraList.innerHTML = "";
+  headers.forEach((header, idx) => {
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = String(idx);
+    label.appendChild(box);
+    label.appendChild(document.createTextNode(header || `Column ${idx + 1}`));
+    extraList.appendChild(label);
+  });
+
   el.mappingPanel.hidden = false;
 }
 
@@ -1047,6 +1063,7 @@ el.confirmImportBtn.addEventListener("click", () => {
     pronunciation: Number(el.mapPronunciation.value),
     email: Number(el.mapEmail.value),
     emailSuffix: el.mapEmailSuffix.value,
+    extraCols: Array.from(document.querySelectorAll("#map-extra-list input:checked")).map((box) => Number(box.value)),
   };
 
   if (RosterModule.students.length > 0) {
@@ -1061,7 +1078,10 @@ el.confirmImportBtn.addEventListener("click", () => {
     RosterModule.replaceAll(students);
     el.mappingPanel.hidden = true;
     renderRoster();
-    el.rosterStatus.textContent = `Imported ${students.length} students — click "Save Roster" to store them in Google Drive.`;
+    el.rosterStatus.textContent =
+      window.GGOAutosave && window.GGOAutosave.enabled()
+        ? `Imported ${students.length} students — saving automatically.`
+        : `Imported ${students.length} students — click "Save Roster" to store them.`;
   } catch (err) {
     el.rosterStatus.textContent = err.message;
   }
@@ -7067,9 +7087,10 @@ el.collectEmailBtn.addEventListener("click", async () => {
   el.emailCollectStatus.textContent = "Creating form…";
   const course = CoursesModule.find(RosterModule.currentCourseId);
   try {
-    await EmailCollectModule.createForm(RosterModule.students, course ? course.name : "");
+    const made = await EmailCollectModule.createForm(RosterModule.students, course ? course.name : "");
     renderEmailCollectButtons();
-    el.emailCollectStatus.textContent = "Form created — opening QR code…";
+    renderEmailSettings();
+    el.emailCollectStatus.textContent = "Form created — opening QR code…" + emailLeftOutNote(made.summary);
     window.open("emailqr.html", "ggo-email-qr", "width=480,height=560");
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't create the form: ${err.message}`;
@@ -7105,12 +7126,190 @@ el.syncEmailBtn.addEventListener("click", async () => {
     renderEmailCollectButtons();
     el.emailCollectStatus.textContent =
       `Matched ${result.matches.length} of ${result.totalResponses} response(s).` +
-      (result.unmatchedCount > 0 ? ` ${result.unmatchedCount} didn't match any School ID.` : "") +
-      (result.matches.length > 0 ? " Click Save Roster to store the emails." : "");
+      (result.unmatchedCount > 0 ? ` ${result.unmatchedCount} no longer match anyone on the roster (ignored).` : "") +
+      (result.matches.length > 0
+        ? window.GGOAutosave && window.GGOAutosave.enabled()
+          ? " Saving automatically."
+          : " Click Save Roster to store the emails."
+        : "");
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't sync: ${err.message}`;
   }
 });
+
+// ===== Email collection settings, and keeping the form's list equal to the roster =====
+
+/** " 3 students are left out: ..." — empty when everyone is in. */
+function emailLeftOutNote(summary) {
+  if (!summary) return "";
+  const parts = [];
+  if (summary.blank > 0) parts.push(`${summary.blank} with nothing filled in`);
+  if (summary.shared.length > 0) parts.push(`shared by several students (${summary.shared.join(", ")})`);
+  return parts.length ? ` Left out: ${parts.join("; ")}.` : "";
+}
+
+let emailSettingsOpen = false;
+const emailEls = {
+  toggle: document.getElementById("toggle-email-settings-btn"),
+  body: document.getElementById("email-settings-body"),
+  field: document.getElementById("email-match-field"),
+  label: document.getElementById("email-match-label"),
+  note: document.getElementById("email-match-note"),
+  status: document.getElementById("email-settings-status"),
+};
+
+function flashEmailSettingsStatus(text, ms = 2500) {
+  emailEls.status.textContent = text;
+  if (ms) setTimeout(() => { if (emailEls.status.textContent === text) emailEls.status.textContent = ""; }, ms);
+}
+
+/** Refreshes the settings section from the current roster and form. Cheap; safe to call often. */
+function renderEmailSettings() {
+  emailEls.body.hidden = !emailSettingsOpen;
+  emailEls.toggle.textContent = emailSettingsOpen ? "Hide Settings" : "Edit Settings";
+  if (!emailSettingsOpen) return;
+
+  const students = RosterModule.students;
+  const fields = EmailCollectModule.availableFields(students);
+  const optionsKey = fields.map((f) => f.value).join("\n");
+  if (emailEls.field.dataset.options !== optionsKey) {
+    emailEls.field.innerHTML = "";
+    fields.forEach((f) => {
+      const opt = document.createElement("option");
+      opt.value = f.value;
+      opt.textContent = f.label;
+      emailEls.field.appendChild(opt);
+    });
+    emailEls.field.dataset.options = optionsKey;
+  }
+  const effective = EmailCollectModule.effectiveField(students);
+  emailEls.field.value = effective;
+
+  emailEls.label.placeholder = EmailCollectModule.defaultLabel(effective);
+  if (document.activeElement !== emailEls.label) emailEls.label.value = EmailCollectModule.matchLabel;
+
+  const notes = [];
+  if (EmailCollectModule.matchField !== effective) {
+    notes.push(`The column "${EmailCollectModule.matchField.replace(/^extra:/, "")}" isn't on the roster any more, so School ID is being used.`);
+  }
+  if (fields.length === 2) {
+    notes.push("Other choices appear here when you upload a roster file and tick extra columns to keep in the import step.");
+  }
+  const info = EmailCollectModule.describe(students);
+  if (EmailCollectModule.hasActiveForm()) {
+    notes.push(
+      info.known
+        ? `${info.inForm} student${info.inForm === 1 ? "" : "s"} can answer.${emailLeftOutNote(info)}`
+        : "Updating the form…"
+    );
+  } else {
+    notes.push(`${info.inForm + info.shared.length} of ${students.length} students have a value filled in. Click "Collect Email Addresses" to start.`);
+  }
+  emailEls.note.textContent = notes.join(" ");
+}
+
+emailEls.toggle.addEventListener("click", () => {
+  emailSettingsOpen = !emailSettingsOpen;
+  renderEmailSettings();
+});
+
+emailEls.field.addEventListener("change", async () => {
+  const chosen = emailEls.field.value;
+  if (chosen === EmailCollectModule.matchField) return;
+  try {
+    if (EmailCollectModule.hasActiveForm()) {
+      const ok = confirm(
+        "Change what students are asked for?\n\nThe QR code keeps working, but students will be asked for the new item. " +
+          "Answers collected so far will be discarded, because they were matched the old way — click Sync Emails first if you haven't yet.\n\nContinue?"
+      );
+      if (!ok) { renderEmailSettings(); return; }
+      await EmailCollectModule.clearResponses();
+    }
+    EmailCollectModule.matchField = chosen;
+    EmailCollectModule.matchLabel = "";
+    await EmailCollectModule.save();
+    if (EmailCollectModule.hasActiveForm()) await EmailCollectModule.pushAllowed(RosterModule.students);
+    flashEmailSettingsStatus("Saved ✓");
+  } catch (err) {
+    flashEmailSettingsStatus(`Couldn't change it: ${err.message}`, 8000);
+  }
+  renderEmailSettings();
+});
+
+emailEls.label.addEventListener("change", async () => {
+  const typed = emailEls.label.value.trim();
+  EmailCollectModule.matchLabel = typed === EmailCollectModule.defaultLabel(EmailCollectModule.effectiveField(RosterModule.students)) ? "" : typed;
+  try {
+    await EmailCollectModule.save();
+    if (EmailCollectModule.hasActiveForm()) await EmailCollectModule.pushAllowed(RosterModule.students);
+    flashEmailSettingsStatus("Saved ✓");
+  } catch (err) {
+    flashEmailSettingsStatus(`Couldn't save: ${err.message}`, 8000);
+  }
+  renderEmailSettings();
+});
+
+// The open form always lists exactly the students on the roster right now. Whenever the roster's values
+// change (a student added or edited, a new file uploaded, a student replaced) the list is re-sent a moment
+// after the changes stop. Never runs while a course is still loading, so it can't send one course's students
+// to another course's form.
+(function keepEmailFormInSyncWithRoster() {
+  let loading = 0;
+  let rosterCourse = null;
+  let emailCourse = null;
+  let seenSig = null;
+  let pushing = false;
+  let retryAt = 0;
+
+  const origRosterLoad = RosterModule.load;
+  RosterModule.load = async function (...args) {
+    loading++;
+    rosterCourse = null;
+    try {
+      const r = await origRosterLoad.apply(this, args);
+      rosterCourse = RosterModule.currentCourseId;
+      return r;
+    } finally {
+      loading--;
+    }
+  };
+  const origEmailLoad = EmailCollectModule.load;
+  EmailCollectModule.load = async function (...args) {
+    loading++;
+    emailCourse = null;
+    seenSig = null;
+    try {
+      const r = await origEmailLoad.apply(this, args);
+      emailCourse = EmailCollectModule.currentCourseId;
+      return r;
+    } finally {
+      loading--;
+    }
+  };
+
+  setInterval(async () => {
+    if (loading || pushing || Date.now() < retryAt) return;
+    const course = RosterModule.currentCourseId;
+    if (!course || rosterCourse !== course || emailCourse !== course) return;
+    if (!storage || !storage.isSignedIn() || !EmailCollectModule.hasActiveForm()) return;
+
+    renderEmailSettings();
+    const sig = EmailCollectModule.signature(RosterModule.students);
+    if (sig === EmailCollectModule.lastPushedSig) { seenSig = null; return; }
+    if (sig !== seenSig) { seenSig = sig; return; } // wait until the changes have stopped
+    pushing = true;
+    try {
+      await EmailCollectModule.pushAllowed(RosterModule.students);
+      seenSig = null;
+      renderEmailSettings();
+    } catch (err) {
+      retryAt = Date.now() + 8000;
+      emailEls.note.textContent = `Couldn't update the email form (${err.message}) — retrying.`;
+    } finally {
+      pushing = false;
+    }
+  }, 1000);
+})();
 
 // ===== Report Card: emailing report cards as PDFs =====
 // Uses the same page as "Print This Student" / "Print All Students"
