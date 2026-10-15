@@ -122,6 +122,7 @@ const TemplatesModule = {
         if (tool.config && typeof tool.config === "object") {
           tool.config.values = {}; // entered scores
           tool.config.subValues = {}; // entered sub-row scores
+          tool.config.off = {}; // per-student "turned off" boxes
           if (tool.type === "presentation") {
             // Keep each project's rubrics and settings; drop its imported students + groups and entered scores.
             const clearProject = (project) => {
@@ -287,6 +288,15 @@ const TemplatesModule = {
         Object.entries(oc.subValues || {}).forEach(([key, value]) => {
           const [line, sub, col] = key.split("|");
           if (subMap[sub] && colMap[col]) nc.subValues[`${line}|${subMap[sub]}|${colMap[col]}`] = value;
+        });
+        // Boxes turned off with the "choose boxes" switch stay off, re-pointed at the template's columns/sub-rows.
+        nc.off = {};
+        Object.keys(oc.off || {}).forEach((key) => {
+          const parts = key.split("|");
+          if (parts.length === 2 && colMap[parts[1]]) nc.off[`${parts[0]}|${colMap[parts[1]]}`] = true;
+          else if (parts.length === 3 && subMap[parts[1]] && colMap[parts[2]]) {
+            nc.off[`${parts[0]}|${subMap[parts[1]]}|${colMap[parts[2]]}`] = true;
+          }
         });
       } else if (nt.type === "testbank") {
         nc.tests = Array.isArray(oc.tests) ? oc.tests : [];

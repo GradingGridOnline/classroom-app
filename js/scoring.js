@@ -420,6 +420,11 @@ const ScoringModule = {
     // keyed "lineId|subRowId|columnId".
     if (!Array.isArray(cfg.subRows)) cfg.subRows = [];
     if (!cfg.subValues || typeof cfg.subValues !== "object") cfg.subValues = {};
+    // Boxes turned OFF ("choose boxes" switch): a box that's off takes no score and is left out of its row's
+    // total and maximum. Sparse — only off boxes are listed: "lineId|columnId" → true, or
+    // "lineId|subRowId|columnId" → true for a sub-row box. What was typed in an off box is kept, so turning
+    // it back on brings it back.
+    if (!cfg.off || typeof cfg.off !== "object") cfg.off = {};
 
     // The fixed Total Score column's own setting: "raw" (the plain sum)
     // or "max" (the sum shown out of totalColumn.maxPoints, and sent to
@@ -598,19 +603,50 @@ const ScoringModule = {
     if (sub) sub.name = (name || "").trim() || sub.name;
   },
 
-  /** The maximum for one column's main-row box in "max" mode: the column's maximum, times the number of sub-rows when it is split into sub-rows (test/quiz columns aren't). 0 in "raw" mode. */
-  tableColumnMax(toolId, column) {
+  /** Which stored key a box is under: a main-row box ("lineId|columnId") or, with subId, a sub-row box ("lineId|subId|columnId"). */
+  _tableCellKey(lineId, columnId, subId) {
+    return subId ? `${lineId}|${subId}|${columnId}` : `${lineId}|${columnId}`;
+  },
+
+  /** True unless this box has been turned off with the "choose boxes" switch. */
+  isTableCellOn(toolId, lineId, columnId, subId) {
+    const cfg = this.getTableConfig(toolId);
+    return !(cfg && cfg.off[this._tableCellKey(lineId, columnId, subId)]);
+  },
+
+  /** Turns one box on or off (its typed value is kept either way). */
+  setTableCellOn(toolId, lineId, columnId, on, subId) {
+    const cfg = this.getTableConfig(toolId);
+    if (!cfg) return;
+    const key = this._tableCellKey(lineId, columnId, subId);
+    if (on) delete cfg.off[key];
+    else cfg.off[key] = true;
+  },
+
+  /**
+   * The maximum for one column's main-row box in "max" mode: the column's maximum, times the number of
+   * sub-rows when it is split into sub-rows (test/quiz columns aren't). 0 in "raw" mode. Give lineId to get
+   * that ROW's maximum — boxes turned off on that row don't count towards it.
+   */
+  tableColumnMax(toolId, column, lineId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg || cfg.mode !== "max") return 0;
     const split = column.type !== "test" && cfg.subRows.length > 0;
-    return (column.maxPoints || 0) * (split ? cfg.subRows.length : 1);
+    if (!split) {
+      if (lineId !== undefined && !this.isTableCellOn(toolId, lineId, column.id)) return 0;
+      return column.maxPoints || 0;
+    }
+    const boxes = lineId === undefined
+      ? cfg.subRows.length
+      : cfg.subRows.filter((sub) => this.isTableCellOn(toolId, lineId, column.id, sub.id)).length;
+    return (column.maxPoints || 0) * boxes;
   },
 
-  /** The maximum for the Total Score column in "max" mode: the sum of every column's maximum (0 in "raw" mode). Automatic — not chosen by the user. */
-  tableMaxTotal(toolId) {
+  /** The maximum for the Total Score column in "max" mode: the sum of every column's maximum (0 in "raw" mode). Automatic — not chosen by the user. Give lineId for one row's own maximum (boxes turned off on that row are left out). */
+  tableMaxTotal(toolId, lineId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg || cfg.mode !== "max") return 0;
-    return cfg.columns.reduce((sum, col) => sum + this.tableColumnMax(toolId, col), 0);
+    return cfg.columns.reduce((sum, col) => sum + this.tableColumnMax(toolId, col, lineId), 0);
   },
 
   // ----- Progress Tracker cell values -----
@@ -656,6 +692,7 @@ const ScoringModule = {
     if (!cfg) return null;
     if (column.type === "test") {
       if (cfg.firstColumn.mode !== "students") return null;
+      if (cfg.off[this._tableCellKey(lineId, column.id)]) return null;
       const source = column.testSource || {};
       return source.toolId && source.testId ? this.testScore(source.toolId, source.testId, lineId) : null;
     }
@@ -663,6 +700,7 @@ const ScoringModule = {
       let sum = 0;
       let any = false;
       cfg.subRows.forEach((sub) => {
+        if (cfg.off[`${lineId}|${sub.id}|${column.id}`]) return;
         const raw = cfg.subValues[`${lineId}|${sub.id}|${column.id}`];
         if (raw === undefined) return;
         const num = Number(raw);
@@ -673,16 +711,29 @@ const ScoringModule = {
       });
       return any ? sum : null;
     }
+    if (cfg.off[`${lineId}|${column.id}`]) return null;
     const raw = cfg.values[`${lineId}|${column.id}`];
     if (raw === undefined) return null;
     const num = Number(raw);
     return Number.isNaN(num) ? null : num;
   },
 
+  /** True if at least one box on this row is still on (a row with no boxes on has no score at all). */
+  _tableHasActiveBox(cfg, lineId) {
+    if (Object.keys(cfg.off).length === 0) return true;
+    return cfg.columns.some((col) => {
+      if (col.type !== "test" && cfg.subRows.length > 0) {
+        return cfg.subRows.some((sub) => !cfg.off[`${lineId}|${sub.id}|${col.id}`]);
+      }
+      return !cfg.off[`${lineId}|${col.id}`];
+    });
+  },
+
   /** The fixed Total Score for one line: the sum of every column's value on that line (blank/non-numeric entries count as 0). Returns null if the tracker has no columns at all, so the caller can show "—" instead of a bare 0. */
   computeTableScoreSum(toolId, lineId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg || cfg.columns.length === 0) return null;
+    if (!this._tableHasActiveBox(cfg, lineId)) return null; // every box on this row is turned off
     let sum = 0;
     cfg.columns.forEach((col) => {
       const num = this.tableCellNumber(toolId, lineId, col);
@@ -710,6 +761,20 @@ const ScoringModule = {
         (subIds && subIds.has(subId))
       ) {
         delete cfg.subValues[key];
+      }
+    });
+    // ...and any "turned off" marks for the same boxes (main-row keys have 2 parts, sub-row keys 3).
+    Object.keys(cfg.off || {}).forEach((key) => {
+      const parts = key.split("|");
+      const lineId = parts[0];
+      const columnId = parts.length === 3 ? parts[2] : parts[1];
+      const subId = parts.length === 3 ? parts[1] : null;
+      if (
+        (lineIds && lineIds.has(lineId)) ||
+        (columnIds && columnIds.has(columnId)) ||
+        (subIds && subId && subIds.has(subId))
+      ) {
+        delete cfg.off[key];
       }
     });
   },
@@ -1736,7 +1801,7 @@ const ScoringModule = {
     // → 85), which then goes through the item's Score Sources weights
     // like any other contribution. Raw mode sends the plain sum.
     return this._totalContribution(
-      { totalColumn: { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id) } },
+      { totalColumn: { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id, rowKey) } },
       sum
     );
   },
@@ -1798,7 +1863,7 @@ const ScoringModule = {
       const sum = this._trackerSumForStudent(tool, studentId);
       if (sum === null) return;
       const cfg = this.getTableConfig(tool.id);
-      const points = this._scaleToItem(sum, { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id) }, item);
+      const points = this._scaleToItem(sum, { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id, this._trackerRowKey(tool, studentId)) }, item);
       if (points === null) return;
       sources.push({ key: toolId, label, weight, points });
     });
@@ -1826,19 +1891,22 @@ const ScoringModule = {
     return sum;
   },
 
+  /** The tracker row a student's score lives on: their own id ("students" mode) or their group number as a string ("groups" mode); null if they have none. */
+  _trackerRowKey(tool, studentId) {
+    const cfg = this.getTableConfig(tool.id);
+    if (!cfg) return null;
+    if (cfg.firstColumn.mode === "groups") {
+      const groupNumber = this._studentGroupNumber(studentId);
+      return groupNumber ? String(groupNumber) : null;
+    }
+    return studentId;
+  },
+
   /** A Progress Tracker's Total Score for one student (or their group), or null if unavailable. */
   _trackerSumForStudent(tool, studentId) {
     if (tool.type !== "table") return null;
-    const cfg = this.getTableConfig(tool.id);
-    if (!cfg) return null;
-    let rowKey;
-    if (cfg.firstColumn.mode === "groups") {
-      const groupNumber = this._studentGroupNumber(studentId);
-      if (!groupNumber) return null;
-      rowKey = String(groupNumber);
-    } else {
-      rowKey = studentId;
-    }
+    const rowKey = this._trackerRowKey(tool, studentId);
+    if (rowKey === null) return null;
     return this.computeTableScoreSum(tool.id, rowKey);
   },
 

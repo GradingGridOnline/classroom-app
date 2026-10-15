@@ -3832,6 +3832,24 @@ function renderScoringToolTableView(tool, container) {
     "Enter scores below; the Total Score column adds up each row (with sub-rows, each box in the main row adds up its sub-rows first). To use a total in Main Scores, open an item's Sources panel and give this tracker a weight.";
   container.appendChild(hint);
 
+  const choosing = trackerChoosing(tool);
+  const modeRow = document.createElement("div");
+  modeRow.className = "tracker-mode-row";
+  modeRow.appendChild(
+    makeTrackerModeSwitch(choosing, (on) => {
+      trackerChooseMode.set(tool.id, on);
+      renderScoringToolView(tool, container);
+    })
+  );
+  if (choosing) {
+    const chooseHint = document.createElement("span");
+    chooseHint.className = "hint";
+    chooseHint.textContent =
+      "Choosing boxes: switch a box off and it stops taking scores and is left out of its row's total and maximum (what was typed in it is kept). Switch back to Scoring to enter scores.";
+    modeRow.appendChild(chooseHint);
+  }
+  container.appendChild(modeRow);
+
   container.appendChild(buildTablePreview(tool, cfg, container));
 
   const settingsWrap = document.createElement("div");
@@ -3929,13 +3947,80 @@ function buildTablePreview(tool, cfg, container) {
   return wrap;
 }
 
-/** One score box. subId (optional) makes it a sub-row's box. */
-function makeTrackerInput(tool, cfg, container, lineId, col, subId) {
+/** Progress Trackers currently in "choose boxes" mode (toolId → true). Just a view setting, so it isn't saved. */
+const trackerChooseMode = new Map();
+function trackerChoosing(tool) {
+  return trackerChooseMode.get(tool.id) === true;
+}
+
+/** The Scoring ↔ Choose boxes switch above the grid. */
+function makeTrackerModeSwitch(choosing, onChange) {
+  const label = document.createElement("label");
+  label.className = "tracker-switch";
+  const left = document.createElement("span");
+  left.className = "tracker-switch-text" + (choosing ? "" : " active");
+  left.textContent = "Scoring";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.setAttribute("role", "switch");
+  input.checked = choosing;
+  input.addEventListener("change", () => onChange(input.checked));
+  const track = document.createElement("span");
+  track.className = "tracker-switch-track";
+  const right = document.createElement("span");
+  right.className = "tracker-switch-text" + (choosing ? " active" : "");
+  right.textContent = "Choose boxes";
+  label.appendChild(left);
+  label.appendChild(input);
+  label.appendChild(track);
+  label.appendChild(right);
+  return label;
+}
+
+/** The small on/off switch shown inside a box while choosing. */
+function makeBoxSwitch(isOn, onToggle, title) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "tracker-box-switch" + (isOn ? " on" : "");
+  btn.setAttribute("role", "switch");
+  btn.setAttribute("aria-checked", isOn ? "true" : "false");
+  btn.title = title || (isOn ? "On — click to turn this box off" : "Off — click to turn this box on");
+  const thumb = document.createElement("span");
+  thumb.className = "tracker-box-switch-thumb";
+  btn.appendChild(thumb);
+  btn.addEventListener("click", onToggle);
+  return btn;
+}
+
+/** A box plus (while choosing) its on/off switch. */
+function makeTrackerBox(tool, cfg, container, lineId, col, subId) {
+  const choosing = trackerChoosing(tool);
+  const isOn = ScoringModule.isTableCellOn(tool.id, lineId, col.id, subId);
+  const wrap = document.createElement("div");
+  wrap.className = "tracker-box" + (isOn ? "" : " tracker-box-off");
+  wrap.appendChild(makeTrackerInput(tool, cfg, container, lineId, col, subId, choosing || !isOn));
+  if (choosing) {
+    wrap.appendChild(
+      makeBoxSwitch(isOn, async () => {
+        ScoringModule.setTableCellOn(tool.id, lineId, col.id, !isOn, subId);
+        await saveScoringToolThen(tool, container);
+      })
+    );
+  }
+  return wrap;
+}
+
+/** One score box. subId (optional) makes it a sub-row's box. locked: shown but can't be typed in (choosing mode, or the box is off). */
+function makeTrackerInput(tool, cfg, container, lineId, col, subId, locked) {
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "decimal";
   input.className = "scoring-score-input";
   input.value = ScoringModule.getTableValue(tool.id, lineId, col.id, subId);
+  if (locked) {
+    input.disabled = true;
+    if (!ScoringModule.isTableCellOn(tool.id, lineId, col.id, subId)) input.title = "This box is turned off";
+  }
   if (cfg.mode === "max" && col.maxPoints > 0) {
     input.placeholder = `/${col.maxPoints}`;
     input.title = `Out of ${col.maxPoints}`;
@@ -3969,21 +4054,41 @@ function buildTablePreviewRows(tool, cfg, container, lineId, label) {
     const td = document.createElement("td");
     if (col.type === "test" || hasSubRows) {
       const num = ScoringModule.tableCellNumber(tool.id, lineId, col);
-      const colMax = ScoringModule.tableColumnMax(tool.id, col);
+      const colMax = ScoringModule.tableColumnMax(tool.id, col, lineId);
+      const boxOn = col.type !== "test" || ScoringModule.isTableCellOn(tool.id, lineId, col.id);
       td.className = col.type === "test" ? "hint" : "tracker-parent-sum";
-      td.textContent =
-        num === null ? "—" : String(Math.round(num * 100) / 100) + (maxMode && colMax > 0 ? `/${colMax}` : "");
+      const text = document.createElement("span");
+      text.textContent = !boxOn
+        ? "off"
+        : num === null ? "—" : String(Math.round(num * 100) / 100) + (maxMode && colMax > 0 ? `/${colMax}` : "");
+      if (col.type === "test" && (trackerChoosing(tool) || !boxOn)) {
+        // A quiz/test box has no typing in it, but can still be switched off.
+        const wrap = document.createElement("div");
+        wrap.className = "tracker-box" + (boxOn ? "" : " tracker-box-off");
+        wrap.appendChild(text);
+        if (trackerChoosing(tool)) {
+          wrap.appendChild(
+            makeBoxSwitch(boxOn, async () => {
+              ScoringModule.setTableCellOn(tool.id, lineId, col.id, !boxOn);
+              await saveScoringToolThen(tool, container);
+            })
+          );
+        }
+        td.appendChild(wrap);
+      } else {
+        td.appendChild(text);
+      }
       tr.appendChild(td);
       return;
     }
-    td.appendChild(makeTrackerInput(tool, cfg, container, lineId, col));
+    td.appendChild(makeTrackerBox(tool, cfg, container, lineId, col));
     tr.appendChild(td);
   });
 
   const totalTd = document.createElement("td");
   totalTd.className = "attendance-stat-cell";
   const sum = ScoringModule.computeTableScoreSum(tool.id, lineId);
-  const totalMax = ScoringModule.tableMaxTotal(tool.id);
+  const totalMax = ScoringModule.tableMaxTotal(tool.id, lineId); // this row's own maximum (boxes turned off don't count)
   if (sum === null) {
     totalTd.textContent = "—";
   } else {
@@ -4005,7 +4110,7 @@ function buildTablePreviewRows(tool, cfg, container, lineId, label) {
         td.className = "hint";
         td.textContent = "—";
       } else {
-        td.appendChild(makeTrackerInput(tool, cfg, container, lineId, col, sub.id));
+        td.appendChild(makeTrackerBox(tool, cfg, container, lineId, col, sub.id));
       }
       subTr.appendChild(td);
     });
