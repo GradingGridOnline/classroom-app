@@ -4634,8 +4634,6 @@ function presPageInSection(page, title) {
   return wrapper;
 }
 
-const presFillStatus = new Map(); // "toolId|projectId" -> message after "Fill Scores from QR Forms"
-
 function buildPresentationScoresPage(tool, cfg, container) {
   const page = document.createElement("div");
   const scoresSection = makePresSection("Scores");
@@ -4652,49 +4650,27 @@ function buildPresentationScoresPage(tool, cfg, container) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill the grid with the button below (it uses the data sets in use on the QR Forms tab) or type scores in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — the Teacher, Audience and Peer cells are loaded automatically from the data sets in use on the QR Forms tab, and you can also type scores in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
   scoresSection.body.appendChild(hint);
 
-  // ----- Fill from the QR Forms data sets that are in use -----
+  // ----- Which QR Forms data sets are loaded into the grid -----
   {
-    const fillKey = `${tool.id}|${cfg.id}`;
-    const bar = document.createElement("div");
-    bar.className = "panel-toolbar-buttons";
-    const fillBtn = document.createElement("button");
-    fillBtn.type = "button";
-    fillBtn.className = "btn btn-primary";
-    fillBtn.textContent = "Fill Scores from QR Forms";
-    fillBtn.title = "Puts the averages from the data set in use for Teacher, Audience and Peer Evaluation (chosen on the QR Forms tab) into the grid below";
-    const inUse = ["teacher", "audience", "peer"]
-      .map((kind) => [kind, ScoringModule.presentationSelectedSet(tool.id, cfg.id, kind)])
-      .filter(([, set]) => set);
-    fillBtn.disabled = inUse.length === 0 || groups.length === 0;
-    fillBtn.addEventListener("click", () => {
-      if (!confirm("This replaces the Teacher, Audience and Peer Evaluation cells of the grid with the averages from the data sets in use. Continue?")) return;
-      const result = ScoringModule.presFillFromDataSets(tool.id, cfg.id);
-      const cells = Object.values(result.filled).reduce((sum, n) => sum + n, 0);
-      presFillStatus.set(
-        fillKey,
-        `Filled ${cells} cell(s) of the grid.` + (result.clamped > 0 ? ` ${result.clamped} average(s) were above the rubric's points and were limited to it.` : "")
-      );
-      presFormsSave();
-      renderScoringToolView(tool, container);
-    });
-    bar.appendChild(fillBtn);
-    scoresSection.body.appendChild(bar);
-
     const using = document.createElement("p");
     using.className = "hint";
     const labels = { teacher: "Teacher", audience: "Audience", peer: "Peer Evaluation" };
-    using.textContent = inUse.length
-      ? `Data sets in use: ${inUse.map(([kind, set]) => `${labels[kind]} — ${set.name}`).join("; ")}. Change them on the QR Forms tab.`
-      : "No collected data yet — launch a QR code on the QR Forms tab.";
+    const inUse = ["teacher", "audience", "peer"]
+      .map((kind) => [kind, ScoringModule.presentationSelectedSet(tool.id, cfg.id, kind)])
+      .filter(([, set]) => set);
+    using.innerHTML = "<strong>Loaded from QR Forms:</strong> ";
+    using.appendChild(
+      document.createTextNode(
+        inUse.length
+          ? inUse.map(([kind, set]) => `${labels[kind]} — ${set.name}`).join("; ") + ". Choose a different data set on the QR Forms tab to load it here."
+          : "nothing yet — launch a QR code on the QR Forms tab and choose a data set."
+      )
+    );
     scoresSection.body.appendChild(using);
-    const fillResult = document.createElement("p");
-    fillResult.className = "result";
-    fillResult.textContent = presFillStatus.get(fillKey) || "";
-    scoresSection.body.appendChild(fillResult);
   }
 
   if (groups.length > 0 && rubricColumnCount > 0) {
@@ -5581,6 +5557,14 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
   const sets = ScoringModule.presentationDataSets(tool.id, project.id, kind);
   const chosen = ScoringModule.presentationSelectedSet(tool.id, project.id, kind);
 
+  /** Puts the data set in use for this kind into the scoring grid. Returns a sentence for the status line ("" if there is none). */
+  const loadIntoGrid = () => {
+    const now = ScoringModule.presentationSelectedSet(tool.id, project.id, kind);
+    if (!now) return "";
+    const r = ScoringModule.presLoadDataSet(tool.id, project.id, kind); // clears this kind's cells first, then fills them
+    return ` Loaded into the scoring grid (${r.applied} cell(s))` + (r.clamped > 0 ? `; ${r.clamped} average(s) above the rubric's points were limited to it` : "") + ".";
+  };
+
   const table = document.createElement("table");
   table.className = "roster-table pres-dataset-table";
   table.innerHTML = "<thead><tr><th>In use</th><th>Data set</th><th>QR code</th><th>Responses</th><th>Last updated</th><th></th></tr></thead>";
@@ -5627,10 +5611,10 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
     } else {
       action(useTd, "Use this set", async () => {
         ScoringModule.presentationSelectSet(tool.id, project.id, kind, set.id);
-        say(`"${set.name}" is now the ${PRES_KIND_LABEL[kind]} data set in use. Click "Fill Scores from QR Forms" on the Scores tab to load it into the grid.`);
+        say(`"${set.name}" is now the ${PRES_KIND_LABEL[kind]} data set in use.` + loadIntoGrid());
         presFormsSave();
         rerender();
-      }, "Reports and the Scores tab will use this data set");
+      }, "Loads this data set into the Scores grid; reports use it too");
     }
     tr.appendChild(useTd);
 
@@ -5679,6 +5663,7 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
                 (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "") +
                 result.note
         );
+        if (chosen && chosen.id === set.id) say(presFormStatus.get(key) + loadIntoGrid()); // the set in use was refreshed: reload it
         presFormsSave();
         rerender();
       }, "Copies the answers students have submitted so far into this data set");
@@ -5705,7 +5690,7 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
       }
       await PresentationFormsModule.remove(tool.id, project.id, set.id);
       expanded.delete(set.id);
-      say(`Deleted "${set.name}".`);
+      say(`Deleted "${set.name}".` + loadIntoGrid()); // if another set took its place, it is loaded now
       presFormsSave();
       rerender();
     });
@@ -5784,7 +5769,7 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     const explain = document.createElement("p");
     explain.className = "hint";
     explain.textContent =
-      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Close QR Code stops new answers and keeps the data set. Only the data set marked \"In use\" is used for scoring and reports.";
+      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Close QR Code stops new answers and keeps the data set. The data set marked \"In use\" is loaded into the Scores grid and used for reports; choosing another one (Use this set) loads it right away.";
     body.appendChild(explain);
 
     const status = document.createElement("p");

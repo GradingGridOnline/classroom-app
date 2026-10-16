@@ -1404,6 +1404,23 @@ const ScoringModule = {
     return chosen ? [chosen] : [];
   },
 
+  /** Loads the data set in use for one kind into the Scores grid: that kind's cells are cleared first (so nothing left over from another data set stays), then filled with the averages. Returns { applied, clamped }. */
+  presLoadDataSet(toolId, projectId, kind) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return { applied: 0, clamped: 0 };
+    const set = this.presentationSelectedSet(toolId, projectId, kind);
+    if (!set) return { applied: 0, clamped: 0 };
+    const groups = this.presentationGroups(toolId, projectId);
+    if (kind === "peer") {
+      groups.forEach((group) => delete project.values[`${group}|peer`]);
+      return this.presApplyPeerAverages(toolId, projectId);
+    }
+    this.presentationColumns(toolId, projectId)
+      .filter((c) => c.kind === kind)
+      .forEach((col) => groups.forEach((group) => delete project.values[`${group}|${col.entryId}`]));
+    return this.presApplySheetAverages(toolId, projectId, kind);
+  },
+
   /** Loads the data sets in use (Teacher, Audience, Peer Evaluation) into the Scores grid. Returns { filled: {kind: cells}, clamped, used: {kind: name} }. */
   presFillFromDataSets(toolId, projectId) {
     const result = { filled: {}, clamped: 0, used: {} };

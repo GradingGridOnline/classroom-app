@@ -1130,3 +1130,18 @@ html[data-textsize="large"] { font-size: 118%; }
     grid-template-columns: 1fr;
   }
 }
+
+/* Tron: dark-blue text (from the theme) on every bright-blue button, instead of white */
+[data-theme="tron-legacy"] .btn-primary,
+[data-theme="tron-legacy"] .btn-primary:hover,
+[data-theme="tron-legacy"] .btn-primary:focus,
+[data-theme="tron-legacy"] .btn-primary:disabled,
+[data-theme="tron-legacy"] .session-present-btn,
+[data-theme="tron-legacy"] .unseated-item-selected,
+[data-theme="tron-legacy"] .unseated-item-selected .unseated-classnumber {
+  color: var(--paper);
+  font-weight: 700;
+}
+[data-theme="tron-legacy"] .unseated-item-selected .unseated-classnumber {
+  background: rgba(6, 27, 36, 0.18);
+}
