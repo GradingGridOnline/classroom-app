@@ -4572,7 +4572,7 @@ function renderScoringToolPresentationView(tool, container) {
     ["scores", "Scores"],
     ["groups", "Student Groups"],
     ["rubrics", "Rubrics"],
-    ["templates", "Templates"],
+    ["templates", "QR Forms"],
   ].forEach(([id, label]) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -4612,7 +4612,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill it from uploaded Peer Evaluation sheets (below) or type it in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill it from the QR Forms tab (Fill Scores Grid) or type it in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
   page.appendChild(hint);
 
@@ -4746,8 +4746,6 @@ function buildPresentationScoresPage(tool, cfg, container) {
   page.appendChild(buildTableTotalColumnBlock(tool, cfg, container, cfg.id));
   page.appendChild(buildPresentationPrintSection(tool, cfg));
   page.appendChild(buildPresentationEmailSection(tool, cfg));
-  page.appendChild(buildPresentationFormsSection(tool, cfg, container));
-  page.appendChild(buildPresentationUploadsSection(tool, cfg, container));
   return page;
 }
 
@@ -5481,27 +5479,13 @@ function buildTestSourceSelect(selected, onChange) {
 }
 
 // ----- Templates page (Presentation Calc) -----
-// Three buttons that each download a CSV score sheet built from this
-// tool's groups, active rubrics, and the settings below. The settings
-// (instructions, comments on/off, highest peer score) are saved with
-// "Save Scoring".
+// The "QR Forms" subtab: one QR launcher per form (Teacher, Audience,
+// Peer Evaluation), the data collected by each, and the settings the
+// forms use (instructions, comments on/off, highest peer score), which
+// are saved with "Save Scoring".
 
 const DEFAULT_AUDIENCE_INSTRUCTIONS =
   "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer.";
-
-function downloadPresentationTemplate(tool, project, kind, label, status) {
-  try {
-    const rows = ScoringModule.buildPresentationTemplateRows(tool.id, project.id, kind);
-    const csv = XLSX.utils.sheet_to_csv(XLSX.utils.aoa_to_sheet(rows));
-    const course = CoursesModule.find(RosterModule.currentCourseId);
-    const safeName = (course ? course.name : "Course").replace(/[\\/:*?"<>|]/g, "").trim() || "Course";
-    const safeProject = project.name.replace(/[\\/:*?"<>|]/g, "").trim();
-    downloadCsv(csv, `${[safeName, safeProject, label].filter(Boolean).join(" ")}.csv`);
-    status.textContent = `Downloaded "${label}".`;
-  } catch (err) {
-    status.textContent = err.message;
-  }
-}
 
 function buildPresentationTemplatesPage(tool, cfg, container) {
   const page = document.createElement("div");
@@ -5545,27 +5529,17 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     return textarea;
   };
 
-  const makeDownloadButton = (label, kind) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-primary";
-    btn.textContent = label;
-    btn.style.marginTop = "10px";
-    btn.addEventListener("click", () => downloadPresentationTemplate(tool, cfg, kind, label, status));
-    return btn;
-  };
-
   // ----- Teacher Score Sheet -----
   const teacher = addSection(
-    "Teacher Score Sheet",
-    "One section per group, with each Active Teacher Rubric and its possible scores, then Comments. Global Comments at the end."
+    "Teacher Scores — QR Code",
+    "Teachers scan the QR code, type their name, and score every group on the Active Teacher Rubrics (with comments). Create the form, then click Sync Responses after they answer."
   );
-  teacher.appendChild(makeDownloadButton("Teacher Score Sheet", "teacher"));
+  teacher.appendChild(buildPresFormRow(tool, cfg, container, "teacher"));
 
   // ----- Audience Score Sheet -----
   const audience = addSection(
-    "Audience Score Sheet",
-    "Same layout, using the Active Audience Rubrics, with instructions in A1."
+    "Audience Scores — QR Code",
+    "Students scan the QR code and type their School ID, then score every other group on the Active Audience Rubrics. Instructions and comments setting below."
   );
   audience.appendChild(
     makeTextarea(settings.audienceInstructions, `Instructions (leave blank for: "${DEFAULT_AUDIENCE_INSTRUCTIONS}")`, (value) => {
@@ -5584,12 +5558,12 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
   });
   audience.appendChild(commentsToggle);
   audience.appendChild(document.createElement("br"));
-  audience.appendChild(makeDownloadButton("Audience Score Sheet", "audience"));
+  audience.appendChild(buildPresFormRow(tool, cfg, container, "audience"));
 
   // ----- Peer Evaluation Score Sheet -----
   const peer = addSection(
-    "Peer Evaluation Score Sheet",
-    "One section per group, listing each student (by class number) with scores from the highest score down to 0."
+    "Peer Evaluation — QR Code",
+    "Students scan the QR code and type their School ID, then rate each member of their own group from 0 to the highest score below."
   );
   const peerRow = document.createElement("div");
   peerRow.className = "mapping-row";
@@ -5615,7 +5589,7 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
   });
   peerRow.append(highestLabel, highestInput);
   peer.appendChild(peerRow);
-  peer.appendChild(makeDownloadButton("Peer Evaluation Score Sheet", "peer"));
+  peer.appendChild(buildPresFormRow(tool, cfg, container, "peer"));
 
   return page;
 }
@@ -5816,113 +5790,114 @@ function presFormsSave() {
   } catch (err) {}
 }
 
-function buildPresentationFormsSection(tool, project, container) {
+/** The launcher for one online form (Teacher / Audience / Peer): create + show QR, sync, update, close. Lives on the Templates page. */
+function buildPresFormRow(tool, project, container, kind) {
   const rerender = () => renderScoringToolView(tool, container);
-
-  const block = document.createElement("div");
-  block.className = "attendance-settings-block";
-  block.style.borderTop = "2px solid var(--line)";
-  block.style.paddingTop = "18px";
-  block.style.marginTop = "22px";
-
-  const heading = document.createElement("h3");
-  heading.textContent = "Online Score Forms (QR codes)";
-  heading.style.fontFamily = "var(--font-heading)";
-  heading.style.fontSize = "1.5rem";
-  heading.style.color = "var(--green-dark)";
-  heading.style.margin = "0 0 8px";
-  block.appendChild(heading);
-
-  const hint = document.createElement("p");
-  hint.className = "hint";
-  hint.textContent =
-    "Students scan a QR code and type their School ID (teachers type their name on the Teacher form, and score every group). The Audience form lets them score every other group on the active Audience rubrics; the Peer form lets them rate the members of their own group. Wording and the highest peer score come from the Templates page settings. After students answer, click Sync — the answers are stored as an \"Online form\" sheet below, ready for \"Fill Scores Grid\". Open the form again after changing rubrics, groups or the roster by clicking Update Form.";
-  block.appendChild(hint);
-
   const KIND_LABEL = { teacher: "Teacher Scores", audience: "Audience Scores", peer: "Peer Evaluation" };
-  PresentationFormsModule.KINDS.forEach((kind) => {
-    const key = `${tool.id}|${project.id}|${kind}`;
-    const token = PresentationFormsModule.tokenOf(project, kind);
+  const key = `${tool.id}|${project.id}|${kind}`;
+  const token = PresentationFormsModule.tokenOf(project, kind);
 
-    const row = document.createElement("div");
-    row.style.margin = "12px 0";
-    const title = document.createElement("strong");
-    title.textContent = `${KIND_LABEL[kind]} form`;
-    row.appendChild(title);
+  const row = document.createElement("div");
+  row.style.margin = "12px 0";
+  const title = document.createElement("strong");
+  title.textContent = `${KIND_LABEL[kind]} form`;
+  row.appendChild(title);
 
-    const status = document.createElement("p");
-    status.className = "result";
-    status.textContent = presFormStatus.get(key) || (token ? "Open." : "");
-    row.appendChild(status);
+  const status = document.createElement("p");
+  status.className = "result";
+  status.textContent = presFormStatus.get(key) || (token ? "Open." : "");
+  row.appendChild(status);
 
-    const buttons = document.createElement("div");
-    buttons.className = "panel-toolbar-buttons";
-    const mk = (label, fn, cls = "btn btn-ghost") => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = cls;
-      b.textContent = label;
-      b.addEventListener("click", async () => {
-        b.disabled = true;
-        try {
-          await fn();
-        } catch (err) {
-          presFormStatus.set(key, `Couldn't do that: ${err.message}`);
-          rerender();
-        }
-      });
-      buttons.appendChild(b);
-      return b;
-    };
-    const leftOut = (shared) => (shared && shared.length ? ` Left out (School ID shared by several students): ${shared.join(", ")}.` : "");
+  const buttons = document.createElement("div");
+  buttons.className = "panel-toolbar-buttons";
+  const mk = (label, fn, cls = "btn btn-ghost") => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = cls;
+    b.textContent = label;
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await fn();
+      } catch (err) {
+        presFormStatus.set(key, `Couldn't do that: ${err.message}`);
+        rerender();
+      }
+    });
+    buttons.appendChild(b);
+    return b;
+  };
+  const leftOut = (shared) => (shared && shared.length ? ` Left out (School ID shared by several students): ${shared.join(", ")}.` : "");
 
-    if (!token) {
-      mk(`Create ${KIND_LABEL[kind]} Form`, async () => {
-        presFormStatus.set(key, "Creating form…");
-        const made = await PresentationFormsModule.create(tool.id, project.id, kind);
-        presFormStatus.set(key, kind === "teacher" ? "Form open. Teachers type their name to start." : `Form open for ${made.count} student(s).${leftOut(made.shared)}`);
-        presFormsSave();
+  if (!token) {
+    mk(`Launch ${KIND_LABEL[kind]} QR Code`, async () => {
+      presFormStatus.set(key, "Creating form…");
+      const made = await PresentationFormsModule.create(tool.id, project.id, kind);
+      presFormStatus.set(key, kind === "teacher" ? "Form open. Teachers type their name to start." : `Form open for ${made.count} student(s).${leftOut(made.shared)}`);
+      presFormsSave();
+      rerender();
+      window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
+    }, "btn btn-primary");
+  } else {
+    mk("Show QR Code", async () => {
+      window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(token))}`, "ggo-pres-qr", "width=480,height=620");
+      rerender();
+    });
+    mk("Sync Responses", async () => {
+      presFormStatus.set(key, "Syncing…");
+      const result = await PresentationFormsModule.sync(tool.id, project.id, kind);
+      const names = result.missing.slice(0, 12).join(", ");
+      presFormStatus.set(
+        key,
+        (kind === "teacher" ? `${result.responses} teacher response(s).` : `${result.responses} of ${result.expected} student(s) have answered.`) +
+          (result.responses > 0 ? " Collected data is shown below." : "") +
+          (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "")
+      );
+      presFormsSave();
+      rerender();
+    }, "btn btn-primary");
+    const sheetNow = (project.scoreUploads || []).find((u) => u.id === `online-${kind}`);
+    const fillBtn = mk(`Fill Scores Grid`, async () => {
+      const cellsName = KIND_LABEL[kind];
+      if (!confirm(`This replaces the ${cellsName} cells of the Scores grid with ${kind === "peer" ? "each group's average peer rating (self-ratings excluded)" : "the averages"} from the collected data. Continue?`)) {
         rerender();
-        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
-      }, "btn btn-primary");
-    } else {
-      mk("Show QR Code", async () => {
-        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(token))}`, "ggo-pres-qr", "width=480,height=620");
+        return;
+      }
+      const result = kind === "peer" ? ScoringModule.presApplyPeerAverages(tool.id, project.id) : ScoringModule.presApplySheetAverages(tool.id, project.id, kind);
+      presFormStatus.set(key, `Filled ${result.applied} cell(s) of the Scores grid` + (result.clamped > 0 ? ` (${result.clamped} average(s) were above the rubric's points and were limited to it)` : "") + ".");
+      presFormsSave();
+      rerender();
+    });
+    fillBtn.disabled = !sheetNow;
+    fillBtn.title = "Puts the averages from the collected data into the Scores page grid";
+    mk("Update Form", async () => {
+      const res = await PresentationFormsModule.update(tool.id, project.id, kind);
+      presFormStatus.set(key, kind === "teacher" ? "Form updated." : `Form updated for ${res.count} student(s).${leftOut(res.shared)}`);
+      rerender();
+    });
+    mk("Close & Delete Form", async () => {
+      if (!confirm("Close this form? Its QR code stops working and the saved answers are deleted from the server. Answers you already synced stay in the sheet below. (Sync first if you haven't!)")) {
         rerender();
-      });
-      mk("Sync Responses", async () => {
-        presFormStatus.set(key, "Syncing…");
-        const result = await PresentationFormsModule.sync(tool.id, project.id, kind);
-        const names = result.missing.slice(0, 12).join(", ");
-        presFormStatus.set(
-          key,
-          (kind === "teacher" ? `${result.responses} teacher response(s).` : `${result.responses} of ${result.expected} student(s) have answered.`) +
-            (result.responses > 0 ? " Stored as the \"Online form\" sheet below." : "") +
-            (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "")
-        );
-        presFormsSave();
-        rerender();
-      }, "btn btn-primary");
-      mk("Update Form", async () => {
-        const res = await PresentationFormsModule.update(tool.id, project.id, kind);
-        presFormStatus.set(key, kind === "teacher" ? "Form updated." : `Form updated for ${res.count} student(s).${leftOut(res.shared)}`);
-        rerender();
-      });
-      mk("Close & Delete Form", async () => {
-        if (!confirm("Close this form? Its QR code stops working and the saved answers are deleted from the server. Answers you already synced stay in the sheet below. (Sync first if you haven't!)")) {
-          rerender();
-          return;
-        }
-        await PresentationFormsModule.close(tool.id, project.id, kind);
-        presFormStatus.set(key, "Form closed.");
-        presFormsSave();
-        rerender();
-      });
-    }
-    row.appendChild(buttons);
-    block.appendChild(row);
-  });
-  return block;
+        return;
+      }
+      await PresentationFormsModule.close(tool.id, project.id, kind);
+      presFormStatus.set(key, "Form closed.");
+      presFormsSave();
+      rerender();
+    });
+  }
+  row.appendChild(buttons);
+  const sheet = (project.scoreUploads || []).find((u) => u.id === `online-${kind}`);
+  if (sheet) {
+    const when = new Date(sheet.importedAt);
+    const info = document.createElement("p");
+    info.className = "hint";
+    info.style.marginTop = "12px";
+    info.innerHTML = `<strong>Collected data</strong> — ${sheet.respondentCount} response(s)${Number.isNaN(when.getTime()) ? "" : `, last synced ${when.toLocaleString()}`}`;
+    row.appendChild(info);
+    row.appendChild(buildScoreSheetDetails(tool, project, sheet));
+  }
+  return row;
 }
 
 function buildPresentationUploadsSection(tool, project, container) {
@@ -6608,7 +6583,7 @@ function buildPresentationPrintSection(tool, project) {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "Comments come from the uploaded Teacher and Audience score sheets. Each page is fitted to one sheet (comments run in columns, with smaller type if needed). Group and student pages include the score tables; on a student's page, the Peer Evaluation row (and the Total) is that student's own peer rating.";
+    "Comments come from the Teacher and Audience QR forms (sync them on the QR Forms tab). Each page is fitted to one sheet (comments run in columns, with smaller type if needed). Group and student pages include the score tables; on a student's page, the Peer Evaluation row (and the Total) is that student's own peer rating.";
   block.appendChild(hint);
 
   const status = document.createElement("p");
