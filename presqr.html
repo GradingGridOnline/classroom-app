@@ -26,8 +26,8 @@
       var q = new URLSearchParams(location.search);
       var url = q.get("u") || "";
       var kind = q.get("k");
-      document.getElementById("h").textContent = kind === "peer" ? "Scan to rate your group members" : "Scan to score the presentations";
-      document.getElementById("p").textContent = "Scan with your phone, then enter your School ID.";
+      document.getElementById("h").textContent = kind === "peer" ? "Scan to rate your group members" : kind === "teacher" ? "Scan to enter teacher scores" : "Scan to score the presentations";
+      document.getElementById("p").textContent = kind === "teacher" ? "Scan with your phone, then type your name." : "Scan with your phone, then enter your School ID.";
       document.getElementById("link").textContent = url;
       if (url && window.QRCode) {
         new QRCode(document.getElementById("qr"), { text: url, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.M });

@@ -10,7 +10,7 @@
 // Which forms are open is kept in project.forms = { audience: {token}, peer: {token} }.
 
 const PresentationFormsModule = {
-  KINDS: ["audience", "peer"],
+  KINDS: ["teacher", "audience", "peer"],
 
   _client() {
     if (typeof storage === "undefined" || !storage || !storage.client) throw new Error("Not signed in.");
@@ -50,18 +50,22 @@ const PresentationFormsModule = {
     const byId = new Map(courseStudents.map((s) => [s.id, s]));
     const groupOf = new Map(project.roster.map((e) => [e.studentId, e.group || null]));
 
-    if (kind === "audience") {
+    if (kind === "audience" || kind === "teacher") {
+      const isTeacher = kind === "teacher";
       const rubrics = ScoringModule.presentationColumns(toolId, projectId)
-        .filter((c) => c.kind === "audience")
+        .filter((c) => c.kind === kind)
         .map((c) => ({ id: c.entryId, text: c.text, points: c.points }));
-      if (rubrics.length === 0) throw new Error('Activate at least one Audience rubric first (the "Rubrics" subtab).');
+      if (rubrics.length === 0) throw new Error(`Activate at least one ${isTeacher ? "Teacher" : "Audience"} rubric first (the "Rubrics" subtab).`);
       const custom = (ts.audienceInstructions || "").trim();
       const config = {
-        instructions: custom || "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer.",
-        comments: ts.audienceComments !== false,
+        instructions: isTeacher
+          ? "Score each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group."
+          : custom || "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer.",
+        comments: isTeacher ? true : ts.audienceComments !== false,
         rubrics,
         groups,
       };
+      if (isTeacher) return { config, people: [] }; // teachers type their name; there is no list to check
       const people = courseStudents
         .filter((s) => String(s.schoolId || "").trim())
         .map((s) => ({ sid: String(s.schoolId).trim(), name: s.name || "", studentId: s.id, group: groupOf.get(s.id) || null }));
@@ -103,7 +107,7 @@ const PresentationFormsModule = {
   async _publish(toolId, projectId, kind, token) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
     const { config, people } = this.build(toolId, projectId, kind);
-    const title = `${project.name}${kind === "audience" ? " — score the presentations" : " — rate your group members"}`;
+    const title = `${project.name}${kind === "peer" ? " — rate your group members" : kind === "teacher" ? " — teacher scores" : " — score the presentations"}`;
     const { data, error } = await this._client().rpc("pres_publish", { p_token: token, p_title: title, p_config: config, p_people: people });
     if (error) throw this._explain(error);
     return { shared: data || [], people };
@@ -157,7 +161,7 @@ const PresentationFormsModule = {
     (rows || []).forEach((row) => {
       const who = row.respondent;
       const p = row.payload || {};
-      if (kind === "audience") {
+      if (kind !== "peer") {
         Object.entries(p.scores || {}).forEach(([group, perRubric]) =>
           Object.entries(perRubric || {}).forEach(([entryId, value]) => scores.push([who, Number(group), entryId, Number(value)]))
         );
@@ -184,6 +188,7 @@ const PresentationFormsModule = {
     }
 
     const answered = new Set((rows || []).map((r) => String(r.respondent)));
+    if (kind === "teacher") return { responses: (rows || []).length, expected: 0, missing: [], sheet };
     const missing = people.filter((p) => !answered.has(String(p.sid))).map((p) => p.name || p.sid);
     return { responses: (rows || []).length, expected: people.length, missing, sheet };
   },

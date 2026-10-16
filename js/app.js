@@ -5836,10 +5836,10 @@ function buildPresentationFormsSection(tool, project, container) {
   const hint = document.createElement("p");
   hint.className = "hint";
   hint.textContent =
-    "Students scan a QR code and type their School ID. The Audience form lets them score every other group on the active Audience rubrics; the Peer form lets them rate the members of their own group. Wording and the highest peer score come from the Templates page settings. After students answer, click Sync — the answers are stored as an \"Online form\" sheet below, ready for \"Fill Scores Grid\". Open the form again after changing rubrics, groups or the roster by clicking Update Form.";
+    "Students scan a QR code and type their School ID (teachers type their name on the Teacher form, and score every group). The Audience form lets them score every other group on the active Audience rubrics; the Peer form lets them rate the members of their own group. Wording and the highest peer score come from the Templates page settings. After students answer, click Sync — the answers are stored as an \"Online form\" sheet below, ready for \"Fill Scores Grid\". Open the form again after changing rubrics, groups or the roster by clicking Update Form.";
   block.appendChild(hint);
 
-  const KIND_LABEL = { audience: "Audience Scores", peer: "Peer Evaluation" };
+  const KIND_LABEL = { teacher: "Teacher Scores", audience: "Audience Scores", peer: "Peer Evaluation" };
   PresentationFormsModule.KINDS.forEach((kind) => {
     const key = `${tool.id}|${project.id}|${kind}`;
     const token = PresentationFormsModule.tokenOf(project, kind);
@@ -5880,7 +5880,7 @@ function buildPresentationFormsSection(tool, project, container) {
       mk(`Create ${KIND_LABEL[kind]} Form`, async () => {
         presFormStatus.set(key, "Creating form…");
         const made = await PresentationFormsModule.create(tool.id, project.id, kind);
-        presFormStatus.set(key, `Form open for ${made.count} student(s).${leftOut(made.shared)}`);
+        presFormStatus.set(key, kind === "teacher" ? "Form open. Teachers type their name to start." : `Form open for ${made.count} student(s).${leftOut(made.shared)}`);
         presFormsSave();
         rerender();
         window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
@@ -5896,7 +5896,7 @@ function buildPresentationFormsSection(tool, project, container) {
         const names = result.missing.slice(0, 12).join(", ");
         presFormStatus.set(
           key,
-          `${result.responses} of ${result.expected} student(s) have answered.` +
+          (kind === "teacher" ? `${result.responses} teacher response(s).` : `${result.responses} of ${result.expected} student(s) have answered.`) +
             (result.responses > 0 ? " Stored as the \"Online form\" sheet below." : "") +
             (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "")
         );
@@ -5905,7 +5905,7 @@ function buildPresentationFormsSection(tool, project, container) {
       }, "btn btn-primary");
       mk("Update Form", async () => {
         const res = await PresentationFormsModule.update(tool.id, project.id, kind);
-        presFormStatus.set(key, `Form updated for ${res.count} student(s).${leftOut(res.shared)}`);
+        presFormStatus.set(key, kind === "teacher" ? "Form updated." : `Form updated for ${res.count} student(s).${leftOut(res.shared)}`);
         rerender();
       });
       mk("Close & Delete Form", async () => {

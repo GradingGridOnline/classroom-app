@@ -58,9 +58,9 @@
 
     <form id="id-form" novalidate hidden>
       <div class="row">
-        <label class="big" for="school-id">Your School ID</label>
+        <label class="big" for="school-id" id="id-label">Your School ID</label>
         <input id="school-id" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
-        <p class="hint">You need your School ID to continue.</p>
+        <p class="hint" id="id-hint">You need your School ID to continue.</p>
       </div>
       <button id="id-btn" class="primary" type="submit">Continue</button>
     </form>
@@ -90,7 +90,7 @@
       const msg = $("msg");
 
       const MESSAGES = {
-        bad_id: "That School ID isn't on the list. Check it and try again.",
+        bad_id: "That School ID isn't on the list (for teachers: type a name not starting with #). Check it and try again.",
         no_group: "You aren't in a presentation group, so there is nothing for you to rate here. Ask your teacher.",
         closed: "This link isn't active any more. Ask your teacher for a new QR code.",
         slow_down: "Too many wrong tries just now. Please wait a minute and try again.",
@@ -161,7 +161,7 @@
         const box = $("questions");
         box.textContent = "";
         const cfgForm = form.config || {};
-        if (kind === "audience") {
+        if (kind !== "peer") {
           (form.groups || []).forEach((g) => {
             const block = document.createElement("div");
             block.className = "block";
@@ -223,7 +223,7 @@
       function missingCount() {
         const cfgForm = form.config || {};
         let missing = 0;
-        if (kind === "audience") {
+        if (kind !== "peer") {
           (form.groups || []).forEach((g) => (cfgForm.rubrics || []).forEach((r) => { if (!(answers[g] && typeof answers[g][r.id] === "number")) missing++; }));
         } else {
           (form.members || []).forEach((m) => { if (typeof answers[m.id] !== "number") missing++; });
@@ -240,7 +240,7 @@
       $("id-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const value = $("school-id").value.trim();
-        if (!value) { say("Type your School ID.", true); return; }
+        if (!value) { say($("id-label").textContent === "Your name" ? "Type your name." : "Type your School ID.", true); return; }
         $("id-btn").disabled = true; say("Checking…");
         try {
           const result = await rpc("pres_open", { p_token: token, p_school_id: value });
@@ -276,7 +276,7 @@
         e.preventDefault();
         if (missingCount() > 0) return;
         let payload;
-        if (kind === "audience") payload = { scores: answers, comments: comments, global: globalComment };
+        if (kind !== "peer") payload = { scores: answers, comments: comments, global: globalComment };
         else payload = { ratings: answers };
         $("send-btn").disabled = true; say("Saving…");
         try {
@@ -300,7 +300,8 @@
         try {
           const info = await rpc("pres_info", { p_token: token });
           if (!info) { say(MESSAGES.closed, true); return; }
-          $("title").textContent = info.kind === "peer" ? "Rate your group members" : "Score the presentations";
+          $("title").textContent = info.kind === "peer" ? "Rate your group members" : info.kind === "teacher" ? "Teacher scores" : "Score the presentations";
+          if (info.kind === "teacher") { $("id-label").textContent = "Your name"; $("id-hint").textContent = "Type your name to continue."; $("change-id").textContent = "That's not me / change name"; }
           $("sub").textContent = info.title || "";
           document.title = $("title").textContent;
           say("");
