@@ -4,10 +4,9 @@
 //   Peer form:     scan QR -> School ID -> rate each member of your own group.
 // A form is saved in Supabase (see presentation-forms-setup.sql). Students never see the class list:
 // the server checks the School ID and only then returns the questions.
-// "Sync" turns the saved answers into the same stored "score sheet" the CSV uploads make
-// (id online-audience / online-peer), so averages, reports and the own-group / self-rating
-// exclusions all work as before. Syncing again replaces that one sheet.
-// Which forms are open is kept in project.forms = { audience: {token}, peer: {token} }.
+// Each launched QR code is a DATA SET stored in the project (project.scoreUploads, with token =
+// the form is still open). "Get Responses" copies the saved answers into the data set; the
+// calculations only read the data set marked "in use" for each kind (see ScoringModule).
 
 const PresentationFormsModule = {
   KINDS: ["teacher", "audience", "peer"],
@@ -35,8 +34,8 @@ const PresentationFormsModule = {
     return new URL(`presform.html?c=${encodeURIComponent(token)}`, location.href).href;
   },
 
-  tokenOf(project, kind) {
-    return (project.forms && project.forms[kind] && project.forms[kind].token) || null;
+  setOf(project, uploadId) {
+    return (project.scoreUploads || []).find((u) => u.id === uploadId) || null;
   },
 
   /** What students see and who may answer, built from the project as it is right now. */
@@ -113,8 +112,8 @@ const PresentationFormsModule = {
     return { shared: data || [], people };
   },
 
-  /** Opens a new form and returns its link. */
-  async create(toolId, projectId, kind) {
+  /** Opens a new form and stores a new (empty) data set for it. Returns { set, url, shared, count }. */
+  async create(toolId, projectId, kind, name) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
     if (!project) throw new Error("That project no longer exists.");
     this.build(toolId, projectId, kind); // fail early with a readable message
@@ -129,29 +128,29 @@ const PresentationFormsModule = {
       await client.from("pres_forms").delete().eq("token", token);
       throw err;
     }
-    if (!project.forms || typeof project.forms !== "object") project.forms = {};
-    project.forms[kind] = { token, createdAt: new Date().toISOString() };
-    return { url: this.urlFor(token), shared: result.shared, count: result.people.length };
+    const set = ScoringModule.addPresentationUpload(toolId, projectId, { kind, name, token, respondentCount: 0 });
+    return { set, url: this.urlFor(token), shared: result.shared, count: result.people.length };
   },
 
-  /** Re-sends the questions and class list (after rubrics, groups or the roster changed). */
-  async update(toolId, projectId, kind) {
+  /**
+   * Copies every saved answer into the data set (replacing what it held) and first refreshes the
+   * form so it follows the current rubrics, groups and roster. Returns { responses, expected, missing: [names], note }.
+   */
+  async sync(toolId, projectId, uploadId) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
-    const token = project && this.tokenOf(project, kind);
-    if (!token) throw new Error("There's no open form to update.");
-    const result = await this._publish(toolId, projectId, kind, token);
-    return { shared: result.shared, count: result.people.length };
-  },
-
-  /** Reads the saved answers and stores them as one score sheet. Returns { responses, expected, missing: [names], sheet }. */
-  async sync(toolId, projectId, kind) {
-    const project = ScoringModule.getPresentationProject(toolId, projectId);
-    const token = project && this.tokenOf(project, kind);
-    if (!token) throw new Error("There's no open form to sync from.");
+    const set = project && this.setOf(project, uploadId);
+    if (!set || !set.token) throw new Error("This data set's form is closed, so there is nothing new to get.");
+    const kind = set.kind;
+    let note = "";
+    try {
+      await this._publish(toolId, projectId, kind, set.token);
+    } catch (err) {
+      note = ` (The form could not be refreshed: ${err.message})`;
+    }
     const client = this._client();
-    const { data: rows, error } = await client.from("pres_responses").select("respondent, payload, submitted_at").eq("token", token).order("submitted_at", { ascending: true });
+    const { data: rows, error } = await client.from("pres_responses").select("respondent, payload, submitted_at").eq("token", set.token).order("submitted_at", { ascending: true });
     if (error) throw this._explain(error);
-    const { data: form, error: formError } = await client.from("pres_forms").select("people").eq("token", token).maybeSingle();
+    const { data: form, error: formError } = await client.from("pres_forms").select("people").eq("token", set.token).maybeSingle();
     if (formError) throw this._explain(formError);
     const people = (form && form.people) || [];
 
@@ -166,41 +165,36 @@ const PresentationFormsModule = {
           Object.entries(perRubric || {}).forEach(([entryId, value]) => scores.push([who, Number(group), entryId, Number(value)]))
         );
         Object.entries(p.comments || {}).forEach(([group, text]) => text && comments.push([who, Number(group), String(text)]));
-        if (p.global) comments.push([who, 0, String(p.global)]);
+        if (p.global && kind === "teacher") comments.push([who, 0, String(p.global)]); // only teachers can leave a comment for everyone
       } else {
         Object.entries(p.ratings || {}).forEach(([studentId, value]) => ratings.push([who, studentId, Number(value)]));
       }
     });
-
-    const id = `online-${kind}`;
-    ScoringModule.removePresentationUpload(toolId, projectId, id);
-    let sheet = null;
-    if ((rows || []).length > 0) {
-      sheet = ScoringModule.addPresentationUpload(toolId, projectId, {
-        id,
-        kind,
-        fileName: "Online form (QR code)",
-        respondentCount: rows.length,
-        scores,
-        comments,
-        ratings,
-      });
-    }
+    set.scores = scores;
+    set.comments = comments;
+    set.ratings = ratings;
+    set.respondentCount = (rows || []).length;
+    set.syncedAt = new Date().toISOString();
 
     const answered = new Set((rows || []).map((r) => String(r.respondent)));
-    if (kind === "teacher") return { responses: (rows || []).length, expected: 0, missing: [], sheet };
-    const missing = people.filter((p) => !answered.has(String(p.sid))).map((p) => p.name || p.sid);
-    return { responses: (rows || []).length, expected: people.length, missing, sheet };
+    const missing = kind === "teacher" ? [] : people.filter((p) => !answered.has(String(p.sid))).map((p) => p.name || p.sid);
+    return { responses: set.respondentCount, expected: kind === "teacher" ? 0 : people.length, missing, note };
   },
 
-  /** Closes the form (its QR code stops working) and deletes the answers on the server. The synced sheet stays in the project. */
-  async close(toolId, projectId, kind) {
+  /** Closes the form (its QR code stops working) and deletes the answers on the server. The data set stays. */
+  async close(toolId, projectId, uploadId) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
-    const token = project && this.tokenOf(project, kind);
-    if (!token) return;
-    const { error } = await this._client().from("pres_forms").delete().eq("token", token);
+    const set = project && this.setOf(project, uploadId);
+    if (!set || !set.token) return;
+    const { error } = await this._client().from("pres_forms").delete().eq("token", set.token);
     if (error) throw this._explain(error);
-    delete project.forms[kind];
+    set.token = null;
+  },
+
+  /** Deletes a data set; if its form is still open, closes it first. */
+  async remove(toolId, projectId, uploadId) {
+    await this.close(toolId, projectId, uploadId);
+    ScoringModule.removePresentationUpload(toolId, projectId, uploadId);
   },
 };
 

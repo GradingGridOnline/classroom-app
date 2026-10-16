@@ -812,6 +812,39 @@ const ScoringModule = {
   // group's Total Score. Which project a Main Scores item pulls from is
   // stored on the item (scoreSources.projectSelections[toolId]).
 
+  /** Data sets (see "Presentation Calc: data sets" below): moves the earlier "open form" bookkeeping onto data sets and makes sure each kind has a chosen set when it has any. */
+  _migrateDataSets(project) {
+    if (!project.selectedUploads || typeof project.selectedUploads !== "object") project.selectedUploads = {};
+    // An earlier version kept open forms in project.forms = { kind: { token } }.
+    if (project.forms && typeof project.forms === "object") {
+      Object.entries(project.forms).forEach(([kind, form]) => {
+        if (!form || !form.token) return;
+        let set = project.scoreUploads.find((u) => u.id === `online-${kind}`);
+        if (!set) {
+          set = { id: `online-${kind}`, kind, fileName: "", importedAt: new Date().toISOString(), respondentCount: 0, scores: [], comments: [], ratings: [] };
+          project.scoreUploads.push(set);
+        }
+        set.token = form.token;
+      });
+      delete project.forms;
+    }
+    project.scoreUploads.forEach((upload) => {
+      if (typeof upload.name !== "string" || !upload.name.trim()) {
+        const label = { teacher: "Teacher Scores", audience: "Audience Scores", peer: "Peer Evaluation" }[upload.kind] || "Data set";
+        const when = new Date(upload.importedAt);
+        upload.name = upload.fileName && upload.fileName !== "Online form (QR code)" ? upload.fileName : `${label}${Number.isNaN(when.getTime()) ? "" : ` — ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}`;
+      }
+      if (typeof upload.token !== "string" || !upload.token) upload.token = null;
+      if (!upload.syncedAt) upload.syncedAt = upload.importedAt || null;
+    });
+    ["teacher", "audience", "peer"].forEach((kind) => {
+      const ofKind = project.scoreUploads.filter((u) => u.kind === kind);
+      const chosen = project.selectedUploads[kind];
+      if (chosen && ofKind.some((u) => u.id === chosen)) return;
+      project.selectedUploads[kind] = ofKind.length ? ofKind[ofKind.length - 1].id : null;
+    });
+  },
+
   /** Fills in any missing pieces of one project, in place. */
   _normalizeProject(project) {
     if (!project.id) project.id = `project-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -844,13 +877,13 @@ const ScoringModule = {
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
     if (typeof project.totalColumn.maxPoints !== "number") project.totalColumn.maxPoints = 0;
 
-    if (!project.forms || typeof project.forms !== "object") project.forms = {}; // open online forms: { audience: {token}, peer: {token} }
     if (!Array.isArray(project.scoreUploads)) project.scoreUploads = [];
     project.scoreUploads.forEach((upload) => {
       ["scores", "comments", "ratings"].forEach((key) => {
         if (!Array.isArray(upload[key])) upload[key] = [];
       });
     });
+    this._migrateDataSets(project);
 
     // Settings for the Templates page (score-sheet CSVs).
     if (!project.templateSettings || typeof project.templateSettings !== "object") project.templateSettings = {};
@@ -1305,32 +1338,84 @@ const ScoringModule = {
   // presentationCountedScores / presentationCountedRatings). Other
   // respondents (a teacher's name, etc.) count for every group.
 
+  // ----- Presentation Calc: data sets -----
+  // Every stored "score sheet" is a data set: the answers from one QR form (token = the form is still open)
+  // or an older uploaded file. project.selectedUploads[kind] says which data set of each kind (teacher /
+  // audience / peer) is IN USE: every average, comment and report reads only that one.
+
   addPresentationUpload(toolId, projectId, upload) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) throw new Error("That project no longer exists.");
+    const now = new Date().toISOString();
     const record = {
       id: upload.id || `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       kind: upload.kind,
+      name: upload.name || "",
+      token: upload.token || null,
       fileName: upload.fileName || "",
-      importedAt: new Date().toISOString(),
+      importedAt: now,
+      syncedAt: upload.syncedAt || now,
       respondentCount: upload.respondentCount || 0,
       scores: upload.scores || [],
       comments: upload.comments || [],
       ratings: upload.ratings || [],
     };
     project.scoreUploads.push(record);
+    this._migrateDataSets(project); // names it, and chooses it if it is the first of its kind
     return record;
   },
 
   removePresentationUpload(toolId, projectId, uploadId) {
     const project = this.getPresentationProject(toolId, projectId);
-    if (project) project.scoreUploads = project.scoreUploads.filter((u) => u.id !== uploadId);
+    if (!project) return;
+    project.scoreUploads = project.scoreUploads.filter((u) => u.id !== uploadId);
+    this._migrateDataSets(project); // if the chosen one was removed, the latest remaining one is chosen
   },
 
-  presentationUploads(toolId, projectId, kind) {
+  /** Every data set of one kind (or all of them), oldest first. */
+  presentationDataSets(toolId, projectId, kind) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return [];
     return project.scoreUploads.filter((u) => !kind || u.kind === kind);
+  },
+
+  /** The data set in use for one kind, or null. */
+  presentationSelectedSet(toolId, projectId, kind) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return null;
+    return project.scoreUploads.find((u) => u.kind === kind && u.id === project.selectedUploads[kind]) || null;
+  },
+
+  presentationSelectSet(toolId, projectId, kind, uploadId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (project && project.scoreUploads.some((u) => u.id === uploadId && u.kind === kind)) project.selectedUploads[kind] = uploadId;
+  },
+
+  renamePresentationDataSet(toolId, projectId, uploadId, name) {
+    const project = this.getPresentationProject(toolId, projectId);
+    const set = project && project.scoreUploads.find((u) => u.id === uploadId);
+    if (set && String(name).trim()) set.name = String(name).trim();
+  },
+
+  /** What the calculations read: only the data set in use for the kind (empty if none). With no kind, every data set. */
+  presentationUploads(toolId, projectId, kind) {
+    if (!kind) return this.presentationDataSets(toolId, projectId);
+    const chosen = this.presentationSelectedSet(toolId, projectId, kind);
+    return chosen ? [chosen] : [];
+  },
+
+  /** Loads the data sets in use (Teacher, Audience, Peer Evaluation) into the Scores grid. Returns { filled: {kind: cells}, clamped, used: {kind: name} }. */
+  presFillFromDataSets(toolId, projectId) {
+    const result = { filled: {}, clamped: 0, used: {} };
+    ["teacher", "audience", "peer"].forEach((kind) => {
+      const set = this.presentationSelectedSet(toolId, projectId, kind);
+      if (!set) return;
+      const r = kind === "peer" ? this.presApplyPeerAverages(toolId, projectId) : this.presApplySheetAverages(toolId, projectId, kind);
+      result.filled[kind] = r.applied;
+      result.clamped += r.clamped;
+      result.used[kind] = set.name;
+    });
+    return result;
   },
 
   /** The course-roster student whose School ID matches `value` (spacing/full-width differences ignored), or null — which is also how an actual name (a teacher, say) is told apart from a student's ID. */

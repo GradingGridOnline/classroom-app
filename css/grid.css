@@ -1040,3 +1040,93 @@ html[data-textsize="large"] { font-size: 118%; }
 /* Progress Tracker (students mode): Class # and School ID columns */
 .scoring-table .tracker-id-cell { white-space: nowrap; text-align: center; }
 .scoring-table .tracker-class-num { font-weight: 700; }
+
+/* ===== Presentation Calc: clearly separated sections ===== */
+.pres-section {
+  margin: 0 0 40px;
+  border: 2px solid var(--green-dark);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card);
+}
+.pres-section-head {
+  background: var(--green-dark);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 700;
+  padding: 11px 20px;
+  letter-spacing: 0.01em;
+}
+.pres-section-body {
+  padding: 20px;
+}
+.pres-section-body .rubric-bank-block,
+.pres-section-body .rubric-active-block {
+  border-top: 0;
+  padding-top: 0;
+}
+.rubrics-top-row .pres-section {
+  margin-bottom: 0;
+}
+.pres-subhead {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  margin: 22px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--line);
+  color: var(--green-dark);
+}
+.pres-dataset-table td {
+  vertical-align: middle;
+}
+.pres-dataset-table .pres-dataset-name {
+  width: 100%;
+  min-width: 250px;
+}
+.pres-dataset-table .panel-toolbar-buttons {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pres-dataset-inuse td {
+  background: rgba(47, 82, 51, 0.12);
+}
+.pres-inuse-badge {
+  display: inline-block;
+  font-weight: 700;
+  color: #1e7a3c;
+  white-space: nowrap;
+}
+.pres-qr-open {
+  font-weight: 700;
+  color: #1e7a3c;
+}
+
+/* Themes: keep the header bar and the "in use" marker readable */
+[data-theme="tron-legacy"] .pres-section {
+  border-color: #45d8ee;
+}
+[data-theme="tron-legacy"] .pres-section-head {
+  background: #0f4452;
+  color: #9cf1fb;
+  border-bottom: 1px solid #45d8ee;
+}
+[data-theme="tron-legacy"] .pres-dataset-inuse td {
+  background: rgba(69, 216, 238, 0.14);
+}
+[data-theme="tron-legacy"] .pres-inuse-badge,
+[data-theme="tron-legacy"] .pres-qr-open {
+  color: #6ff0a6;
+}
+[data-theme="cyberpunk"] .pres-section-head {
+  background: #06495a;
+  color: #e4f8f7;
+}
+[data-theme="cyberpunk"] .pres-dataset-inuse td {
+  background: rgba(11, 127, 149, 0.18);
+}
+@media (max-width: 800px) {
+  .rubrics-top-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -131,7 +131,7 @@ const TemplatesModule = {
               project.sourceBankName = "";
               project.values = {};
               project.scoreUploads = []; // uploaded score sheets
-              project.forms = {}; // online QR forms belong to one course
+              project.selectedUploads = {}; // QR data sets belong to one course
             };
             if (Array.isArray(tool.config.projects)) tool.config.projects.forEach(clearProject);
             else clearProject(tool.config); // saved before projects existed

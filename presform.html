@@ -187,7 +187,7 @@
             }
             box.appendChild(block);
           });
-          if (cfgForm.comments) {
+          if (cfgForm.comments && kind === "teacher") { // only teachers can write a comment for everyone
             const block = document.createElement("div");
             block.className = "block";
             const h = document.createElement("h2");

@@ -4598,8 +4598,48 @@ function renderScoringToolPresentationView(tool, container) {
 
 // ----- Scores page -----
 
+// ----- Presentation Calc: clearly separated sections -----
+
+/** A section with a header bar and a padded body, used on every Presentation Calc subtab. Returns { section, body }. */
+function makePresSection(title) {
+  const section = document.createElement("div");
+  section.className = "pres-section";
+  const head = document.createElement("div");
+  head.className = "pres-section-head";
+  head.textContent = title;
+  const body = document.createElement("div");
+  body.className = "pres-section-body";
+  section.append(head, body);
+  return { section, body };
+}
+
+/** Wraps an existing block (whose own heading becomes the header bar) in a section. */
+function presSectionFromBlock(block, titleOverride) {
+  const h = block.querySelector(":scope > h3, :scope > h4, :scope > h5");
+  const title = titleOverride || (h ? h.textContent : "");
+  if (h) h.remove();
+  block.removeAttribute("style");
+  block.classList.remove("attendance-settings-block");
+  const { section, body } = makePresSection(title);
+  body.appendChild(block);
+  return section;
+}
+
+/** Puts everything already built for a page inside one titled section. */
+function presPageInSection(page, title) {
+  const { section, body } = makePresSection(title);
+  while (page.firstChild) body.appendChild(page.firstChild);
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(section);
+  return wrapper;
+}
+
+const presFillStatus = new Map(); // "toolId|projectId" -> message after "Fill Scores from QR Forms"
+
 function buildPresentationScoresPage(tool, cfg, container) {
   const page = document.createElement("div");
+  const scoresSection = makePresSection("Scores");
+  page.appendChild(scoresSection.section);
   const columns = ScoringModule.presentationColumns(tool.id, cfg.id);
   const rubricColumnCount = columns.filter((c) => c.kind !== "peer").length; // the Peer Evaluation column is always there
   const groups = ScoringModule.presentationGroups(tool.id, cfg.id);
@@ -4612,9 +4652,50 @@ function buildPresentationScoresPage(tool, cfg, container) {
     hint.textContent = 'No score columns yet — open "Rubrics" and activate at least one Teacher or Audience rubric.';
   } else {
     hint.textContent =
-      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill it from the QR Forms tab (Fill Scores Grid) or type it in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
+      "Enter one score per group for each rubric; the Total Score column adds up each row (weighted by the Weight row — enter percentages that add up to 100; with none entered the scores are simply added), and every student in a group shares their group's total. The Peer Evaluation column is each group's average peer rating — fill the grid with the button below (it uses the data sets in use on the QR Forms tab) or type scores in. To use it in Main Scores, open an item's Sources panel, give this tool a weight, and choose this project.";
   }
-  page.appendChild(hint);
+  scoresSection.body.appendChild(hint);
+
+  // ----- Fill from the QR Forms data sets that are in use -----
+  {
+    const fillKey = `${tool.id}|${cfg.id}`;
+    const bar = document.createElement("div");
+    bar.className = "panel-toolbar-buttons";
+    const fillBtn = document.createElement("button");
+    fillBtn.type = "button";
+    fillBtn.className = "btn btn-primary";
+    fillBtn.textContent = "Fill Scores from QR Forms";
+    fillBtn.title = "Puts the averages from the data set in use for Teacher, Audience and Peer Evaluation (chosen on the QR Forms tab) into the grid below";
+    const inUse = ["teacher", "audience", "peer"]
+      .map((kind) => [kind, ScoringModule.presentationSelectedSet(tool.id, cfg.id, kind)])
+      .filter(([, set]) => set);
+    fillBtn.disabled = inUse.length === 0 || groups.length === 0;
+    fillBtn.addEventListener("click", () => {
+      if (!confirm("This replaces the Teacher, Audience and Peer Evaluation cells of the grid with the averages from the data sets in use. Continue?")) return;
+      const result = ScoringModule.presFillFromDataSets(tool.id, cfg.id);
+      const cells = Object.values(result.filled).reduce((sum, n) => sum + n, 0);
+      presFillStatus.set(
+        fillKey,
+        `Filled ${cells} cell(s) of the grid.` + (result.clamped > 0 ? ` ${result.clamped} average(s) were above the rubric's points and were limited to it.` : "")
+      );
+      presFormsSave();
+      renderScoringToolView(tool, container);
+    });
+    bar.appendChild(fillBtn);
+    scoresSection.body.appendChild(bar);
+
+    const using = document.createElement("p");
+    using.className = "hint";
+    const labels = { teacher: "Teacher", audience: "Audience", peer: "Peer Evaluation" };
+    using.textContent = inUse.length
+      ? `Data sets in use: ${inUse.map(([kind, set]) => `${labels[kind]} — ${set.name}`).join("; ")}. Change them on the QR Forms tab.`
+      : "No collected data yet — launch a QR code on the QR Forms tab.";
+    scoresSection.body.appendChild(using);
+    const fillResult = document.createElement("p");
+    fillResult.className = "result";
+    fillResult.textContent = presFillStatus.get(fillKey) || "";
+    scoresSection.body.appendChild(fillResult);
+  }
 
   if (groups.length > 0 && rubricColumnCount > 0) {
     const wrap = document.createElement("div");
@@ -4739,13 +4820,13 @@ function buildPresentationScoresPage(tool, cfg, container) {
     });
     table.appendChild(tbody);
     wrap.appendChild(table);
-    page.appendChild(wrap);
+    scoresSection.body.appendChild(wrap);
   }
 
   // Same raw / out-of-max setting as the Progress Tracker's Total Score column.
-  page.appendChild(buildTableTotalColumnBlock(tool, cfg, container, cfg.id));
-  page.appendChild(buildPresentationPrintSection(tool, cfg));
-  page.appendChild(buildPresentationEmailSection(tool, cfg));
+  page.appendChild(presSectionFromBlock(buildTableTotalColumnBlock(tool, cfg, container, cfg.id), "Total Score Column"));
+  page.appendChild(presSectionFromBlock(buildPresentationPrintSection(tool, cfg), "Print"));
+  page.appendChild(presSectionFromBlock(buildPresentationEmailSection(tool, cfg), "Email as PDF"));
   return page;
 }
 
@@ -4838,7 +4919,7 @@ function buildPresentationGroupsPage(tool, cfg, container) {
   table.appendChild(tbody);
   page.appendChild(table);
 
-  return page;
+  return presPageInSection(page, "Student Groups");
 }
 
 // ----- Rubrics page -----
@@ -4853,11 +4934,11 @@ function buildPresentationRubricsPage(tool, cfg, container) {
 
   const topRow = document.createElement("div");
   topRow.className = "rubrics-top-row";
-  topRow.appendChild(buildPresentationActiveBlock(tool, cfg, "teacher", "Active Teacher Rubrics", rerender, status));
-  topRow.appendChild(buildPresentationActiveBlock(tool, cfg, "audience", "Active Audience Rubrics", rerender, status));
+  topRow.appendChild(presSectionFromBlock(buildPresentationActiveBlock(tool, cfg, "teacher", "Active Teacher Rubrics", rerender, status)));
+  topRow.appendChild(presSectionFromBlock(buildPresentationActiveBlock(tool, cfg, "audience", "Active Audience Rubrics", rerender, status)));
   page.appendChild(topRow);
 
-  page.appendChild(buildPresentationBankBlock(tool, cfg, rerender, status));
+  page.appendChild(presSectionFromBlock(buildPresentationBankBlock(tool, cfg, rerender, status)));
   return page;
 }
 
@@ -5487,38 +5568,167 @@ function buildTestSourceSelect(selected, onChange) {
 const DEFAULT_AUDIENCE_INSTRUCTIONS =
   "Rate each group that presents. Higher numbers are good, lower numbers are bad. You can leave a comment for each group. Only the teacher can see your answer.";
 
+const PRES_KIND_LABEL = { teacher: "Teacher Scores", audience: "Audience Scores", peer: "Peer Evaluation" };
+
+/** The table of data sets for one kind: which is in use, whether its QR code is open, and the actions for each. */
+function buildPresDataSetTable(tool, project, container, kind, statusEl) {
+  const rerender = () => renderScoringToolView(tool, container);
+  const key = `${tool.id}|${project.id}|${kind}`;
+  const say = (text) => presFormStatus.set(key, text);
+  const stateKey = `${tool.id}|${project.id}`;
+  const expanded = scoreSheetExpanded.get(stateKey) || new Set();
+  scoreSheetExpanded.set(stateKey, expanded);
+  const sets = ScoringModule.presentationDataSets(tool.id, project.id, kind);
+  const chosen = ScoringModule.presentationSelectedSet(tool.id, project.id, kind);
+
+  const table = document.createElement("table");
+  table.className = "roster-table pres-dataset-table";
+  table.innerHTML = "<thead><tr><th>In use</th><th>Data set</th><th>QR code</th><th>Responses</th><th>Last updated</th><th></th></tr></thead>";
+  const tbody = document.createElement("tbody");
+  if (sets.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "hint";
+    td.textContent = `No data sets yet — click "Launch New QR Code" above. Each QR code you launch creates its own data set here.`;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  const action = (parent, label, fn, title) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-ghost btn-small";
+    b.textContent = label;
+    if (title) b.title = title;
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await fn();
+      } catch (err) {
+        say(`Couldn't do that: ${err.message}`);
+        rerender();
+      }
+    });
+    parent.appendChild(b);
+    return b;
+  };
+
+  sets.forEach((set) => {
+    const tr = document.createElement("tr");
+    if (chosen && chosen.id === set.id) tr.className = "pres-dataset-inuse";
+
+    const useTd = document.createElement("td");
+    if (chosen && chosen.id === set.id) {
+      const badge = document.createElement("span");
+      badge.className = "pres-inuse-badge";
+      badge.textContent = "● In use";
+      useTd.appendChild(badge);
+    } else {
+      action(useTd, "Use this set", async () => {
+        ScoringModule.presentationSelectSet(tool.id, project.id, kind, set.id);
+        say(`"${set.name}" is now the ${PRES_KIND_LABEL[kind]} data set in use. Click "Fill Scores from QR Forms" on the Scores tab to load it into the grid.`);
+        presFormsSave();
+        rerender();
+      }, "Reports and the Scores tab will use this data set");
+    }
+    tr.appendChild(useTd);
+
+    const nameTd = document.createElement("td");
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.className = "pres-dataset-name";
+    nameInput.value = set.name;
+    nameInput.addEventListener("change", () => {
+      ScoringModule.renamePresentationDataSet(tool.id, project.id, set.id, nameInput.value);
+      nameInput.value = set.name;
+      presFormsSave();
+    });
+    nameTd.appendChild(nameInput);
+    tr.appendChild(nameTd);
+
+    const qrTd = document.createElement("td");
+    qrTd.textContent = set.token ? "Open" : "Closed";
+    if (set.token) qrTd.className = "pres-qr-open";
+    tr.appendChild(qrTd);
+
+    const countTd = document.createElement("td");
+    countTd.textContent = String(set.respondentCount || 0);
+    tr.appendChild(countTd);
+
+    const whenTd = document.createElement("td");
+    const when = new Date(set.syncedAt || set.importedAt);
+    whenTd.textContent = Number.isNaN(when.getTime()) ? "" : when.toLocaleString();
+    tr.appendChild(whenTd);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "panel-toolbar-buttons";
+    if (set.token) {
+      action(actionsTd, "Show QR Code", async () => {
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(set.token))}`, "ggo-pres-qr", "width=480,height=620");
+        rerender();
+      });
+      action(actionsTd, "Get Responses", async () => {
+        say("Getting responses…");
+        const result = await PresentationFormsModule.sync(tool.id, project.id, set.id);
+        const names = result.missing.slice(0, 12).join(", ");
+        say(
+          kind === "teacher"
+            ? `"${set.name}": ${result.responses} teacher response(s).${result.note}`
+            : `"${set.name}": ${result.responses} of ${result.expected} student(s) have answered.` +
+                (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "") +
+                result.note
+        );
+        presFormsSave();
+        rerender();
+      }, "Copies the answers students have submitted so far into this data set");
+      action(actionsTd, "Close QR Code", async () => {
+        if (!confirm("Close this QR code? Students can no longer answer. Click Get Responses first if you haven't — the answers on the server are deleted when it closes. The data set stays here.")) {
+          rerender();
+          return;
+        }
+        await PresentationFormsModule.close(tool.id, project.id, set.id);
+        say(`"${set.name}": QR code closed. The data set is kept.`);
+        presFormsSave();
+        rerender();
+      });
+    }
+    action(actionsTd, expanded.has(set.id) ? "Hide Data" : "View Data", async () => {
+      if (expanded.has(set.id)) expanded.delete(set.id);
+      else expanded.add(set.id);
+      rerender();
+    });
+    action(actionsTd, "Delete", async () => {
+      if (!confirm(`Delete the data set "${set.name}"?${set.token ? " Its QR code will stop working." : ""} Scores already placed in the grid are not changed.`)) {
+        rerender();
+        return;
+      }
+      await PresentationFormsModule.remove(tool.id, project.id, set.id);
+      expanded.delete(set.id);
+      say(`Deleted "${set.name}".`);
+      presFormsSave();
+      rerender();
+    });
+    tr.appendChild(actionsTd);
+    tbody.appendChild(tr);
+
+    if (expanded.has(set.id)) {
+      const detailTr = document.createElement("tr");
+      const detailTd = document.createElement("td");
+      detailTd.colSpan = 6;
+      detailTd.appendChild(buildScoreSheetDetails(tool, project, set));
+      detailTr.appendChild(detailTd);
+      tbody.appendChild(detailTr);
+    }
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
 function buildPresentationTemplatesPage(tool, cfg, container) {
   const page = document.createElement("div");
   const settings = cfg.templateSettings;
-
-  const status = document.createElement("p");
-  status.className = "result";
-  page.appendChild(status);
-
-  const addSection = (title, hintText) => {
-    const block = document.createElement("div");
-    block.className = "attendance-settings-block";
-    block.style.borderTop = "2px solid var(--line)";
-    block.style.paddingTop = "18px";
-    block.style.marginTop = "22px";
-    const heading = document.createElement("h3");
-    heading.textContent = title;
-    heading.style.fontFamily = "var(--font-heading)";
-    heading.style.fontSize = "1.9rem";
-    heading.style.fontWeight = "700";
-    heading.style.lineHeight = "1.2";
-    heading.style.color = "var(--green-dark)";
-    heading.style.margin = "0 0 10px";
-    block.appendChild(heading);
-    if (hintText) {
-      const hint = document.createElement("p");
-      hint.className = "hint";
-      hint.textContent = hintText;
-      block.appendChild(hint);
-    }
-    page.appendChild(block);
-    return block;
-  };
+  const rerender = () => renderScoringToolView(tool, container);
 
   const makeTextarea = (value, placeholder, onInput) => {
     const textarea = document.createElement("textarea");
@@ -5529,19 +5739,81 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     return textarea;
   };
 
-  // ----- Teacher Score Sheet -----
-  const teacher = addSection(
-    "Teacher Scores — QR Code",
-    "Teachers scan the QR code, type their name, and score every group on the Active Teacher Rubrics (with comments). Create the form, then click Sync Responses after they answer."
-  );
-  teacher.appendChild(buildPresFormRow(tool, cfg, container, "teacher"));
+  const addSection = (kind, title, hintText) => {
+    const { section, body } = makePresSection(title);
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = hintText;
+    body.appendChild(hint);
+    page.appendChild(section);
+    return { body, kind };
+  };
 
-  // ----- Audience Score Sheet -----
-  const audience = addSection(
-    "Audience Scores — QR Code",
-    "Students scan the QR code and type their School ID, then score every other group on the Active Audience Rubrics. Instructions and comments setting below."
+  /** Settings go first; then the launch button, a status line, and the data set table at the bottom. */
+  const finishSection = ({ body, kind }) => {
+    const key = `${tool.id}|${cfg.id}|${kind}`;
+    const bar = document.createElement("div");
+    bar.className = "panel-toolbar-buttons";
+    bar.style.marginTop = "14px";
+    const launch = document.createElement("button");
+    launch.type = "button";
+    launch.className = "btn btn-primary";
+    launch.textContent = "Launch New QR Code";
+    launch.title = "Opens a form students scan; its answers are collected in a new data set below";
+    launch.addEventListener("click", async () => {
+      launch.disabled = true;
+      try {
+        presFormStatus.set(key, "Creating QR code…");
+        const made = await PresentationFormsModule.create(tool.id, cfg.id, kind);
+        presFormStatus.set(
+          key,
+          `"${made.set.name}" is open${kind === "teacher" ? "." : ` for ${made.count} student(s).`}` +
+            (made.shared && made.shared.length ? ` Left out (School ID shared by several students): ${made.shared.join(", ")}.` : "")
+        );
+        presFormsSave();
+        rerender();
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
+      } catch (err) {
+        presFormStatus.set(key, `Couldn't do that: ${err.message}`);
+        rerender();
+      }
+    });
+    bar.appendChild(launch);
+    body.appendChild(bar);
+
+    const explain = document.createElement("p");
+    explain.className = "hint";
+    explain.textContent =
+      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Close QR Code stops new answers and keeps the data set. Only the data set marked \"In use\" is used for scoring and reports.";
+    body.appendChild(explain);
+
+    const status = document.createElement("p");
+    status.className = "result";
+    status.textContent = presFormStatus.get(key) || "";
+    body.appendChild(status);
+
+    const tableHeading = document.createElement("h4");
+    tableHeading.className = "pres-subhead";
+    tableHeading.textContent = `Data sets — ${PRES_KIND_LABEL[kind]}`;
+    body.appendChild(tableHeading);
+    body.appendChild(buildPresDataSetTable(tool, cfg, container, kind, status));
+  };
+
+  // ----- Teacher -----
+  const teacher = addSection(
+    "teacher",
+    "Teacher Scores — QR Code",
+    "Teachers scan the QR code, type their name, and score every group on the Active Teacher Rubrics (with comments)."
   );
-  audience.appendChild(
+  finishSection(teacher);
+
+  // ----- Audience -----
+  const audience = addSection(
+    "audience",
+    "Audience Scores — QR Code",
+    "Students scan the QR code and type their School ID, then score every other group on the Active Audience Rubrics. They can leave a comment for each group."
+  );
+  audience.body.appendChild(
     makeTextarea(settings.audienceInstructions, `Instructions (leave blank for: "${DEFAULT_AUDIENCE_INSTRUCTIONS}")`, (value) => {
       settings.audienceInstructions = value;
     })
@@ -5551,17 +5823,17 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
   commentsToggle.className = "btn btn-ghost btn-small";
   commentsToggle.style.marginTop = "8px";
   commentsToggle.textContent = settings.audienceComments ? "Comments On" : "Comments Off";
-  commentsToggle.title = "Whether audience members can leave comments (turning this off leaves out the Comments and Global Comments rows)";
+  commentsToggle.title = "Whether audience members can leave a comment for each group";
   commentsToggle.addEventListener("click", () => {
     settings.audienceComments = !settings.audienceComments;
-    renderScoringToolView(tool, container);
+    rerender();
   });
-  audience.appendChild(commentsToggle);
-  audience.appendChild(document.createElement("br"));
-  audience.appendChild(buildPresFormRow(tool, cfg, container, "audience"));
+  audience.body.appendChild(commentsToggle);
+  finishSection(audience);
 
-  // ----- Peer Evaluation Score Sheet -----
+  // ----- Peer Evaluation -----
   const peer = addSection(
+    "peer",
     "Peer Evaluation — QR Code",
     "Students scan the QR code and type their School ID, then rate each member of their own group from 0 to the highest score below."
   );
@@ -5585,11 +5857,11 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
   highestInput.value = settings.peerHighestScore;
   highestInput.addEventListener("change", () => {
     settings.peerHighestScore = highestInput.value;
-    renderScoringToolView(tool, container); // re-normalizes to 1-10
+    rerender(); // re-normalizes to 1-10
   });
   peerRow.append(highestLabel, highestInput);
-  peer.appendChild(peerRow);
-  peer.appendChild(buildPresFormRow(tool, cfg, container, "peer"));
+  peer.body.appendChild(peerRow);
+  finishSection(peer);
 
   return page;
 }
@@ -5788,348 +6060,6 @@ function presFormsSave() {
   try {
     if (window.GGOAutosave && window.GGOAutosave.enabled()) window.GGOAutosave.flush();
   } catch (err) {}
-}
-
-/** The launcher for one online form (Teacher / Audience / Peer): create + show QR, sync, update, close. Lives on the Templates page. */
-function buildPresFormRow(tool, project, container, kind) {
-  const rerender = () => renderScoringToolView(tool, container);
-  const KIND_LABEL = { teacher: "Teacher Scores", audience: "Audience Scores", peer: "Peer Evaluation" };
-  const key = `${tool.id}|${project.id}|${kind}`;
-  const token = PresentationFormsModule.tokenOf(project, kind);
-
-  const row = document.createElement("div");
-  row.style.margin = "12px 0";
-  const title = document.createElement("strong");
-  title.textContent = `${KIND_LABEL[kind]} form`;
-  row.appendChild(title);
-
-  const status = document.createElement("p");
-  status.className = "result";
-  status.textContent = presFormStatus.get(key) || (token ? "Open." : "");
-  row.appendChild(status);
-
-  const buttons = document.createElement("div");
-  buttons.className = "panel-toolbar-buttons";
-  const mk = (label, fn, cls = "btn btn-ghost") => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = cls;
-    b.textContent = label;
-    b.addEventListener("click", async () => {
-      b.disabled = true;
-      try {
-        await fn();
-      } catch (err) {
-        presFormStatus.set(key, `Couldn't do that: ${err.message}`);
-        rerender();
-      }
-    });
-    buttons.appendChild(b);
-    return b;
-  };
-  const leftOut = (shared) => (shared && shared.length ? ` Left out (School ID shared by several students): ${shared.join(", ")}.` : "");
-
-  if (!token) {
-    mk(`Launch ${KIND_LABEL[kind]} QR Code`, async () => {
-      presFormStatus.set(key, "Creating form…");
-      const made = await PresentationFormsModule.create(tool.id, project.id, kind);
-      presFormStatus.set(key, kind === "teacher" ? "Form open. Teachers type their name to start." : `Form open for ${made.count} student(s).${leftOut(made.shared)}`);
-      presFormsSave();
-      rerender();
-      window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
-    }, "btn btn-primary");
-  } else {
-    mk("Show QR Code", async () => {
-      window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(token))}`, "ggo-pres-qr", "width=480,height=620");
-      rerender();
-    });
-    mk("Sync Responses", async () => {
-      presFormStatus.set(key, "Syncing…");
-      const result = await PresentationFormsModule.sync(tool.id, project.id, kind);
-      const names = result.missing.slice(0, 12).join(", ");
-      presFormStatus.set(
-        key,
-        (kind === "teacher" ? `${result.responses} teacher response(s).` : `${result.responses} of ${result.expected} student(s) have answered.`) +
-          (result.responses > 0 ? " Collected data is shown below." : "") +
-          (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "")
-      );
-      presFormsSave();
-      rerender();
-    }, "btn btn-primary");
-    const sheetNow = (project.scoreUploads || []).find((u) => u.id === `online-${kind}`);
-    const fillBtn = mk(`Fill Scores Grid`, async () => {
-      const cellsName = KIND_LABEL[kind];
-      if (!confirm(`This replaces the ${cellsName} cells of the Scores grid with ${kind === "peer" ? "each group's average peer rating (self-ratings excluded)" : "the averages"} from the collected data. Continue?`)) {
-        rerender();
-        return;
-      }
-      const result = kind === "peer" ? ScoringModule.presApplyPeerAverages(tool.id, project.id) : ScoringModule.presApplySheetAverages(tool.id, project.id, kind);
-      presFormStatus.set(key, `Filled ${result.applied} cell(s) of the Scores grid` + (result.clamped > 0 ? ` (${result.clamped} average(s) were above the rubric's points and were limited to it)` : "") + ".");
-      presFormsSave();
-      rerender();
-    });
-    fillBtn.disabled = !sheetNow;
-    fillBtn.title = "Puts the averages from the collected data into the Scores page grid";
-    mk("Update Form", async () => {
-      const res = await PresentationFormsModule.update(tool.id, project.id, kind);
-      presFormStatus.set(key, kind === "teacher" ? "Form updated." : `Form updated for ${res.count} student(s).${leftOut(res.shared)}`);
-      rerender();
-    });
-    mk("Close & Delete Form", async () => {
-      if (!confirm("Close this form? Its QR code stops working and the saved answers are deleted from the server. Answers you already synced stay in the sheet below. (Sync first if you haven't!)")) {
-        rerender();
-        return;
-      }
-      await PresentationFormsModule.close(tool.id, project.id, kind);
-      presFormStatus.set(key, "Form closed.");
-      presFormsSave();
-      rerender();
-    });
-  }
-  row.appendChild(buttons);
-  const sheet = (project.scoreUploads || []).find((u) => u.id === `online-${kind}`);
-  if (sheet) {
-    const when = new Date(sheet.importedAt);
-    const info = document.createElement("p");
-    info.className = "hint";
-    info.style.marginTop = "12px";
-    info.innerHTML = `<strong>Collected data</strong> — ${sheet.respondentCount} response(s)${Number.isNaN(when.getTime()) ? "" : `, last synced ${when.toLocaleString()}`}`;
-    row.appendChild(info);
-    row.appendChild(buildScoreSheetDetails(tool, project, sheet));
-  }
-  return row;
-}
-
-function buildPresentationUploadsSection(tool, project, container) {
-  const stateKey = `${tool.id}|${project.id}`;
-  const rerender = () => renderScoringToolView(tool, container);
-
-  const block = document.createElement("div");
-  block.className = "attendance-settings-block";
-  block.style.borderTop = "2px solid var(--line)";
-  block.style.paddingTop = "18px";
-  block.style.marginTop = "22px";
-
-  const heading = document.createElement("h3");
-  heading.textContent = "Score Sheet Uploads";
-  heading.style.fontFamily = "var(--font-heading)";
-  heading.style.fontSize = "1.5rem";
-  heading.style.color = "var(--green-dark)";
-  heading.style.margin = "0 0 8px";
-  block.appendChild(heading);
-
-  const hint = document.createElement("p");
-  hint.className = "hint";
-  hint.textContent =
-    'Upload the completed score sheets (CSV or Excel) and they are read automatically. The "name" column holds each respondent — a student\'s School ID, or an actual name such as a teacher. For Teacher and Audience sheets, the first column matching an active rubric starts Group 1, and each time the first rubric appears again the next group begins; comments are read the same way. A student\'s score for their own group, and their rating of themselves in a peer evaluation, are never counted.';
-  block.appendChild(hint);
-
-  const status = document.createElement("p");
-  status.className = "result";
-  status.textContent = scoreSheetStatus.get(stateKey) || "";
-  block.appendChild(status);
-
-  // ----- Upload buttons -----
-  const buttons = document.createElement("div");
-  buttons.className = "panel-toolbar-buttons";
-  Object.entries(SCORE_SHEET_LABELS).forEach(([kind, label]) => {
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = ".csv,.xlsx,.xls";
-    fileInput.hidden = true;
-    fileInput.addEventListener("change", async () => {
-      const file = fileInput.files[0];
-      fileInput.value = "";
-      if (!file) return;
-      try {
-        if (ScoringModule.presentationGroups(tool.id, project.id).length === 0) {
-          throw new Error('Import the groups first (the "Student Groups" subtab).');
-        }
-        if (kind !== "peer" && !ScoringModule.presentationColumns(tool.id, project.id).some((c) => c.kind === kind)) {
-          throw new Error(
-            `Activate at least one ${kind === "teacher" ? "Teacher" : "Audience"} rubric first (the "Rubrics" subtab) so the sheet's columns can be recognized.`
-          );
-        }
-        const rawRows = await readSpreadsheetRows(file);
-        if (rawRows.length < 2) throw new Error("The file needs a heading row and at least one row of responses.");
-
-        const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const parsed = parseScoreSheet(kind, rawRows, tool, project, uploadId);
-        const record = ScoringModule.addPresentationUpload(tool.id, project.id, {
-          id: uploadId,
-          kind,
-          fileName: file.name,
-          respondentCount: parsed.respondentCount,
-          scores: parsed.scores,
-          comments: parsed.comments,
-          ratings: parsed.ratings,
-        });
-
-        // Who responded: students (matched by School ID) or others (a teacher's name, etc.)
-        const respondents = new Set(
-          [...parsed.scores, ...parsed.comments, ...parsed.ratings].map((r) => r[0]).filter((k) => !k.startsWith("#"))
-        );
-        const students = [...respondents].filter((k) => ScoringModule.studentBySchoolId(k)).length;
-        const others = respondents.size - students;
-        const excluded =
-          kind === "peer"
-            ? ScoringModule.presentationCountedRatings(record).excluded
-            : ScoringModule.presentationCountedScores(tool.id, project.id, record).excluded;
-
-        scoreSheetStatus.set(
-          stateKey,
-          `Imported ${label}: ${parsed.respondentCount} response(s) (${students} by student ID, ${others} by name), ` +
-            (kind === "peer"
-              ? `${parsed.ratings.length} rating(s)`
-              : `${parsed.scores.length} score(s), ${parsed.comments.length} comment(s)`) +
-            (excluded > 0 ? `; ${excluded} ${kind === "peer" ? "self-rating(s)" : "own-group score(s)"} won't be counted` : "") +
-            (parsed.notes.length > 0 ? `. Note: ${parsed.notes.join("; ")}` : "") +
-            ". Click Save Scoring to store it."
-        );
-      } catch (err) {
-        scoreSheetStatus.set(stateKey, `Couldn't import that file: ${err.message}`);
-      }
-      rerender();
-    });
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-ghost";
-    btn.textContent = `Upload ${label}`;
-    btn.addEventListener("click", () => fileInput.click());
-    buttons.append(fileInput, btn);
-  });
-  block.appendChild(buttons);
-
-  block.appendChild(buildScoreSheetUploadList(tool, project, stateKey, rerender));
-  block.appendChild(buildPeerAveragesTable(tool, project));
-  return block;
-}
-
-/** The stored uploads, with Details/Delete, plus buttons that apply the Teacher/Audience averages to the Scores grid. */
-function buildScoreSheetUploadList(tool, project, stateKey, rerender) {
-  const wrap = document.createElement("div");
-  wrap.style.marginTop = "16px";
-
-  const uploads = ScoringModule.presentationUploads(tool.id, project.id);
-  const expanded = scoreSheetExpanded.get(stateKey) || new Set();
-  scoreSheetExpanded.set(stateKey, expanded);
-
-  // ----- Apply to grid -----
-  const applyRow = document.createElement("div");
-  applyRow.className = "panel-toolbar-buttons";
-  ["teacher", "audience", "peer"].forEach((kind) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-ghost btn-small";
-    btn.textContent = `Fill Scores Grid from ${SCORE_SHEET_LABELS[kind]}`;
-    btn.title = "Puts the average score per group and rubric from the uploaded sheets into the Scores grid above";
-    btn.disabled = ScoringModule.presentationUploads(tool.id, project.id, kind).length === 0;
-    btn.addEventListener("click", () => {
-      const cellsName = kind === "teacher" ? "Teacher" : kind === "audience" ? "Audience" : "Peer Evaluation";
-      if (
-        !confirm(
-          `This replaces the ${cellsName} cells of the Scores grid with ${
-            kind === "peer" ? "each group's average peer rating (self-ratings excluded)" : "the averages"
-          } from all uploaded ${SCORE_SHEET_LABELS[kind]} sheets. Continue?`
-        )
-      ) {
-        return;
-      }
-      const result =
-        kind === "peer"
-          ? ScoringModule.presApplyPeerAverages(tool.id, project.id)
-          : ScoringModule.presApplySheetAverages(tool.id, project.id, kind);
-      scoreSheetStatus.set(
-        stateKey,
-        `Filled ${result.applied} cell(s) of the Scores grid` +
-          (result.clamped > 0 ? ` (${result.clamped} average(s) were above the rubric's points and were limited to it)` : "") +
-          ". Click Save Scoring to store it."
-      );
-      rerender();
-    });
-    applyRow.appendChild(btn);
-  });
-  wrap.appendChild(applyRow);
-
-  // ----- Uploads table -----
-  const table = document.createElement("table");
-  table.className = "roster-table";
-  table.style.marginTop = "10px";
-  const thead = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  ["Type", "File", "Imported", "Responses", "Data", ""].forEach((label) => {
-    const th = document.createElement("th");
-    th.textContent = label;
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  if (uploads.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.className = "hint";
-    td.textContent = "No score sheets uploaded yet.";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-  }
-
-  uploads.forEach((upload) => {
-    const tr = document.createElement("tr");
-    const imported = new Date(upload.importedAt);
-    [
-      SCORE_SHEET_LABELS[upload.kind] || upload.kind,
-      upload.fileName,
-      Number.isNaN(imported.getTime()) ? "" : imported.toLocaleString(),
-      String(upload.respondentCount),
-      upload.kind === "peer"
-        ? `${upload.ratings.length} rating(s)`
-        : `${upload.scores.length} score(s), ${upload.comments.length} comment(s)`,
-    ].forEach((text) => {
-      const td = document.createElement("td");
-      td.textContent = text;
-      tr.appendChild(td);
-    });
-
-    const actionsTd = document.createElement("td");
-    actionsTd.className = "panel-toolbar-buttons";
-    const detailsBtn = document.createElement("button");
-    detailsBtn.type = "button";
-    detailsBtn.className = "btn btn-ghost btn-small";
-    detailsBtn.textContent = expanded.has(upload.id) ? "Hide" : "Details";
-    detailsBtn.addEventListener("click", () => {
-      if (expanded.has(upload.id)) expanded.delete(upload.id);
-      else expanded.add(upload.id);
-      rerender();
-    });
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn-ghost btn-small";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", () => {
-      if (!confirm(`Delete this uploaded sheet (${upload.fileName})? Scores already placed in the grid are not changed.`)) return;
-      ScoringModule.removePresentationUpload(tool.id, project.id, upload.id);
-      expanded.delete(upload.id);
-      rerender();
-    });
-    actionsTd.append(detailsBtn, deleteBtn);
-    tr.appendChild(actionsTd);
-    tbody.appendChild(tr);
-
-    if (expanded.has(upload.id)) {
-      const detailTr = document.createElement("tr");
-      const detailTd = document.createElement("td");
-      detailTd.colSpan = 6;
-      detailTd.appendChild(buildScoreSheetDetails(tool, project, upload));
-      detailTr.appendChild(detailTd);
-      tbody.appendChild(detailTr);
-    }
-  });
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-  return wrap;
 }
 
 /** What one stored upload contains: average scores per group and rubric plus every comment (teacher/audience), or the average rating each student received (peer). Own-group scores and self-ratings are left out, and the count of those is shown. */
