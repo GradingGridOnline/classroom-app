@@ -844,6 +844,7 @@ const ScoringModule = {
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
     if (typeof project.totalColumn.maxPoints !== "number") project.totalColumn.maxPoints = 0;
 
+    if (!project.forms || typeof project.forms !== "object") project.forms = {}; // open online forms: { audience: {token}, peer: {token} }
     if (!Array.isArray(project.scoreUploads)) project.scoreUploads = [];
     project.scoreUploads.forEach((upload) => {
       ["scores", "comments", "ratings"].forEach((key) => {

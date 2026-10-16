@@ -4746,6 +4746,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
   page.appendChild(buildTableTotalColumnBlock(tool, cfg, container, cfg.id));
   page.appendChild(buildPresentationPrintSection(tool, cfg));
   page.appendChild(buildPresentationEmailSection(tool, cfg));
+  page.appendChild(buildPresentationFormsSection(tool, cfg, container));
   page.appendChild(buildPresentationUploadsSection(tool, cfg, container));
   return page;
 }
@@ -5803,6 +5804,125 @@ function parseScoreSheet(kind, rawRows, tool, project, uploadId) {
   });
 
   return { scores, comments, ratings, respondentCount: dataRows.length, blocks, notes };
+}
+
+// ----- Online score forms (QR codes) -----
+
+const presFormStatus = new Map(); // "toolId|projectId|kind" -> last status message
+
+function presFormsSave() {
+  try {
+    if (window.GGOAutosave && window.GGOAutosave.enabled()) window.GGOAutosave.flush();
+  } catch (err) {}
+}
+
+function buildPresentationFormsSection(tool, project, container) {
+  const rerender = () => renderScoringToolView(tool, container);
+
+  const block = document.createElement("div");
+  block.className = "attendance-settings-block";
+  block.style.borderTop = "2px solid var(--line)";
+  block.style.paddingTop = "18px";
+  block.style.marginTop = "22px";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Online Score Forms (QR codes)";
+  heading.style.fontFamily = "var(--font-heading)";
+  heading.style.fontSize = "1.5rem";
+  heading.style.color = "var(--green-dark)";
+  heading.style.margin = "0 0 8px";
+  block.appendChild(heading);
+
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent =
+    "Students scan a QR code and type their School ID. The Audience form lets them score every other group on the active Audience rubrics; the Peer form lets them rate the members of their own group. Wording and the highest peer score come from the Templates page settings. After students answer, click Sync — the answers are stored as an \"Online form\" sheet below, ready for \"Fill Scores Grid\". Open the form again after changing rubrics, groups or the roster by clicking Update Form.";
+  block.appendChild(hint);
+
+  const KIND_LABEL = { audience: "Audience Scores", peer: "Peer Evaluation" };
+  PresentationFormsModule.KINDS.forEach((kind) => {
+    const key = `${tool.id}|${project.id}|${kind}`;
+    const token = PresentationFormsModule.tokenOf(project, kind);
+
+    const row = document.createElement("div");
+    row.style.margin = "12px 0";
+    const title = document.createElement("strong");
+    title.textContent = `${KIND_LABEL[kind]} form`;
+    row.appendChild(title);
+
+    const status = document.createElement("p");
+    status.className = "result";
+    status.textContent = presFormStatus.get(key) || (token ? "Open." : "");
+    row.appendChild(status);
+
+    const buttons = document.createElement("div");
+    buttons.className = "panel-toolbar-buttons";
+    const mk = (label, fn, cls = "btn btn-ghost") => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      b.textContent = label;
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await fn();
+        } catch (err) {
+          presFormStatus.set(key, `Couldn't do that: ${err.message}`);
+          rerender();
+        }
+      });
+      buttons.appendChild(b);
+      return b;
+    };
+    const leftOut = (shared) => (shared && shared.length ? ` Left out (School ID shared by several students): ${shared.join(", ")}.` : "");
+
+    if (!token) {
+      mk(`Create ${KIND_LABEL[kind]} Form`, async () => {
+        presFormStatus.set(key, "Creating form…");
+        const made = await PresentationFormsModule.create(tool.id, project.id, kind);
+        presFormStatus.set(key, `Form open for ${made.count} student(s).${leftOut(made.shared)}`);
+        presFormsSave();
+        rerender();
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
+      }, "btn btn-primary");
+    } else {
+      mk("Show QR Code", async () => {
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(token))}`, "ggo-pres-qr", "width=480,height=620");
+        rerender();
+      });
+      mk("Sync Responses", async () => {
+        presFormStatus.set(key, "Syncing…");
+        const result = await PresentationFormsModule.sync(tool.id, project.id, kind);
+        const names = result.missing.slice(0, 12).join(", ");
+        presFormStatus.set(
+          key,
+          `${result.responses} of ${result.expected} student(s) have answered.` +
+            (result.responses > 0 ? " Stored as the \"Online form\" sheet below." : "") +
+            (result.missing.length > 0 && kind === "peer" ? ` Not yet: ${names}${result.missing.length > 12 ? ` and ${result.missing.length - 12} more` : ""}.` : "")
+        );
+        presFormsSave();
+        rerender();
+      }, "btn btn-primary");
+      mk("Update Form", async () => {
+        const res = await PresentationFormsModule.update(tool.id, project.id, kind);
+        presFormStatus.set(key, `Form updated for ${res.count} student(s).${leftOut(res.shared)}`);
+        rerender();
+      });
+      mk("Close & Delete Form", async () => {
+        if (!confirm("Close this form? Its QR code stops working and the saved answers are deleted from the server. Answers you already synced stay in the sheet below. (Sync first if you haven't!)")) {
+          rerender();
+          return;
+        }
+        await PresentationFormsModule.close(tool.id, project.id, kind);
+        presFormStatus.set(key, "Form closed.");
+        presFormsSave();
+        rerender();
+      });
+    }
+    row.appendChild(buttons);
+    block.appendChild(row);
+  });
+  return block;
 }
 
 function buildPresentationUploadsSection(tool, project, container) {
