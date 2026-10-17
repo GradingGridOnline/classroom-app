@@ -1,25 +1,60 @@
 // ===== Quiz editor + QR answer form for the Test & Quiz Bank =====
 // Load AFTER app.js. A quiz is a normal test in the bank (so Sources / Progress Tracker
 // pulling keep working) with an extra `quiz` field:
-//   quiz: { sections: [{ id, title, questions: [{ id, type: "mc"|"blank", text, points,
-//           choices: [..], correct: index, accepted: [..] }] }],
+//   quiz: { kind: "standard" | "answers",            ("answers" = Answer Collection: no question text)
+//           settings: { labelStyle, defaultOptions },
+//           sections: [{ id, title, questions: [{ id, type: "mc"|"blank", text, points,
+//                      choices: [..], correct: index, accepted: [..] }] }],
 //           token (open QR form or null), submissions: [{ sid, name, answers, at }] }
 // The answer key stays in this app; the server only gets questions + who may answer.
-// "Get Responses" pulls answers, grades them here, and fills the test's scores.
 
 (function () {
   const newId = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const MAX_QUESTIONS = 200;
+  const MAX_OPTIONS = 20;
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
   const statusMsg = new Map(); // toolId|testId -> text
+
+  // ---------- option labels ----------
+  const HIRA = "あいうえおかきくけこさしすせそたちつてと";
+  const KATA = "アイウエオカキクケコサシスセソタチツテト";
+  const LABEL_STYLES = [
+    ["upper", "A, B, C"],
+    ["lower", "a, b, c"],
+    ["numbers", "1, 2, 3"],
+    ["roman-upper", "I, II, III"],
+    ["roman-lower", "i, ii, iii"],
+    ["hiragana", "あ, い, う"],
+    ["katakana", "ア, イ, ウ"],
+  ];
+  function roman(n) {
+    let s = "";
+    [[10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]].forEach(([v, r]) => { while (n >= v) { s += r; n -= v; } });
+    return s;
+  }
+  function optionLabel(style, i) {
+    switch (style) {
+      case "lower": return String.fromCharCode(97 + i);
+      case "numbers": return String(i + 1);
+      case "roman-upper": return roman(i + 1).toUpperCase();
+      case "roman-lower": return roman(i + 1);
+      case "hiragana": return HIRA[i] || String(i + 1);
+      case "katakana": return KATA[i] || String(i + 1);
+      default: return String.fromCharCode(65 + i);
+    }
+  }
+  window.quizOptionLabel = optionLabel;
 
   // ---------- data + grading ----------
   Object.assign(ScoringModule, {
     normalizeQuiz(test) {
       const q = test && test.quiz;
       if (!q) return null;
+      if (q.kind !== "answers") q.kind = "standard";
+      if (!q.settings || typeof q.settings !== "object") q.settings = {};
+      if (!LABEL_STYLES.some(([id]) => id === q.settings.labelStyle)) q.settings.labelStyle = "upper";
+      q.settings.defaultOptions = Math.max(2, Math.min(MAX_OPTIONS, Math.round(Number(q.settings.defaultOptions) || 4)));
       if (!Array.isArray(q.sections)) q.sections = [];
       if (!Array.isArray(q.submissions)) q.submissions = [];
       if (typeof q.token !== "string") q.token = null;
@@ -43,14 +78,20 @@
     quizQuestionCount(quiz) {
       return quiz.sections.reduce((a, s) => a + s.questions.length, 0);
     },
-    addQuizTest(toolId, name) {
+    /** kind: "standard" (questions with text) or "answers" (Answer Collection: numbers and options only). */
+    addQuizTest(toolId, name, kind) {
       const cfg = this.getTestBankConfig(toolId);
       if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
       if (cfg.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`This bank is at its limit of ${MAX_TESTS_PER_BANK} tests/quizzes.`);
       const test = {
         id: newId("test"), name: (name || "").trim() || "Untitled quiz", maxPoints: 0, sourceFile: "Quiz editor",
         rows: [], scores: {}, unmatched: [],
-        quiz: { sections: [{ id: newId("sec"), title: "Section 1", questions: [] }], token: null, submissions: [] },
+        quiz: {
+          kind: kind === "answers" ? "answers" : "standard",
+          settings: { labelStyle: "upper", defaultOptions: 4 },
+          sections: [{ id: newId("sec"), title: "Section 1", questions: [] }],
+          token: null, submissions: [],
+        },
       };
       cfg.tests.push(test);
       return test;
@@ -62,8 +103,21 @@
       if (this.quizQuestionCount(quiz) >= MAX_QUESTIONS) throw new Error(`Limit of ${MAX_QUESTIONS} questions.`);
       section.questions.push({
         id: newId("q"), type, text: "", points: 1,
-        choices: type === "mc" ? ["", "", "", ""] : [], correct: 0, accepted: [],
+        choices: type === "mc" ? Array(quiz.settings.defaultOptions).fill("") : [], correct: 0, accepted: type === "blank" ? [""] : [],
       });
+    },
+    duplicateQuizQuestion(quiz, section, index) {
+      if (this.quizQuestionCount(quiz) >= MAX_QUESTIONS) throw new Error(`Limit of ${MAX_QUESTIONS} questions.`);
+      const copy = JSON.parse(JSON.stringify(section.questions[index]));
+      copy.id = newId("q");
+      section.questions.splice(index + 1, 0, copy);
+    },
+    /** Sets how many options a multiple-choice question has (2-20), keeping the existing option texts. */
+    setQuizChoiceCount(q, count) {
+      count = Math.max(2, Math.min(MAX_OPTIONS, Math.round(Number(count) || 0)));
+      while (q.choices.length < count) q.choices.push("");
+      q.choices.length = count;
+      if (q.correct >= count) q.correct = 0;
     },
     /** Points earned for one answer. MC: chosen index must equal the key. Blank: matches any accepted answer (spacing/case/full-width ignored; numbers compare as numbers). */
     gradeQuizQuestion(q, ans) {
@@ -124,10 +178,16 @@
         .filter((s) => String(s.schoolId || "").trim())
         .map((s) => ({ sid: String(s.schoolId).trim(), name: s.name || "" }));
       if (people.length === 0) throw new Error("No students on the roster have a School ID yet.");
+      const answersOnly = quiz.kind === "answers";
       const config = {
+        kind: quiz.kind,
+        labelStyle: quiz.settings.labelStyle,
         sections: quiz.sections.map((s) => ({
           title: s.title,
-          questions: s.questions.map((x) => ({ id: x.id, type: x.type, text: x.text, points: x.points, choices: x.type === "mc" ? x.choices : undefined })),
+          questions: s.questions.map((x) => ({
+            id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: x.points,
+            choices: x.type === "mc" ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
+          })),
         })),
       };
       return { title: test.name, config, people };
@@ -193,34 +253,36 @@
     i.addEventListener("change", () => onChange(i.value));
     return i;
   }
-  const splitList = (text) => String(text).split(/[,\n、，]/).map((s) => s.trim()).filter(Boolean);
+  const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : "Quiz");
 
   // ---------- quiz list on the bank page ----------
   function buildQuizList(tool, container) {
-    const { section, body } = makePresSection("Quizzes (built in the editor)");
+    const { section, body } = makePresSection("Quizzes & Answer Collections (built in the editor)");
     const rerender = () => renderScoringToolView(tool, container);
-    const note = h("p", "hint", "Build a quiz here, open a QR code, and students answer on their phones (School ID first). Answers are graded automatically; the scores appear below as a normal test you can use in Sources.");
-    body.appendChild(note);
+    body.appendChild(h("p", "hint", "Build a quiz (questions with text) or an Answer Collection (just question numbers and answer options, to match a paper test sheet). Open a QR code and students answer on their phones (School ID first). Answers are graded automatically; scores appear below as a normal test you can use in Sources."));
     const tests = ScoringModule.testBankTests(tool.id).filter((t) => t.quiz);
     tests.forEach((t) => {
       const quiz = ScoringModule.normalizeQuiz(t);
       const row = h("div", "panel-toolbar");
-      row.appendChild(h("span", "", `${t.name} — ${ScoringModule.quizQuestionCount(quiz)} question(s), ${ScoringModule.quizTotal(quiz)} pts${quiz.token ? " · QR open" : ""}`));
+      row.appendChild(h("span", "", `${t.name} (${kindName(quiz)}) — ${ScoringModule.quizQuestionCount(quiz)} question(s), ${ScoringModule.quizTotal(quiz)} pts${quiz.token ? " · QR open" : ""}`));
       const btns = h("div", "panel-toolbar-buttons");
       btns.appendChild(button("Edit / Collect Answers", "btn btn-primary btn-small", () => { editing.set(tool.id, t.id); rerender(); }));
       row.appendChild(btns);
       body.appendChild(row);
     });
-    const add = button("+ New Quiz", "btn btn-ghost", () => {
-      const name = prompt("Quiz name:", `Quiz ${tests.length + 1}`);
+    const create = (kind, label) => () => {
+      const name = prompt(`${label} name:`, `${label} ${tests.length + 1}`);
       if (name === null) return;
       try {
-        const t = ScoringModule.addQuizTest(tool.id, name);
+        const t = ScoringModule.addQuizTest(tool.id, name, kind);
         editing.set(tool.id, t.id);
       } catch (err) { alert(err.message); return; }
       rerender();
-    });
-    body.appendChild(add);
+    };
+    const bar = h("div", "panel-toolbar-buttons");
+    bar.appendChild(button("+ New Quiz", "btn btn-ghost", create("standard", "Quiz")));
+    bar.appendChild(button("+ New Answer Collection", "btn btn-ghost", create("answers", "Answer Collection")));
+    body.appendChild(bar);
     return section;
   }
 
@@ -228,24 +290,50 @@
   function renderEditor(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
+    const answersOnly = quiz.kind === "answers";
+    const style = quiz.settings.labelStyle;
     container.innerHTML = "";
     const rerender = () => renderScoringToolView(tool, container);
+    const regrade = () => ScoringModule.regradeQuiz(tool.id, testId);
     const key = `${tool.id}|${testId}`;
 
     const bar = h("div", "panel-toolbar");
     const left = h("div", "panel-toolbar-buttons");
     left.appendChild(button("← Back to bank", "btn btn-ghost", () => { editing.delete(tool.id); rerender(); }));
-    left.appendChild(h("label", "", "Quiz name:"));
+    left.appendChild(h("label", "", `${kindName(quiz)} name:`));
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, testId, v); rerender(); }));
     bar.appendChild(left);
     bar.appendChild(h("span", "count-badge", `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
     container.appendChild(bar);
 
+    // ----- quiz settings -----
+    {
+      const { section, body } = makePresSection(`${kindName(quiz)} settings`);
+      const r1 = h("div", "mapping-row");
+      r1.appendChild(h("label", "", "Option labels"));
+      const sel = h("select");
+      LABEL_STYLES.forEach(([id, text]) => {
+        const o = h("option", "", text);
+        o.value = id;
+        if (id === style) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", () => { quiz.settings.labelStyle = sel.value; rerender(); });
+      r1.appendChild(sel);
+      body.appendChild(r1);
+      const r2row = h("div", "mapping-row");
+      r2row.appendChild(h("label", "", "Options in new multiple-choice questions"));
+      r2row.appendChild(textInput(String(quiz.settings.defaultOptions), "", (v) => { quiz.settings.defaultOptions = Math.max(2, Math.min(MAX_OPTIONS, Math.round(Number(v) || 4))); rerender(); }, "point-value-input"));
+      body.appendChild(r2row);
+      body.appendChild(h("p", "hint", "The label style applies to the whole quiz, including what students see. You can still change the number of options on each question."));
+      container.appendChild(section);
+    }
+
     let n = 0;
     quiz.sections.forEach((sec, si) => {
       const { section, body } = makePresSection(`Section ${si + 1}`);
       const top = h("div", "panel-toolbar");
-      top.appendChild(textInput(sec.title, "Section title", (v) => { sec.title = v; ScoringModule.regradeQuiz(tool.id, testId); rerender(); }));
+      top.appendChild(textInput(sec.title, "Section title", (v) => { sec.title = v; rerender(); }));
       const tb = h("div", "panel-toolbar-buttons");
       tb.appendChild(button("+ Multiple choice", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Fill in the blank", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "blank"); } catch (e) { alert(e.message); return; } rerender(); }));
@@ -253,7 +341,7 @@
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
           if (!confirm(`Delete "${sec.title}" and its ${sec.questions.length} question(s)?`)) return;
           quiz.sections.splice(si, 1);
-          ScoringModule.regradeQuiz(tool.id, testId);
+          regrade();
           rerender();
         }));
       }
@@ -267,46 +355,63 @@
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("strong", "", `Q${n}`));
         row.appendChild(h("span", "hint", q.type === "mc" ? "Multiple choice" : "Fill in the blank"));
-        const text = textInput(q.text, "Question text (or just the number from the test sheet)", (v) => { q.text = v; });
-        text.style.flex = "1";
-        text.style.maxWidth = "none";
-        row.appendChild(text);
+        if (answersOnly) {
+          const spacer = h("span");
+          spacer.style.flex = "1";
+          row.appendChild(spacer);
+        } else {
+          const text = textInput(q.text, "Question text", (v) => { q.text = v; });
+          text.style.flex = "1";
+          text.style.maxWidth = "none";
+          row.appendChild(text);
+        }
         row.appendChild(h("span", "hint", "pts"));
-        row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); ScoringModule.regradeQuiz(tool.id, testId); rerender(); }, "point-value-input"));
-        row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); ScoringModule.regradeQuiz(tool.id, testId); rerender(); }));
+        row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
+        row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
+        row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
         box.appendChild(row);
 
         if (q.type === "mc") {
-          const area = h("textarea");
-          area.rows = Math.max(3, q.choices.length);
-          area.placeholder = "One choice per line (students pick A, B, C…)";
-          area.value = q.choices.join("\n");
-          area.addEventListener("change", () => {
-            q.choices = area.value.split("\n").map((s) => s.trim()).filter(Boolean);
-            if (q.correct >= q.choices.length) q.correct = 0;
-            ScoringModule.regradeQuiz(tool.id, testId);
-            rerender();
-          });
-          box.appendChild(area);
+          const cnt = h("div", "mapping-row");
+          cnt.appendChild(h("label", "", "Number of options"));
+          cnt.appendChild(textInput(String(q.choices.length), "", (v) => { ScoringModule.setQuizChoiceCount(q, v); regrade(); rerender(); }, "point-value-input"));
+          box.appendChild(cnt);
+          if (!answersOnly) {
+            q.choices.forEach((c, ci) => {
+              const crow = h("div", "mapping-row");
+              crow.appendChild(h("label", "", optionLabel(style, ci)));
+              const inp = textInput(c, "Option text", (v) => { q.choices[ci] = v.trim(); rerender(); });
+              inp.style.flex = "1";
+              crow.appendChild(inp);
+              box.appendChild(crow);
+            });
+          }
           const keyRow = h("div", "mapping-row");
           keyRow.appendChild(h("label", "", "Correct answer"));
           const sel = h("select");
           q.choices.forEach((c, ci) => {
-            const o = h("option", "", `${LETTERS[ci]}: ${c}`);
+            const o = h("option", "", answersOnly || !c ? optionLabel(style, ci) : `${optionLabel(style, ci)}: ${c}`);
             o.value = String(ci);
             if (ci === q.correct) o.selected = true;
             sel.appendChild(o);
           });
-          sel.addEventListener("change", () => { q.correct = Number(sel.value); ScoringModule.regradeQuiz(tool.id, testId); });
+          sel.addEventListener("change", () => { q.correct = Number(sel.value); regrade(); });
           keyRow.appendChild(sel);
           box.appendChild(keyRow);
         } else {
-          const keyRow = h("div", "mapping-row");
-          keyRow.appendChild(h("label", "", "Accepted answers"));
-          const inp = textInput(q.accepted.join(", "), "e.g. 42, forty-two  (separate with commas; case and spacing ignored)", (v) => { q.accepted = splitList(v); ScoringModule.regradeQuiz(tool.id, testId); });
-          inp.style.flex = "1";
-          keyRow.appendChild(inp);
-          box.appendChild(keyRow);
+          if (q.accepted.length === 0) q.accepted.push("");
+          q.accepted.forEach((a, ai) => {
+            const arow = h("div", "mapping-row");
+            arow.appendChild(h("label", "", ai === 0 ? "Correct answer" : `Alternate answer ${ai}`));
+            const inp = textInput(a, ai === 0 ? "e.g. 42" : "Another accepted answer", (v) => { q.accepted[ai] = v.trim(); regrade(); });
+            inp.style.flex = "1";
+            arow.appendChild(inp);
+            if (q.accepted.length > 1) arow.appendChild(button("×", "btn btn-ghost btn-small", () => { q.accepted.splice(ai, 1); regrade(); rerender(); }));
+            box.appendChild(arow);
+          });
+          const addAlt = button("+ Add alternate answer", "btn btn-ghost btn-small", () => { q.accepted.push(""); rerender(); });
+          box.appendChild(addAlt);
+          box.appendChild(h("p", "hint", "Case, spacing and full-width/half-width forms are ignored; numbers match as numbers (42 = 042)."));
         }
         body.appendChild(box);
       });
@@ -317,7 +422,7 @@
 
     // ----- QR + results -----
     const { section: qrSection, body: qrBody } = makePresSection("Student QR form & results");
-    qrBody.appendChild(h("p", "hint", "Students scan, type their School ID, then pick choices / type answers. Get Responses refreshes the questions and roster, copies answers, and grades them (re-run it after changing the answer key). Close QR Code stops new answers; graded results stay."));
+    qrBody.appendChild(h("p", "hint", "Students scan, type their School ID, then pick options / type answers. Get Responses refreshes the questions and roster, copies answers, and grades them (re-run it after changing the answer key). Close QR Code stops new answers; graded results stay."));
     const bb = h("div", "panel-toolbar-buttons");
     const stat = h("p", "result", statusMsg.get(key) || "");
     const say = (t) => { statusMsg.set(key, t); stat.textContent = t; };
@@ -349,7 +454,7 @@
         rerender();
       })));
     }
-    bb.appendChild(button("Regrade", "btn btn-ghost", () => { ScoringModule.regradeQuiz(tool.id, testId); flush(); say("Regraded from stored answers."); rerender(); }));
+    bb.appendChild(button("Regrade", "btn btn-ghost", () => { regrade(); flush(); say("Regraded from stored answers."); rerender(); }));
     qrBody.appendChild(bb);
     qrBody.appendChild(stat);
 

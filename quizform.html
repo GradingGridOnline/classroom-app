@@ -23,6 +23,9 @@
     .q { margin-bottom:16px; } .qt { font-weight:600; margin-bottom:6px; } .pts { color:var(--soft); font-weight:400; font-size:.85rem; }
     .opt { display:flex; gap:10px; width:100%; text-align:left; font:inherit; padding:10px 12px; margin-bottom:6px; border:1.5px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); cursor:pointer; }
     .opt b { min-width:1.4em; } .opt.on { background:var(--green); border-color:var(--green); color:#fff; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { min-width:48px; height:48px; padding:0 10px; border:1.5px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); font:inherit; font-weight:700; cursor:pointer; }
+    .chip.on { background:var(--green); border-color:var(--green); color:#fff; }
     .done { text-align:center; padding:10px 0; } .tick { font-size:3rem; color:var(--good); line-height:1; }
     [hidden] { display:none !important; }
   </style>
@@ -61,7 +64,20 @@
       const cfg = (typeof APP_CONFIG !== "undefined" && APP_CONFIG.supabase) || {};
       const token = new URLSearchParams(location.search).get("c") || "";
       const $ = (id) => document.getElementById(id);
-      const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const HIRA = "あいうえおかきくけこさしすせそたちつてと";
+      const KATA = "アイウエオカキクケコサシスセソタチツテト";
+      function roman(n) { let s = ""; [[10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]].forEach(([v, r]) => { while (n >= v) { s += r; n -= v; } }); return s; }
+      function label(style, i) {
+        switch (style) {
+          case "lower": return String.fromCharCode(97 + i);
+          case "numbers": return String(i + 1);
+          case "roman-upper": return roman(i + 1).toUpperCase();
+          case "roman-lower": return roman(i + 1);
+          case "hiragana": return HIRA[i] || String(i + 1);
+          case "katakana": return KATA[i] || String(i + 1);
+          default: return String.fromCharCode(65 + i);
+        }
+      }
       const MSG = {
         bad_id: "That School ID isn't on the list. Check it and try again.",
         closed: "This link isn't active any more. Ask your teacher for a new QR code.",
@@ -87,6 +103,8 @@
 
       function render() {
         const box = $("questions"); box.textContent = ""; let num = 0;
+        const style = form.config.labelStyle || "upper";
+        const answersOnly = form.config.kind === "answers";
         form.config.sections.forEach((sec) => {
           const block = document.createElement("div"); block.className = "block";
           if (sec.title) { const h = document.createElement("h2"); h.textContent = sec.title; block.appendChild(h); }
@@ -94,16 +112,26 @@
             num++;
             const wrap = document.createElement("div"); wrap.className = "q";
             const qt = document.createElement("div"); qt.className = "qt";
-            qt.textContent = `${num}. ${q.text || ""} `;
+            qt.textContent = answersOnly || !q.text ? `${num}. ` : `${num}. ${q.text} `;
             const pts = document.createElement("span"); pts.className = "pts"; pts.textContent = `(${q.points} pt${q.points === 1 ? "" : "s"})`;
             qt.appendChild(pts); wrap.appendChild(qt);
             if (q.type === "mc") {
+              const compact = answersOnly || (q.choices || []).every((c) => !c);
+              const holder = document.createElement("div");
+              if (compact) holder.className = "chips";
               (q.choices || []).forEach((c, i) => {
-                const b = document.createElement("button"); b.type = "button"; b.className = "opt" + (answers[q.id] === i ? " on" : "");
-                const l = document.createElement("b"); l.textContent = LETTERS[i]; b.append(l, document.createTextNode(c));
-                b.addEventListener("click", () => { answers[q.id] = i; wrap.querySelectorAll(".opt").forEach((o) => o.classList.remove("on")); b.classList.add("on"); refresh(); });
-                wrap.appendChild(b);
+                const b = document.createElement("button"); b.type = "button";
+                b.className = (compact ? "chip" : "opt") + (answers[q.id] === i ? " on" : "");
+                if (compact) b.textContent = label(style, i);
+                else { const l = document.createElement("b"); l.textContent = label(style, i); b.append(l, document.createTextNode(c)); }
+                b.addEventListener("click", () => {
+                  answers[q.id] = i;
+                  holder.querySelectorAll("button").forEach((o) => o.classList.remove("on"));
+                  b.classList.add("on"); refresh();
+                });
+                holder.appendChild(b);
               });
+              wrap.appendChild(holder);
             } else {
               const t = document.createElement("input"); t.type = "text"; t.autocomplete = "off"; t.autocapitalize = "off"; t.spellcheck = false;
               t.value = answers[q.id] || "";
