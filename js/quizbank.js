@@ -20,38 +20,37 @@
   const viewOf = new Map(); // toolId -> "build" | "review"
   const statusMsg = new Map(); // toolId|testId -> text
 
-  // ---------- look & feel (colours that tell the parts of the editor apart) ----------
-  const styleEl = document.createElement("style");
-  styleEl.textContent = `
-    .qz-header { background:#1f3b5c; border-radius:8px; padding:12px 14px; margin-bottom:20px; }
-    .qz-header label { color:#fff; font-weight:700; }
-    .qz-header .count-badge { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.4); color:#fff; }
-    .qz-settings, .qz-section, .qz-qr, .qz-review { margin-bottom:30px; border-width:3px; }
-    .qz-settings { border-color:#5b6b7a; } .qz-settings .pres-section-head { background:#5b6b7a; color:#fff; }
-    .qz-section { border-color:#2f6b3a; } .qz-section .pres-section-head { background:#2f6b3a; color:#fff; }
-    .qz-qr { border-color:#7a3b8f; } .qz-qr .pres-section-head { background:#7a3b8f; color:#fff; }
-    .qz-review { border-color:#b35a00; } .qz-review .pres-section-head { background:#b35a00; color:#fff; }
-    .qz-q { border:1px solid var(--line) !important; border-left-width:8px !important; border-radius:8px; padding:12px 14px !important; margin-bottom:16px !important; }
-    .qz-q-mc { border-left-color:#2a74c8 !important; background:color-mix(in srgb, #2a74c8 7%, var(--card)) !important; }
-    .qz-q-blank { border-left-color:#d9822b !important; background:color-mix(in srgb, #d9822b 8%, var(--card)) !important; }
-    .qz-num { display:inline-block; min-width:2.6em; text-align:center; padding:3px 10px; border-radius:14px; background:#1f3b5c; color:#fff; font-size:1.05rem; }
-    .qz-pill { padding:2px 10px; border-radius:10px; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#fff; white-space:nowrap; }
-    .qz-q-mc .qz-pill { background:#2a74c8; } .qz-q-blank .qz-pill { background:#d9822b; }
-    .qz-opt { margin-left:20px; padding-left:12px; border-left:3px dotted var(--line); }
-    .qz-opt label { font-weight:700; text-align:center; background:var(--paper); border:1px solid var(--line); border-radius:4px; width:3em !important; }
-    .qz-key { background:rgba(30,158,74,.15); border:2px solid #1e9e4a; border-radius:6px; padding:6px 10px; margin-top:10px; }
-    .qz-key label { font-weight:700; color:#14753a; }
-    .qz-alt { margin-left:20px; padding:4px 10px; border-left:4px solid #1e9e4a; background:rgba(30,158,74,.07); }
-    .qz-listrow { border:1px solid var(--line); border-left:6px solid #2f6b3a; border-radius:8px; padding:8px 12px; margin-bottom:8px; background:color-mix(in srgb, #2f6b3a 6%, var(--card)); }
-    .qz-grid thead th { background:#b35a00 !important; color:#fff !important; }
-    .qz-grid thead .item-points-label { color:#ffe9cc; }
-    .qz-grid tr.qz-keyrow td { background:rgba(30,158,74,.28) !important; border-top:2px solid #1e9e4a; border-bottom:2px solid #1e9e4a; }
-    .qz-grid tr.qz-band-a td { background:var(--td-bg); }
-    .qz-grid tr.qz-band-b td { background:color-mix(in srgb, var(--td-bg) 78%, #4f7fb0); }
-    .qz-grid tr.qz-student-start td { border-top:3px solid var(--ink-soft); }
-    .qz-grid tfoot td { font-weight:700; border-top:3px solid #b35a00; }
-  `;
-  document.head.appendChild(styleEl);
+  // ---------- look & feel (injected so no other file needs changing) ----------
+  if (!document.getElementById("qz-style")) {
+    const st = document.createElement("style");
+    st.id = "qz-style";
+    st.textContent = `
+      .qz-header { background: color-mix(in srgb, var(--green) 12%, var(--card)); border: 2px solid var(--green); border-radius: 10px; padding: 10px 14px; margin-bottom: 22px; }
+      .qz-tab { font-weight: 700; padding: 8px 18px !important; border-width: 2px !important; }
+      .pres-section.qz-sec-settings { border-color: #6a4fb3; }
+      .pres-section.qz-sec-settings > .pres-section-head { background: #6a4fb3; color: #fff; }
+      .pres-section.qz-sec-q0 { border-color: #1f6fb5; } .pres-section.qz-sec-q0 > .pres-section-head { background: #1f6fb5; color: #fff; }
+      .pres-section.qz-sec-q1 { border-color: #2e8b57; } .pres-section.qz-sec-q1 > .pres-section-head { background: #2e8b57; color: #fff; }
+      .pres-section.qz-sec-q2 { border-color: #b8860b; } .pres-section.qz-sec-q2 > .pres-section-head { background: #b8860b; color: #fff; }
+      .pres-section.qz-sec-q3 { border-color: #a23b72; } .pres-section.qz-sec-q3 > .pres-section-head { background: #a23b72; color: #fff; }
+      .pres-section.qz-sec-qr { border-color: #c2571a; } .pres-section.qz-sec-qr > .pres-section-head { background: #c2571a; color: #fff; }
+      .pres-section.qz-sec-review { border-color: #0f7d73; } .pres-section.qz-sec-review > .pres-section-head { background: #0f7d73; color: #fff; }
+      .pres-section.qz-sec-list { border-color: #4a5568; } .pres-section.qz-sec-list > .pres-section-head { background: #4a5568; color: #fff; }
+      .category-manage-item.qz-q { border: 1px solid var(--line); border-left: 8px solid var(--qz-c); border-radius: 8px; padding: 12px 14px; background: var(--card); }
+      .qz-q-mc { --qz-c: #2a7de1; } .qz-q-blank { --qz-c: #e08a1e; }
+      .qz-qnum { background: var(--qz-c); color: #fff; border-radius: 999px; min-width: 2.6em; padding: 3px 12px; text-align: center; font-weight: 800; font-size: 1.05rem; }
+      .qz-pill { border: 1.5px solid var(--qz-c); color: var(--qz-c); border-radius: 999px; padding: 1px 12px; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+      .qz-opt-row { margin-left: 26px; border-left: 3px solid var(--line); padding-left: 12px; }
+      .qz-keyrow { background: color-mix(in srgb, #2e9e4f 16%, transparent); border-radius: 6px; padding: 6px 10px; }
+      .qz-review thead th { background: #0f7d73 !important; color: #fff !important; }
+      .qz-review td.qz-ok { background: rgba(46, 158, 79, .22) !important; }
+      .qz-review td.qz-bad { background: rgba(211, 48, 47, .17) !important; }
+      .qz-review tr.qz-key td { background: rgba(224, 168, 0, .28) !important; font-weight: 700; border-bottom: 3px solid #b8860b; }
+      .qz-review tr.qz-newstudent td { border-top: 3px solid var(--ink-soft); }
+      .qz-review tfoot td { background: #0f7d73 !important; color: #fff !important; font-weight: 700; }
+    `;
+    document.head.appendChild(st);
+  }
 
   // ---------- option labels ----------
   const HIRA = "あいうえおかきくけこさしすせそたちつてと";
@@ -339,13 +338,13 @@
   // ---------- quiz list on the bank page ----------
   function buildQuizList(tool, container) {
     const { section, body } = makePresSection("Quizzes & Answer Collections (built in the editor)");
-    section.classList.add("qz-section");
+    section.classList.add("qz-sec-list");
     const rerender = () => renderScoringToolView(tool, container);
     body.appendChild(h("p", "hint", "Build a quiz (questions with text) or an Answer Collection (just question numbers and answer options, to match a paper test sheet). Open a QR code and students answer on their phones (School ID first). Answers are graded automatically; scores appear below as a normal test you can use in Sources."));
     const tests = ScoringModule.testBankTests(tool.id).filter((t) => t.quiz);
     tests.forEach((t) => {
       const quiz = ScoringModule.normalizeQuiz(t);
-      const row = h("div", "panel-toolbar qz-listrow");
+      const row = h("div", "panel-toolbar");
       row.appendChild(h("span", "", `${t.name} (${kindName(quiz)}) — ${ScoringModule.quizQuestionCount(quiz)} question(s), ${ScoringModule.quizTotal(quiz)} pts${quiz.token ? " · QR open" : ""}`));
       const btns = h("div", "panel-toolbar-buttons");
       btns.appendChild(button("Edit / Collect Answers", "btn btn-primary btn-small", () => { editing.set(tool.id, t.id); viewOf.set(tool.id, "build"); rerender(); }));
@@ -377,8 +376,8 @@
     left.appendChild(button("← Back to bank", "btn btn-ghost", () => { editing.delete(tool.id); rerender(); }));
     left.appendChild(h("label", "", `${kindName(quiz)} name:`));
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
-    left.appendChild(button("Edit questions", current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small", () => { viewOf.set(tool.id, "build"); rerender(); }));
-    left.appendChild(button(`Review answers & regrade (${new Set(quiz.submissions.map((s) => s.sid)).size})`, current === "review" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small", () => { viewOf.set(tool.id, "review"); rerender(); }));
+    left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
+    left.appendChild(button(`Review answers & regrade (${new Set(quiz.submissions.map((s) => s.sid)).size})`, "qz-tab " + (current === "review" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "review"); rerender(); }));
     bar.appendChild(left);
     bar.appendChild(h("span", "count-badge", `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
     return bar;
@@ -400,7 +399,7 @@
     // ----- quiz settings -----
     {
       const { section, body } = makePresSection(`⚙ ${kindName(quiz)} settings`);
-      section.classList.add("qz-settings");
+      section.classList.add("qz-sec-settings");
       const addRow = (labelText, control) => {
         const row = h("div", "mapping-row");
         row.appendChild(h("label", "", labelText));
@@ -436,8 +435,8 @@
 
     let n = 0;
     quiz.sections.forEach((sec, si) => {
-      const { section, body } = makePresSection(`Section ${si + 1} of ${quiz.sections.length}`);
-      section.classList.add("qz-section");
+      const { section, body } = makePresSection(`Section ${si + 1}: ${sec.title || "(untitled)"}`);
+      section.classList.add("qz-sec-q" + (si % 4));
       const top = h("div", "panel-toolbar");
       top.appendChild(textInput(sec.title, "Section title", (v) => { sec.title = v; rerender(); }));
       const tb = h("div", "panel-toolbar-buttons");
@@ -457,9 +456,9 @@
       sec.questions.forEach((q, qi) => {
         n++;
         const box = h("div", "category-manage-item qz-q " + (q.type === "mc" ? "qz-q-mc" : "qz-q-blank"));
-        box.style.marginBottom = "10px";
+        box.style.marginBottom = "14px";
         const row = h("div", "category-manage-top-row");
-        row.appendChild(h("strong", "qz-num", `Q${n}`));
+        row.appendChild(h("span", "qz-qnum", `Q${n}`));
         row.appendChild(h("span", "qz-pill", q.type === "mc" ? "Multiple choice" : "Fill in the blank"));
         if (answersOnly) {
           const spacer = h("span");
@@ -484,7 +483,7 @@
           box.appendChild(cnt);
           if (!answersOnly) {
             q.choices.forEach((c, ci) => {
-              const crow = h("div", "mapping-row qz-opt");
+              const crow = h("div", "mapping-row qz-opt-row");
               crow.appendChild(h("label", "", optionLabel(style, ci)));
               const inp = textInput(c, "Option text", (v) => { q.choices[ci] = v.trim(); rerender(); });
               inp.style.flex = "1";
@@ -492,8 +491,8 @@
               box.appendChild(crow);
             });
           }
-          const keyRow = h("div", "mapping-row qz-key");
-          keyRow.appendChild(h("label", "", "Correct answer"));
+          const keyRow = h("div", "mapping-row qz-keyrow");
+          keyRow.appendChild(h("label", "", "✔ Correct answer"));
           const sel = h("select");
           q.choices.forEach((c, ci) => {
             const o = h("option", "", answersOnly || !c ? optionLabel(style, ci) : `${optionLabel(style, ci)}: ${c}`);
@@ -507,8 +506,8 @@
         } else {
           if (q.accepted.length === 0) q.accepted.push("");
           q.accepted.forEach((a, ai) => {
-            const arow = h("div", "mapping-row " + (ai === 0 ? "qz-key" : "qz-alt"));
-            arow.appendChild(h("label", "", ai === 0 ? "Correct answer" : `Alternate answer ${ai}`));
+            const arow = h("div", "mapping-row" + (ai === 0 ? " qz-keyrow" : " qz-opt-row"));
+            arow.appendChild(h("label", "", ai === 0 ? "✔ Correct answer" : `Alternate answer ${ai}`));
             const inp = textInput(a, ai === 0 ? "e.g. 42" : "Another accepted answer", (v) => { q.accepted[ai] = v.trim(); regrade(); });
             inp.style.flex = "1";
             arow.appendChild(inp);
@@ -527,7 +526,7 @@
 
     // ----- QR -----
     const { section: qrSection, body: qrBody } = makePresSection("📱 Student QR form");
-    qrSection.classList.add("qz-qr");
+    qrSection.classList.add("qz-sec-qr");
     qrBody.appendChild(h("p", "hint", "Students scan, type their School ID, then pick options / type answers. Get Responses refreshes the questions, settings and roster, copies answers, and grades them. Close QR Code stops new answers; graded results stay. Look at and fix individual answers under \"Review answers & regrade\"."));
     const bb = h("div", "panel-toolbar-buttons");
     const stat = h("p", "result", statusMsg.get(key) || "");
@@ -574,8 +573,8 @@
     const regrade = () => ScoringModule.regradeQuiz(tool.id, testId);
 
     container.appendChild(editorHeader(tool, container, test, quiz, "review"));
-    const { section, body } = makePresSection("📝 Review & edit answers");
-    section.classList.add("qz-review");
+    const { section, body } = makePresSection("Review & edit answers   ● correct   ✕ incorrect");
+    section.classList.add("qz-sec-review");
     container.appendChild(section);
     body.appendChild(h("p", "hint", "● green = correct, ✕ red = incorrect. Change any student's answer in its box, or fix an answer in the \"Answer key\" row — scores update instantly. Edited answers get a yellow outline and are kept when you Get Responses again."));
 
@@ -588,7 +587,7 @@
     quiz.sections.forEach((s) => s.questions.forEach((q) => qs.push(q)));
     const total = ScoringModule.quizTotal(quiz);
     const wrap = h("div", "attendance-table-wrap");
-    const table = h("table", "attendance-table qz-grid");
+    const table = h("table", "attendance-table qz-review");
     wrap.appendChild(table);
     body.appendChild(wrap);
 
@@ -609,8 +608,8 @@
     table.appendChild(tbody);
 
     // answer key row
-    const keyTr = h("tr", "qz-keyrow");
-    const keyLabel = h("td", "", "Answer key");
+    const keyTr = h("tr", "qz-key");
+    const keyLabel = h("td", "", "🔑 Answer key");
     keyLabel.style.fontWeight = "700";
     keyTr.appendChild(keyLabel);
     keyTr.appendChild(h("td"));
@@ -647,9 +646,11 @@
 
     // student rows
     const rows = [];
+    let lastSid = null;
     const sorted = [...quiz.submissions].sort((a, b) => (a.name || a.sid).localeCompare(b.name || b.sid) || a.attempt - b.attempt);
     sorted.forEach((s) => {
-      const tr = h("tr");
+      const tr = h("tr", s.sid !== lastSid ? "qz-newstudent" : "");
+      lastSid = s.sid;
       const nameTd = h("td", "", s.name || "(not on roster)");
       nameTd.appendChild(h("div", "hint", s.sid));
       tr.appendChild(nameTd);
@@ -699,15 +700,10 @@
         cell.appendChild(mark);
         td.appendChild(cell);
         tr.appendChild(td);
-        cells.push({ q, mark, cell });
+        cells.push({ q, mark, cell, td });
       });
       tbody.appendChild(tr);
-      const prev = rows[rows.length - 1];
-      const newStudent = !prev || prev.s.sid !== s.sid;
-      const bandNo = prev ? prev.band + (newStudent ? 1 : 0) : 0;
-      tr.classList.add(bandNo % 2 ? "qz-band-b" : "qz-band-a");
-      if (newStudent) tr.classList.add("qz-student-start");
-      rows.push({ s, cells, scoreTd, band: bandNo });
+      rows.push({ s, cells, scoreTd });
     });
 
     // % correct footer
@@ -728,6 +724,7 @@
         r.cells.forEach((c, i) => {
           const ok = ScoringModule.quizAnswerCorrect(c.q, eff[c.q.id]);
           if (ok) correctCount[i]++;
+          c.td.className = ok ? "qz-ok" : "qz-bad";
           c.mark.textContent = ok ? "●" : "✕";
           c.mark.style.color = ok ? "#1e9e4a" : "#d3302f";
           const edited = Object.prototype.hasOwnProperty.call(r.s.overrides, c.q.id);
