@@ -17,7 +17,10 @@
     .hint { color:var(--soft); font-size:.88rem; margin:6px 0 0; }
     .msg { min-height:1.4em; margin:0 0 12px; font-size:.95rem; } .msg.bad { color:var(--bad); }
     button.primary { width:100%; font:inherit; font-weight:600; padding:13px; border:0; border-radius:8px; background:var(--green); color:#fff; cursor:pointer; margin-top:10px; }
+    button.primary:disabled { opacity:.6; cursor:default; }
     button.link { background:none; border:0; color:var(--green); font:inherit; font-size:.9rem; text-decoration:underline; cursor:pointer; padding:0; margin-top:8px; }
+    .timer { position:sticky; top:0; z-index:5; background:#fff; border:1.5px solid var(--green); border-radius:8px; padding:8px 12px; margin:0 0 14px; font-weight:700; text-align:center; font-variant-numeric:tabular-nums; }
+    .timer.low { border-color:var(--bad); color:var(--bad); background:#fdecea; }
     .block { border:1.5px solid var(--line); border-radius:10px; padding:14px 12px 4px; margin-bottom:16px; }
     .block h2 { margin:0 0 12px; font:700 1.1rem Georgia,serif; color:var(--dark); }
     .q { margin-bottom:16px; } .qt { font-weight:600; margin-bottom:6px; } .pts { color:var(--soft); font-weight:400; font-size:.85rem; }
@@ -27,6 +30,7 @@
     .chip { min-width:48px; height:48px; padding:0 10px; border:1.5px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); font:inherit; font-weight:700; cursor:pointer; }
     .chip.on { background:var(--green); border-color:var(--green); color:#fff; }
     .done { text-align:center; padding:10px 0; } .tick { font-size:3rem; color:var(--good); line-height:1; }
+    .locked { pointer-events:none; opacity:.7; }
     [hidden] { display:none !important; }
   </style>
 </head>
@@ -39,11 +43,12 @@
     <form id="id-form" novalidate hidden>
       <label for="sid" style="font-weight:600;display:block;margin-bottom:6px">Your School ID</label>
       <input id="sid" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
-      <p class="hint">You need your School ID to continue.</p>
+      <p class="hint" id="id-hint">You need your School ID to continue.</p>
       <button id="id-btn" class="primary" type="submit">Continue</button>
     </form>
 
     <form id="quiz-form" novalidate hidden>
+      <div id="timer" class="timer" hidden></div>
       <p id="who" style="font-weight:600"></p>
       <div id="questions"></div>
       <p id="missing" class="hint"></p>
@@ -54,7 +59,8 @@
     <div id="done" class="done" hidden>
       <div class="tick">✓</div>
       <h2>Thank you!</h2>
-      <p class="sub">Your answers have been saved. You can close this page.</p>
+      <p class="sub" id="done-msg">Your answers have been saved.</p>
+      <button id="again" class="primary" type="button" hidden>Take it again</button>
     </div>
   </main>
 
@@ -64,6 +70,7 @@
       const cfg = (typeof APP_CONFIG !== "undefined" && APP_CONFIG.supabase) || {};
       const token = new URLSearchParams(location.search).get("c") || "";
       const $ = (id) => document.getElementById(id);
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const HIRA = "あいうえおかきくけこさしすせそたちつてと";
       const KATA = "アイウエオカキクケコサシスセソタチツテト";
       function roman(n) { let s = ""; [[10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]].forEach(([v, r]) => { while (n >= v) { s += r; n -= v; } }); return s; }
@@ -82,6 +89,8 @@
         bad_id: "That School ID isn't on the list. Check it and try again.",
         closed: "This link isn't active any more. Ask your teacher for a new QR code.",
         bad_answer: "Your answers couldn't be saved. Reload and try again.",
+        bad_attempt: "Something went wrong with this attempt. Reload and start again.",
+        time_up: "Time ran out before your answers reached the server, so they were not saved.",
         network: "Couldn't reach the server. Check your connection and try again.",
       };
       const say = (t, bad) => { $("msg").textContent = t || ""; $("msg").className = "msg" + (bad ? " bad" : ""); };
@@ -92,7 +101,7 @@
         if (!res.ok) throw new Error("http " + res.status);
         return res.json();
       }
-      let sid = "", form = null, answers = {};
+      let sid = "", form = null, answers = {}, attempt = 1, maxAtt = 0, endAt = 0, timerId = null, submitting = false;
       const step = (w) => { $("id-form").hidden = w !== "id"; $("quiz-form").hidden = w !== "quiz"; $("done").hidden = w !== "done"; $("sub").hidden = w === "done"; };
       const questions = () => form.config.sections.flatMap((s) => s.questions);
 
@@ -102,7 +111,7 @@
       }
 
       function render() {
-        const box = $("questions"); box.textContent = ""; let num = 0;
+        const box = $("questions"); box.textContent = ""; box.classList.remove("locked"); let num = 0;
         const style = form.config.labelStyle || "upper";
         const answersOnly = form.config.kind === "answers";
         form.config.sections.forEach((sec) => {
@@ -145,40 +154,94 @@
         refresh();
       }
 
-      $("id-form").addEventListener("submit", async (e) => {
+      // ----- timer -----
+      function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
+      function startTimer(r) {
+        stopTimer();
+        const limit = Number((r.config && r.config.timeLimit) || 0);
+        const el = $("timer");
+        if (!limit) { el.hidden = true; return; }
+        const elapsed = (Date.parse(r.server_now) - Date.parse(r.started_at)) / 1000; // measured on the server's clock
+        endAt = Date.now() + (limit * 60 - (Number.isFinite(elapsed) ? elapsed : 0)) * 1000;
+        el.hidden = false;
+        const tick = () => {
+          const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+          const m = Math.floor(left / 60), s = left % 60;
+          el.textContent = `Time left: ${m}:${String(s).padStart(2, "0")}`;
+          el.classList.toggle("low", left <= 60);
+          if (left === 0) { stopTimer(); doSubmit(true); }
+        };
+        tick();
+        if (!submitting) timerId = setInterval(tick, 500);
+      }
+
+      // ----- open / submit -----
+      async function openQuiz(value) {
+        $("id-btn").disabled = true; $("again").disabled = true; say("Checking…");
+        try {
+          const r = await rpc("quiz_open", { p_token: token, p_school_id: value });
+          if (r && r.status === "ok") {
+            sid = value; form = r; answers = {}; attempt = r.attempt || 1; maxAtt = r.max || 0; submitting = false;
+            $("send").disabled = false;
+            $("who").textContent = (r.name ? "Hello, " + r.name : "") + (maxAtt ? ` — attempt ${attempt} of ${maxAtt}` : attempt > 1 ? ` — attempt ${attempt}` : "");
+            say(""); render(); step("quiz"); startTimer(r);
+          } else if (r && r.status === "no_attempts") {
+            say(`You have already used all ${r.max} attempt(s) allowed for this quiz.`, true);
+          } else {
+            say(MSG[r && r.status] || MSG.network, true);
+            if (r && r.status === "closed") { $("id-form").hidden = true; $("done").hidden = true; }
+          }
+        } catch (err) { say(MSG.network, true); } finally { $("id-btn").disabled = false; $("again").disabled = false; }
+      }
+
+      function finish(auto) {
+        stopTimer();
+        $("done-msg").textContent = auto ? "Time's up. Your answers were submitted." : "Your answers have been saved.";
+        const left = maxAtt === 0 ? Infinity : maxAtt - attempt;
+        $("again").hidden = !(left > 0);
+        if (left > 0 && left !== Infinity) $("again").textContent = `Take it again (${left} attempt${left === 1 ? "" : "s"} left)`;
+        else $("again").textContent = "Take it again";
+        say(""); step("done");
+      }
+
+      async function doSubmit(auto) {
+        if (submitting) return;
+        submitting = true; stopTimer();
+        $("send").disabled = true;
+        if (auto) { $("questions").classList.add("locked"); if (document.activeElement) document.activeElement.blur(); }
+        say(auto ? "Time's up — submitting your answers…" : "Saving…");
+        const tries = auto ? 6 : 1;
+        for (let i = 0; i < tries; i++) {
+          try {
+            const r = await rpc("quiz_submit", { p_token: token, p_school_id: sid, p_payload: { answers }, p_attempt: attempt });
+            if (r === "ok" || r === "already") { finish(auto); return; }
+            say(MSG[r] || MSG.network, true);
+            if (r === "bad_id") { submitting = false; sid = ""; step("id"); return; }
+            if (r === "closed" || r === "time_up") { $("quiz-form").hidden = true; return; }
+            break; // other refusals: let the student try again
+          } catch (err) {
+            if (i === tries - 1) { say(MSG.network, true); break; }
+            await sleep(2500);
+          }
+        }
+        submitting = false; $("send").disabled = false; $("questions").classList.remove("locked");
+        if (auto) { endAt = Date.now() + 60 * 1000; startTimer({ config: { timeLimit: 0 } }); } // timer shown stays hidden; they can press Submit
+      }
+
+      $("id-form").addEventListener("submit", (e) => {
         e.preventDefault();
         const v = $("sid").value.trim();
         if (!v) { say("Type your School ID.", true); return; }
-        $("id-btn").disabled = true; say("Checking…");
-        try {
-          const r = await rpc("quiz_open", { p_token: token, p_school_id: v });
-          if (r && r.status === "ok") {
-            sid = v; form = r; answers = {};
-            $("who").textContent = r.name ? "Hello, " + r.name : "";
-            say(""); render(); step("quiz");
-          } else {
-            say(MSG[r && r.status] || MSG.network, true);
-            if (r && r.status === "closed") $("id-form").hidden = true;
-          }
-        } catch (err) { say(MSG.network, true); } finally { $("id-btn").disabled = false; }
+        openQuiz(v);
       });
+      $("again").addEventListener("click", () => openQuiz(sid));
+      $("change").addEventListener("click", () => { stopTimer(); sid = ""; form = null; say(""); step("id"); $("sid").select(); });
 
-      $("change").addEventListener("click", () => { sid = ""; form = null; say(""); step("id"); $("sid").select(); });
-
-      $("quiz-form").addEventListener("submit", async (e) => {
+      $("quiz-form").addEventListener("submit", (e) => {
         e.preventDefault();
         const unanswered = questions().filter((q) => answers[q.id] === undefined || answers[q.id] === "").length;
         if (unanswered && !confirm(unanswered + " question(s) are not answered. Submit anyway?")) return;
-        $("send").disabled = true; say("Saving…");
-        try {
-          const r = await rpc("quiz_submit", { p_token: token, p_school_id: sid, p_payload: { answers } });
-          if (r === "ok") { say(""); step("done"); }
-          else {
-            say(MSG[r] || MSG.network, true);
-            if (r === "bad_id") { sid = ""; step("id"); }
-            if (r === "closed") $("quiz-form").hidden = true;
-          }
-        } catch (err) { say(MSG.network, true); } finally { $("send").disabled = false; }
+        doSubmit(false);
       });
 
       (async function start() {
