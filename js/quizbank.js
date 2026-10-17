@@ -377,6 +377,7 @@
     left.appendChild(h("label", "", `${kindName(quiz)} name:`));
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
+    left.appendChild(button("Results", "qz-tab " + (current === "results" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "results"); rerender(); }));
     left.appendChild(button(`Review answers & regrade (${new Set(quiz.submissions.map((s) => s.sid)).size})`, "qz-tab " + (current === "review" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "review"); rerender(); }));
     bar.appendChild(left);
     bar.appendChild(h("span", "count-badge", `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
@@ -738,12 +739,123 @@
     refresh();
   }
 
+  // ---------- the results view: a read-only grid of ● / ✕ ----------
+  function renderResults(tool, container, testId) {
+    const test = ScoringModule.findTest(tool.id, testId);
+    const quiz = ScoringModule.quizOf(tool.id, testId);
+    const style = quiz.settings.labelStyle;
+    container.innerHTML = "";
+    container.appendChild(editorHeader(tool, container, test, quiz, "results"));
+
+    if (!document.getElementById("qz-style2")) {
+      const st = document.createElement("style");
+      st.id = "qz-style2";
+      st.textContent = `
+        .qz-res td.qz-mark { text-align: center; font-size: 1.6rem; font-weight: 800; line-height: 1; padding: 6px 12px; }
+        .qz-res .qz-yes { color: #1e9e4a; } .qz-res .qz-no { color: #d3302f; }
+        .qz-res thead th { text-align: center; }
+        .qz-res tr.qz-newstudent td { border-top: 3px solid var(--ink-soft); }
+        .qz-res tfoot td { background: #0f7d73 !important; color: #fff !important; font-weight: 700; text-align: center; }
+      `;
+      document.head.appendChild(st);
+    }
+
+    const { section, body } = makePresSection("Results   ● correct   ✕ incorrect");
+    section.classList.add("qz-sec-review");
+    container.appendChild(section);
+
+    if (quiz.submissions.length === 0) {
+      body.appendChild(h("p", "hint", "No answers yet. Launch the QR code on the \"Edit questions\" screen, then click Get Responses."));
+      return;
+    }
+    body.appendChild(h("p", "hint", "Hover over a symbol to see the student's answer. To change an answer or fix the answer key, use \"Review answers & regrade\"."));
+
+    const total = ScoringModule.quizTotal(quiz);
+    const colors = ["#1f6fb5", "#2e8b57", "#b8860b", "#a23b72"];
+    const qs = [];
+    const wrap = h("div", "attendance-table-wrap");
+    const table = h("table", "attendance-table qz-res");
+    wrap.appendChild(table);
+    body.appendChild(wrap);
+
+    const thead = h("thead");
+    const r1 = h("tr");
+    const r2row = h("tr");
+    ["Student", "Attempt", "Score"].forEach((t) => {
+      const th = h("th", "", t);
+      th.rowSpan = 2;
+      r1.appendChild(th);
+    });
+    let num = 0;
+    quiz.sections.forEach((sec, si) => {
+      if (sec.questions.length === 0) return;
+      const th = h("th", "", sec.title || `Section ${si + 1}`);
+      th.colSpan = sec.questions.length;
+      th.style.cssText = `background:${colors[si % 4]};color:#fff;`;
+      r1.appendChild(th);
+      sec.questions.forEach((q) => {
+        num++;
+        qs.push(q);
+        const qth = h("th");
+        qth.appendChild(h("div", "", `Q${num}`));
+        qth.appendChild(h("div", "item-points-label", `${q.points} pt`));
+        r2row.appendChild(qth);
+      });
+    });
+    thead.append(r1, r2row);
+    table.appendChild(thead);
+
+    const answerText = (q, ans) => {
+      if (ans === undefined || ans === null || ans === "") return "(no answer)";
+      return q.type === "mc" ? optionLabel(style, Number(ans)) : String(ans);
+    };
+
+    const tbody = h("tbody");
+    const correctCount = qs.map(() => 0);
+    let lastSid = null;
+    [...quiz.submissions].sort((a, b) => (a.name || a.sid).localeCompare(b.name || b.sid) || a.attempt - b.attempt).forEach((s) => {
+      const eff = ScoringModule.quizEffectiveAnswers(s);
+      const tr = h("tr", s.sid !== lastSid ? "qz-newstudent" : "");
+      lastSid = s.sid;
+      const nameTd = h("td", "", s.name || "(not on roster)");
+      nameTd.appendChild(h("div", "hint", s.sid));
+      tr.appendChild(nameTd);
+      tr.appendChild(h("td", "", String(s.attempt)));
+      const score = h("td", "", `${ScoringModule.gradeQuizSubmission(quiz, eff)} / ${total}`);
+      score.style.cssText = "font-weight:700;white-space:nowrap;";
+      tr.appendChild(score);
+      qs.forEach((q, i) => {
+        const ok = ScoringModule.quizAnswerCorrect(q, eff[q.id]);
+        if (ok) correctCount[i]++;
+        const td = h("td", "qz-mark " + (ok ? "qz-yes" : "qz-no"), ok ? "●" : "✕");
+        td.title = answerText(q, eff[q.id]);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    const tfoot = h("tfoot");
+    const ftr = h("tr");
+    const fl = h("td", "", "% correct");
+    fl.style.textAlign = "left";
+    ftr.appendChild(fl);
+    ftr.appendChild(h("td"));
+    ftr.appendChild(h("td"));
+    const count = quiz.submissions.length;
+    qs.forEach((q, i) => ftr.appendChild(h("td", "", `${Math.round((100 * correctCount[i]) / count)}%`)));
+    tfoot.appendChild(ftr);
+    table.appendChild(tfoot);
+  }
+
   // ---------- hook into the Test & Quiz Bank view ----------
   const original = SCORING_TOOL_RENDERERS.testbank;
   SCORING_TOOL_RENDERERS.testbank = function (tool, container) {
     const testId = editing.get(tool.id);
     if (testId && ScoringModule.quizOf(tool.id, testId)) {
-      return viewOf.get(tool.id) === "review" ? renderReview(tool, container, testId) : renderEditor(tool, container, testId);
+      const view = viewOf.get(tool.id);
+      if (view === "results") return renderResults(tool, container, testId);
+      return view === "review" ? renderReview(tool, container, testId) : renderEditor(tool, container, testId);
     }
     editing.delete(tool.id);
     original(tool, container);
