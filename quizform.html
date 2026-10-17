@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Quiz answers</title>
+  <style>
+    :root { --paper:#f6f5f1; --ink:#2b2a28; --soft:#6b6560; --green:#2f5233; --dark:#223d26; --line:#ddd8cd; --bad:#b3261e; --good:#1e7a3c; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font:17px/1.5 -apple-system,"Segoe UI",Roboto,"Hiragino Sans","Noto Sans JP",sans-serif; display:flex; justify-content:center; padding:20px 12px 60px; }
+    .card { width:100%; max-width:560px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px 18px; align-self:flex-start; }
+    h1 { font:700 1.3rem Georgia,serif; color:var(--dark); margin:0 0 4px; }
+    .sub { color:var(--soft); margin:0 0 16px; font-size:.95rem; }
+    input[type=text] { width:100%; font:inherit; padding:12px; border:1.5px solid var(--line); border-radius:8px; }
+    input:focus { outline:none; border-color:var(--green); box-shadow:0 0 0 3px rgba(47,82,51,.18); }
+    .hint { color:var(--soft); font-size:.88rem; margin:6px 0 0; }
+    .msg { min-height:1.4em; margin:0 0 12px; font-size:.95rem; } .msg.bad { color:var(--bad); }
+    button.primary { width:100%; font:inherit; font-weight:600; padding:13px; border:0; border-radius:8px; background:var(--green); color:#fff; cursor:pointer; margin-top:10px; }
+    button.link { background:none; border:0; color:var(--green); font:inherit; font-size:.9rem; text-decoration:underline; cursor:pointer; padding:0; margin-top:8px; }
+    .block { border:1.5px solid var(--line); border-radius:10px; padding:14px 12px 4px; margin-bottom:16px; }
+    .block h2 { margin:0 0 12px; font:700 1.1rem Georgia,serif; color:var(--dark); }
+    .q { margin-bottom:16px; } .qt { font-weight:600; margin-bottom:6px; } .pts { color:var(--soft); font-weight:400; font-size:.85rem; }
+    .opt { display:flex; gap:10px; width:100%; text-align:left; font:inherit; padding:10px 12px; margin-bottom:6px; border:1.5px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); cursor:pointer; }
+    .opt b { min-width:1.4em; } .opt.on { background:var(--green); border-color:var(--green); color:#fff; }
+    .done { text-align:center; padding:10px 0; } .tick { font-size:3rem; color:var(--good); line-height:1; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1 id="title">Quiz answers</h1>
+    <p id="sub" class="sub"></p>
+    <p id="msg" class="msg" aria-live="polite"></p>
+
+    <form id="id-form" novalidate hidden>
+      <label for="sid" style="font-weight:600;display:block;margin-bottom:6px">Your School ID</label>
+      <input id="sid" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <p class="hint">You need your School ID to continue.</p>
+      <button id="id-btn" class="primary" type="submit">Continue</button>
+    </form>
+
+    <form id="quiz-form" novalidate hidden>
+      <p id="who" style="font-weight:600"></p>
+      <div id="questions"></div>
+      <p id="missing" class="hint"></p>
+      <button id="send" class="primary" type="submit">Submit</button>
+      <button id="change" class="link" type="button">That's not me / change ID</button>
+    </form>
+
+    <div id="done" class="done" hidden>
+      <div class="tick">✓</div>
+      <h2>Thank you!</h2>
+      <p class="sub">Your answers have been saved. You can close this page.</p>
+    </div>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script>
+    (function () {
+      const cfg = (typeof APP_CONFIG !== "undefined" && APP_CONFIG.supabase) || {};
+      const token = new URLSearchParams(location.search).get("c") || "";
+      const $ = (id) => document.getElementById(id);
+      const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const MSG = {
+        bad_id: "That School ID isn't on the list. Check it and try again.",
+        closed: "This link isn't active any more. Ask your teacher for a new QR code.",
+        bad_answer: "Your answers couldn't be saved. Reload and try again.",
+        network: "Couldn't reach the server. Check your connection and try again.",
+      };
+      const say = (t, bad) => { $("msg").textContent = t || ""; $("msg").className = "msg" + (bad ? " bad" : ""); };
+      async function rpc(fn, args) {
+        const headers = { "Content-Type": "application/json", apikey: cfg.anonKey };
+        if (String(cfg.anonKey).startsWith("eyJ")) headers.Authorization = "Bearer " + cfg.anonKey;
+        const res = await fetch(cfg.url + "/rest/v1/rpc/" + fn, { method: "POST", headers, body: JSON.stringify(args) });
+        if (!res.ok) throw new Error("http " + res.status);
+        return res.json();
+      }
+      let sid = "", form = null, answers = {};
+      const step = (w) => { $("id-form").hidden = w !== "id"; $("quiz-form").hidden = w !== "quiz"; $("done").hidden = w !== "done"; $("sub").hidden = w === "done"; };
+      const questions = () => form.config.sections.flatMap((s) => s.questions);
+
+      function refresh() {
+        const n = questions().filter((q) => answers[q.id] === undefined || answers[q.id] === "").length;
+        $("missing").textContent = n ? n + " question(s) not answered yet." : "";
+      }
+
+      function render() {
+        const box = $("questions"); box.textContent = ""; let num = 0;
+        form.config.sections.forEach((sec) => {
+          const block = document.createElement("div"); block.className = "block";
+          if (sec.title) { const h = document.createElement("h2"); h.textContent = sec.title; block.appendChild(h); }
+          sec.questions.forEach((q) => {
+            num++;
+            const wrap = document.createElement("div"); wrap.className = "q";
+            const qt = document.createElement("div"); qt.className = "qt";
+            qt.textContent = `${num}. ${q.text || ""} `;
+            const pts = document.createElement("span"); pts.className = "pts"; pts.textContent = `(${q.points} pt${q.points === 1 ? "" : "s"})`;
+            qt.appendChild(pts); wrap.appendChild(qt);
+            if (q.type === "mc") {
+              (q.choices || []).forEach((c, i) => {
+                const b = document.createElement("button"); b.type = "button"; b.className = "opt" + (answers[q.id] === i ? " on" : "");
+                const l = document.createElement("b"); l.textContent = LETTERS[i]; b.append(l, document.createTextNode(c));
+                b.addEventListener("click", () => { answers[q.id] = i; wrap.querySelectorAll(".opt").forEach((o) => o.classList.remove("on")); b.classList.add("on"); refresh(); });
+                wrap.appendChild(b);
+              });
+            } else {
+              const t = document.createElement("input"); t.type = "text"; t.autocomplete = "off"; t.autocapitalize = "off"; t.spellcheck = false;
+              t.value = answers[q.id] || "";
+              t.addEventListener("input", () => { answers[q.id] = t.value.trim(); refresh(); });
+              wrap.appendChild(t);
+            }
+            block.appendChild(wrap);
+          });
+          box.appendChild(block);
+        });
+        refresh();
+      }
+
+      $("id-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const v = $("sid").value.trim();
+        if (!v) { say("Type your School ID.", true); return; }
+        $("id-btn").disabled = true; say("Checking…");
+        try {
+          const r = await rpc("quiz_open", { p_token: token, p_school_id: v });
+          if (r && r.status === "ok") {
+            sid = v; form = r; answers = {};
+            $("who").textContent = r.name ? "Hello, " + r.name : "";
+            say(""); render(); step("quiz");
+          } else {
+            say(MSG[r && r.status] || MSG.network, true);
+            if (r && r.status === "closed") $("id-form").hidden = true;
+          }
+        } catch (err) { say(MSG.network, true); } finally { $("id-btn").disabled = false; }
+      });
+
+      $("change").addEventListener("click", () => { sid = ""; form = null; say(""); step("id"); $("sid").select(); });
+
+      $("quiz-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const unanswered = questions().filter((q) => answers[q.id] === undefined || answers[q.id] === "").length;
+        if (unanswered && !confirm(unanswered + " question(s) are not answered. Submit anyway?")) return;
+        $("send").disabled = true; say("Saving…");
+        try {
+          const r = await rpc("quiz_submit", { p_token: token, p_school_id: sid, p_payload: { answers } });
+          if (r === "ok") { say(""); step("done"); }
+          else {
+            say(MSG[r] || MSG.network, true);
+            if (r === "bad_id") { sid = ""; step("id"); }
+            if (r === "closed") $("quiz-form").hidden = true;
+          }
+        } catch (err) { say(MSG.network, true); } finally { $("send").disabled = false; }
+      });
+
+      (async function start() {
+        if (!token || !cfg.url) { say(MSG.closed, true); return; }
+        say("Loading…");
+        try {
+          const title = await rpc("quiz_info", { p_token: token });
+          if (!title) { say(MSG.closed, true); return; }
+          $("title").textContent = title; $("sub").textContent = "Enter your answers"; document.title = title;
+          say(""); step("id"); $("sid").focus();
+        } catch (err) { say(MSG.network, true); }
+      })();
+    })();
+  </script>
+</body>
+</html>
