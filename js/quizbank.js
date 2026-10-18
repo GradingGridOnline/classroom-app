@@ -119,7 +119,15 @@
         if (!s.overrides || typeof s.overrides !== "object") s.overrides = {};
         s.attempt = Number(s.attempt) || 1;
       });
+      test.maxPoints = this.quizTotal(q); // a quiz's max score is always the sum of its question points
       return q;
+    },
+    /** Quizzes ignore manual max-score edits: their max is the sum of the question points. */
+    setTestMaxPoints(toolId, testId, value) {
+      const test = this.findTest(toolId, testId);
+      if (!test) return;
+      if (test.quiz) { this.normalizeQuiz(test); return; }
+      test.maxPoints = Math.max(0, Number(value) || 0);
     },
     quizOf(toolId, testId) {
       return this.normalizeQuiz(this.findTest(toolId, testId));
@@ -878,6 +886,12 @@
       const go = (view) => () => { editing.set(tool.id, t.id); viewOf.set(tool.id, view); rerender(); };
       const students = new Set(quiz.submissions.map((x) => x.sid)).size;
       tr.children[4].textContent = `${kindName(quiz)}${quiz.token ? " · QR open" : ""}`;
+      const maxCell = tr.children[1];
+      maxCell.textContent = "";
+      const maxText = h("span", "", String(ScoringModule.quizTotal(quiz)));
+      maxText.title = "Total of the question points. Change the points on the questions to change this.";
+      maxText.style.fontWeight = "600";
+      maxCell.appendChild(maxText);
 
       const group = h("div", "qz-actions");
       group.appendChild(button("Edit Questions", "btn btn-primary btn-small", go("build")));
@@ -936,6 +950,7 @@
       return view === "review" ? renderReview(tool, container, testId) : renderEditor(tool, container, testId);
     }
     editing.delete(tool.id);
+    ScoringModule.testBankTests(tool.id).forEach((t) => { if (t.quiz) ScoringModule.normalizeQuiz(t); });
     original(tool, container);
     mergeBankView(tool, container);
   };
