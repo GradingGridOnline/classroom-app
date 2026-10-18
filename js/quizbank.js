@@ -848,6 +848,48 @@
     table.appendChild(tfoot);
   }
 
+  // ---------- one combined section: the bank's own view + quiz buttons ----------
+  function mergeBankView(tool, container) {
+    const rerender = () => renderScoringToolView(tool, container);
+    const tests = ScoringModule.testBankTests(tool.id);
+    const { section, body } = makePresSection("Tests & Quizzes");
+    section.classList.add("qz-sec-list");
+    Array.from(container.children).forEach((k) => body.appendChild(k)); // hint, toolbar, import panel, table
+    container.appendChild(section);
+
+    const hint = body.querySelector("p.hint");
+    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or build a quiz (questions with text) or an Answer Collection (just question numbers and options, to match a paper test sheet) and collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
+
+    const create = (kind, label) => () => {
+      const count = tests.filter((t) => t.quiz).length + 1;
+      const name = prompt(`${label} name:`, `${label} ${count}`);
+      if (name === null) return;
+      try {
+        const t = ScoringModule.addQuizTest(tool.id, name, kind);
+        editing.set(tool.id, t.id);
+        viewOf.set(tool.id, "build");
+      } catch (err) { alert(err.message); return; }
+      rerender();
+    };
+    const btns = body.querySelector(".panel-toolbar-buttons");
+    if (btns) {
+      btns.insertBefore(button("+ New Answer Collection", "btn btn-ghost", create("answers", "Answer Collection")), btns.firstChild);
+      btns.insertBefore(button("+ New Quiz", "btn btn-ghost", create("standard", "Quiz")), btns.firstChild);
+    }
+
+    const tbody = body.querySelector("table.roster-table tbody");
+    if (!tbody) return;
+    const mains = Array.from(tbody.children).filter((tr) => tr.children.length === 6); // skips the empty-state and detail rows
+    tests.forEach((t, i) => {
+      const tr = mains[i];
+      if (!tr || !t.quiz) return;
+      const quiz = ScoringModule.normalizeQuiz(t);
+      tr.children[4].textContent = `${kindName(quiz)}${quiz.token ? " · QR open" : ""}`;
+      const actions = tr.children[5];
+      actions.insertBefore(button("Edit / Collect Answers", "btn btn-primary btn-small", () => { editing.set(tool.id, t.id); viewOf.set(tool.id, "build"); rerender(); }), actions.firstChild);
+    });
+  }
+
   // ---------- hook into the Test & Quiz Bank view ----------
   const original = SCORING_TOOL_RENDERERS.testbank;
   SCORING_TOOL_RENDERERS.testbank = function (tool, container) {
@@ -859,6 +901,6 @@
     }
     editing.delete(tool.id);
     original(tool, container);
-    container.insertBefore(buildQuizList(tool, container), container.children[1] || null);
+    mergeBankView(tool, container);
   };
 })();
