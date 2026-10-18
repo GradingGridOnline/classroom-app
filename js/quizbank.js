@@ -366,6 +366,13 @@
       this.items.push(this.snapshot(test, courseName));
       await this.save();
     },
+    async rename(id, name) {
+      const trimmed = (name || "").trim();
+      if (!trimmed) throw new Error("The name can't be empty.");
+      await this.load();
+      const item = this.items.find((x) => x.id === id);
+      if (item) { item.name = trimmed; await this.save(); }
+    },
     async remove(id) {
       await this.load();
       this.items = this.items.filter((x) => x.id !== id);
@@ -922,19 +929,38 @@
 
     const draw = () => {
       list.textContent = "";
+      const table = h("table", "roster-table");
+      const thead = h("thead");
+      const hr = h("tr");
+      ["Test / Quiz", "Max score", "Questions", "Type", "From course", ""].forEach((t) => hr.appendChild(h("th", "", t)));
+      thead.appendChild(hr);
+      table.appendChild(thead);
+      const tbody = h("tbody");
+      table.appendChild(tbody);
       if (SharedTests.items.length === 0) {
-        list.appendChild(h("p", "hint", "Nothing shared yet."));
-        return;
+        const tr = h("tr");
+        const td = h("td", "hint", 'Nothing shared yet — use "Copy to Shared" on a test or quiz above.');
+        td.colSpan = 6;
+        tr.appendChild(td);
+        tbody.appendChild(tr);
       }
       SharedTests.items.forEach((item) => {
-        const row = h("div", "panel-toolbar");
-        const detail = item.quiz
-          ? `${SharedTests.kindOf(item)} · ${ScoringModule.quizQuestionCount(ScoringModule.normalizeQuiz({ quiz: JSON.parse(JSON.stringify(item.quiz)) }))} question(s) · ${item.maxPoints} pts`
-          : `Test · max ${item.maxPoints || "—"}`;
-        const label = h("span", "", `${item.name} — ${detail}${item.sourceCourseName ? ` · from ${item.sourceCourseName}` : ""}`);
-        row.appendChild(label);
-        const btns = h("div", "panel-toolbar-buttons");
-        btns.appendChild(button("Add to this course", "btn btn-primary btn-small", () => {
+        const tr = h("tr");
+        const nameTd = h("td");
+        nameTd.appendChild(textInput(item.name, "", async (v) => {
+          try {
+            await SharedTests.rename(item.id, v);
+            say("Renamed.");
+          } catch (err) { say(`Couldn't do that: ${err.message}`); }
+          draw();
+        }));
+        tr.appendChild(nameTd);
+        tr.appendChild(h("td", "", item.maxPoints ? String(item.maxPoints) : "—"));
+        tr.appendChild(h("td", "", item.quiz ? String(item.quiz.sections.reduce((a, sec) => a + (sec.questions || []).length, 0)) : "—"));
+        tr.appendChild(h("td", "", SharedTests.kindOf(item)));
+        tr.appendChild(h("td", "hint", item.sourceCourseName || "—"));
+        const actions = h("td");
+        actions.appendChild(button("Add to this course", "btn btn-primary btn-small", () => {
           try {
             SharedTests.copyToCourse(tool.id, item);
             flush();
@@ -942,7 +968,7 @@
           } catch (err) { say(`Couldn't do that: ${err.message}`); return; }
           rerender();
         }));
-        btns.appendChild(button("Delete", "btn btn-ghost btn-small", async () => {
+        actions.appendChild(button("Delete", "btn btn-ghost btn-small", async () => {
           if (!confirm(`Remove "${item.name}" from the shared list? Copies already in courses are not affected.`)) return;
           try {
             await SharedTests.remove(item.id);
@@ -950,9 +976,10 @@
           } catch (err) { say(`Couldn't do that: ${err.message}`); }
           draw();
         }));
-        row.appendChild(btns);
-        list.appendChild(row);
+        tr.appendChild(actions);
+        tbody.appendChild(tr);
       });
+      list.appendChild(table);
     };
     SharedTests.ensureLoaded().then(draw).catch((err) => {
       list.textContent = "";
