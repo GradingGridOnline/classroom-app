@@ -43,8 +43,10 @@
       .qz-opt-row { margin-left: 26px; border-left: 3px solid var(--line); padding-left: 12px; }
       .qz-keyrow { background: color-mix(in srgb, #2e9e4f 16%, transparent); border-radius: 6px; padding: 6px 10px; }
       .qz-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-      .qz-act-res { border-color: #0f7d73 !important; border-width: 2px !important; font-weight: 600; }
-      .qz-act-qr { border-color: #c2571a !important; border-width: 2px !important; font-weight: 600; }
+      .qz-menu-btn { border-color: var(--qz-menu-c) !important; border-width: 2px !important; font-weight: 600; }
+      .qz-menu-list { position: fixed; z-index: 10000; min-width: 190px; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--card); border: 2px solid var(--qz-menu-c); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+      .qz-menu-item { width: 100%; text-align: left; border-color: transparent !important; }
+      .qz-menu-item:hover { background: color-mix(in srgb, var(--qz-menu-c) 25%, transparent) !important; }
       .qz-review thead th { background: #0f7d73 !important; color: #fff !important; }
       .qz-review td.qz-ok { background: rgba(46, 158, 79, .22) !important; }
       .qz-review td.qz-bad { background: rgba(211, 48, 47, .17) !important; }
@@ -784,6 +786,50 @@
     table.appendChild(tfoot);
   }
 
+  // ---------- dropdown menus ----------
+  let openMenu = null;
+  function closeMenu() {
+    if (!openMenu) return;
+    openMenu.list.remove();
+    openMenu.btn.setAttribute("aria-expanded", "false");
+    openMenu = null;
+  }
+  document.addEventListener("click", (e) => { if (openMenu && !openMenu.list.contains(e.target)) closeMenu(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  window.addEventListener("resize", closeMenu);
+  window.addEventListener("scroll", closeMenu, true);
+  /** A button that opens a small menu; items = [{ label, onClick }]. The menu floats above the page so tables never clip it. */
+  function menuButton(label, accent, items) {
+    const btn = h("button", "btn btn-ghost btn-small qz-menu-btn", `${label} ▾`);
+    btn.type = "button";
+    btn.style.setProperty("--qz-menu-c", accent);
+    btn.setAttribute("aria-haspopup", "true");
+    btn.setAttribute("aria-expanded", "false");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (openMenu && openMenu.btn === btn) { closeMenu(); return; }
+      closeMenu();
+      const list = h("div", "qz-menu-list");
+      list.setAttribute("role", "menu");
+      list.style.setProperty("--qz-menu-c", accent);
+      items.forEach((it) => {
+        const b = h("button", "btn btn-ghost btn-small qz-menu-item", it.label);
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.addEventListener("click", (ev) => { ev.stopPropagation(); closeMenu(); it.onClick(); });
+        list.appendChild(b);
+      });
+      document.body.appendChild(list);
+      const r = btn.getBoundingClientRect();
+      const below = r.bottom + 4;
+      list.style.top = `${below + list.offsetHeight > window.innerHeight ? Math.max(8, r.top - list.offsetHeight - 4) : below}px`;
+      list.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - list.offsetWidth - 8))}px`;
+      btn.setAttribute("aria-expanded", "true");
+      openMenu = { list, btn };
+    });
+    return btn;
+  }
+
   // ---------- one combined section: the bank's own view + quiz buttons ----------
   function mergeBankView(tool, container) {
     const rerender = () => renderScoringToolView(tool, container);
@@ -835,34 +881,46 @@
 
       const group = h("div", "qz-actions");
       group.appendChild(button("Edit Questions", "btn btn-primary btn-small", go("build")));
-      group.appendChild(button("Results", "btn btn-ghost btn-small qz-act-res", go("results")));
-      group.appendChild(button(`Review & Regrade (${students})`, "btn btn-ghost btn-small qz-act-res", go("review")));
-      if (!quiz.token) {
-        group.appendChild(button("Launch QR Code", "btn btn-ghost btn-small qz-act-qr", guard(async () => {
-          say("Creating QR code…");
-          const url = await QuizForms.create(tool.id, t.id);
-          flush();
-          say(`QR code for "${t.name}" is open.`);
-          rerender();
-          openQr(url);
-        })));
-      } else {
-        group.appendChild(button("Show QR Code", "btn btn-ghost btn-small qz-act-qr", () => openQr(QuizForms.urlFor(quiz.token))));
-        group.appendChild(button("Get Responses", "btn btn-ghost btn-small qz-act-qr", guard(async () => {
-          say("Getting responses…");
-          const r = await QuizForms.sync(tool.id, t.id);
-          flush();
-          say(`${t.name}: ${r.responses} attempt(s) from ${r.students} of ${r.expected} student(s) collected and graded.` + (r.missing.length ? ` Not yet: ${r.missing.slice(0, 12).join(", ")}${r.missing.length > 12 ? "…" : ""}.` : ""));
-          rerender();
-        })));
-        group.appendChild(button("Close QR Code", "btn btn-ghost btn-small qz-act-qr", guard(async () => {
-          if (!confirm("Close the QR code? Click Get Responses first if you haven't — the server's copies of the answers are deleted on close.")) return;
-          await QuizForms.close(tool.id, t.id);
-          flush();
-          say(`QR code for "${t.name}" closed. Graded results are kept.`);
-          rerender();
-        })));
-      }
+      group.appendChild(menuButton("Scores", "#0f7d73", [
+        { label: "Results", onClick: go("results") },
+        { label: `Review & Regrade (${students})`, onClick: go("review") },
+      ]));
+      const qrItems = !quiz.token
+        ? [{
+          label: "Launch QR Code",
+          onClick: guard(async () => {
+            say("Creating QR code…");
+            const url = await QuizForms.create(tool.id, t.id);
+            flush();
+            say(`QR code for "${t.name}" is open.`);
+            rerender();
+            openQr(url);
+          }),
+        }]
+        : [
+          { label: "Show QR Code", onClick: () => openQr(QuizForms.urlFor(quiz.token)) },
+          {
+            label: "Get Responses",
+            onClick: guard(async () => {
+              say("Getting responses…");
+              const r = await QuizForms.sync(tool.id, t.id);
+              flush();
+              say(`${t.name}: ${r.responses} attempt(s) from ${r.students} of ${r.expected} student(s) collected and graded.` + (r.missing.length ? ` Not yet: ${r.missing.slice(0, 12).join(", ")}${r.missing.length > 12 ? "…" : ""}.` : ""));
+              rerender();
+            }),
+          },
+          {
+            label: "Close QR Code",
+            onClick: guard(async () => {
+              if (!confirm("Close the QR code? Click Get Responses first if you haven't — the server's copies of the answers are deleted on close.")) return;
+              await QuizForms.close(tool.id, t.id);
+              flush();
+              say(`QR code for "${t.name}" closed. Graded results are kept.`);
+              rerender();
+            }),
+          },
+        ];
+      group.appendChild(menuButton("QR Code", "#c2571a", qrItems));
       const actions = tr.children[5];
       actions.insertBefore(group, actions.firstChild);
     });
