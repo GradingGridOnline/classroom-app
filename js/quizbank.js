@@ -42,6 +42,17 @@
       .qz-pill { border: 1.5px solid var(--qz-c); color: var(--qz-c); border-radius: 999px; padding: 1px 12px; font-size: .8rem; font-weight: 700; white-space: nowrap; }
       .qz-opt-row { margin-left: 26px; border-left: 3px solid var(--line); padding-left: 12px; }
       .qz-keyrow { background: color-mix(in srgb, #2e9e4f 16%, transparent); border-radius: 6px; padding: 6px 10px; }
+      .pres-section.qz-sec-settings { border-style: dashed; background: color-mix(in srgb, #6a4fb3 14%, var(--card)); }
+      .pres-section.qz-sec-settings > .pres-section-head { background: color-mix(in srgb, #6a4fb3 32%, transparent); color: inherit; font-style: italic; font-size: 1.05rem; border-bottom: 2px dashed #6a4fb3; }
+      .pres-section.qz-sec-q0 { background: color-mix(in srgb, #1f6fb5 13%, var(--card)); }
+      .pres-section.qz-sec-q1 { background: color-mix(in srgb, #2e8b57 13%, var(--card)); }
+      .pres-section.qz-sec-q2 { background: color-mix(in srgb, #b8860b 14%, var(--card)); }
+      .pres-section.qz-sec-q3 { background: color-mix(in srgb, #a23b72 13%, var(--card)); }
+      .pres-section.qz-sec-review { background: color-mix(in srgb, #0f7d73 13%, var(--card)); }
+      .pres-section.qz-sec-list { background: color-mix(in srgb, #4a5568 16%, var(--card)); }
+      .pres-section.qz-sec-shared { border-color: #c2571a; background: color-mix(in srgb, #c2571a 12%, var(--card)); }
+      .pres-section.qz-sec-shared > .pres-section-head { background: #c2571a; color: #fff; }
+      .qz-act-share { border-color: #c2571a !important; border-width: 2px !important; font-weight: 600; }
       .qz-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
       .qz-menu-btn { border-color: var(--qz-menu-c) !important; border-width: 2px !important; font-weight: 600; }
       .qz-menu-list { position: fixed; z-index: 10000; min-width: 190px; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--card); border: 2px solid var(--qz-menu-c); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
@@ -322,6 +333,63 @@
     },
   };
   window.QuizFormsModule = QuizForms;
+
+  // ---------- shared tests & quizzes (one list, visible from every course) ----------
+  const MAX_SHARED_TESTS = 100;
+  const SharedTests = {
+    items: [], // [{ id, name, maxPoints, quiz | null, sourceCourseName, createdAt }]
+    loaded: false,
+    async load() {
+      const data = await storage.loadFile("sharedtests.json");
+      this.items = data && Array.isArray(data.items) ? data.items : [];
+      this.loaded = true;
+    },
+    async ensureLoaded() { if (!this.loaded) await this.load(); },
+    async save() { await storage.saveFile("sharedtests.json", { items: this.items }); },
+    kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : "Quiz") : "Test"; },
+    /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
+    snapshot(test, courseName) {
+      const quiz = test.quiz ? ScoringModule.normalizeQuiz(test) : null;
+      return {
+        id: newId("shared"),
+        name: test.name,
+        maxPoints: quiz ? ScoringModule.quizTotal(quiz) : Number(test.maxPoints) || 0,
+        quiz: quiz ? JSON.parse(JSON.stringify({ kind: quiz.kind, settings: quiz.settings, sections: quiz.sections })) : null,
+        sourceCourseName: courseName || "",
+        createdAt: new Date().toISOString(),
+      };
+    },
+    /** Adds a copy to the shared list (re-reads the list first so other devices' changes aren't lost). */
+    async addFromCourse(test, courseName) {
+      await this.load();
+      if (this.items.length >= MAX_SHARED_TESTS) throw new Error(`The shared list is at its limit of ${MAX_SHARED_TESTS}.`);
+      this.items.push(this.snapshot(test, courseName));
+      await this.save();
+    },
+    async remove(id) {
+      await this.load();
+      this.items = this.items.filter((x) => x.id !== id);
+      await this.save();
+    },
+    /** Copies a shared item into this course's bank; the course's own students are used (nobody has answered yet). */
+    copyToCourse(toolId, item) {
+      const cfg = ScoringModule.getTestBankConfig(toolId);
+      if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
+      if (cfg.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`This bank is at its limit of ${MAX_TESTS_PER_BANK} tests/quizzes.`);
+      const test = {
+        id: newId("test"), name: item.name, maxPoints: Number(item.maxPoints) || 0,
+        sourceFile: item.quiz ? "Quiz editor" : "Shared test",
+        rows: [], scores: {}, unmatched: [],
+      };
+      if (item.quiz) {
+        test.quiz = { ...JSON.parse(JSON.stringify(item.quiz)), token: null, submissions: [] };
+        ScoringModule.normalizeQuiz(test);
+      }
+      cfg.tests.push(test);
+      return test;
+    },
+  };
+  window.SharedTestsModule = SharedTests;
 
   function flush() {
     try { if (window.GGOAutosave && window.GGOAutosave.enabled()) window.GGOAutosave.flush(); } catch (e) {}
@@ -838,6 +906,61 @@
     return btn;
   }
 
+  // ---------- the shared list section (below the Tests & Quizzes list) ----------
+  function buildSharedSection(tool, container) {
+    const rerender = () => renderScoringToolView(tool, container);
+    const { section, body } = makePresSection("Shared Tests & Quizzes");
+    section.classList.add("qz-sec-shared");
+    body.appendChild(h("p", "hint", "This list is the same in every course. \"Add to this course\" copies the whole test or quiz here (this course's students are used). To put a copy of one of this course's tests or quizzes on this list, use \"Copy to Shared\" in its row above."));
+    const statKey = `${tool.id}|shared`;
+    const stat = h("p", "result", statusMsg.get(statKey) || "");
+    const say = (t) => { statusMsg.set(statKey, t); stat.textContent = t; };
+    body.appendChild(stat);
+    const list = h("div");
+    list.appendChild(h("p", "hint", "Loading shared tests…"));
+    body.appendChild(list);
+
+    const draw = () => {
+      list.textContent = "";
+      if (SharedTests.items.length === 0) {
+        list.appendChild(h("p", "hint", "Nothing shared yet."));
+        return;
+      }
+      SharedTests.items.forEach((item) => {
+        const row = h("div", "panel-toolbar");
+        const detail = item.quiz
+          ? `${SharedTests.kindOf(item)} · ${ScoringModule.quizQuestionCount(ScoringModule.normalizeQuiz({ quiz: JSON.parse(JSON.stringify(item.quiz)) }))} question(s) · ${item.maxPoints} pts`
+          : `Test · max ${item.maxPoints || "—"}`;
+        const label = h("span", "", `${item.name} — ${detail}${item.sourceCourseName ? ` · from ${item.sourceCourseName}` : ""}`);
+        row.appendChild(label);
+        const btns = h("div", "panel-toolbar-buttons");
+        btns.appendChild(button("Add to this course", "btn btn-primary btn-small", () => {
+          try {
+            SharedTests.copyToCourse(tool.id, item);
+            flush();
+            say(`"${item.name}" added to this course.`);
+          } catch (err) { say(`Couldn't do that: ${err.message}`); return; }
+          rerender();
+        }));
+        btns.appendChild(button("Delete", "btn btn-ghost btn-small", async () => {
+          if (!confirm(`Remove "${item.name}" from the shared list? Copies already in courses are not affected.`)) return;
+          try {
+            await SharedTests.remove(item.id);
+            say(`"${item.name}" removed from the shared list.`);
+          } catch (err) { say(`Couldn't do that: ${err.message}`); }
+          draw();
+        }));
+        row.appendChild(btns);
+        list.appendChild(row);
+      });
+    };
+    SharedTests.ensureLoaded().then(draw).catch((err) => {
+      list.textContent = "";
+      list.appendChild(h("p", "hint", `Couldn't load the shared list: ${err.message}`));
+    });
+    return section;
+  }
+
   // ---------- one combined section: the bank's own view + quiz buttons ----------
   function mergeBankView(tool, container) {
     const rerender = () => renderScoringToolView(tool, container);
@@ -881,7 +1004,20 @@
     const mains = Array.from(tbody.children).filter((tr) => tr.children.length === 6); // skips the empty-state and detail rows
     tests.forEach((t, i) => {
       const tr = mains[i];
-      if (!tr || !t.quiz) return;
+      if (!tr) return;
+      const shareBtn = button("Copy to Shared", "btn btn-ghost btn-small qz-act-share", guard(async () => {
+        say("Copying to Shared…");
+        const course = window.CoursesModule && CoursesModule.find(RosterModule.currentCourseId);
+        await SharedTests.addFromCourse(t, course ? course.name : "");
+        say(`"${t.name}" copied to Shared (students not included).`);
+        rerender();
+      }));
+      if (!t.quiz) {
+        const only = h("div", "qz-actions");
+        only.appendChild(shareBtn);
+        tr.children[5].insertBefore(only, tr.children[5].firstChild);
+        return;
+      }
       const quiz = ScoringModule.normalizeQuiz(t);
       const go = (view) => () => { editing.set(tool.id, t.id); viewOf.set(tool.id, view); rerender(); };
       const students = new Set(quiz.submissions.map((x) => x.sid)).size;
@@ -935,6 +1071,7 @@
           },
         ];
       group.appendChild(menuButton("QR Code", "#c2571a", qrItems));
+      group.appendChild(shareBtn);
       const actions = tr.children[5];
       actions.insertBefore(group, actions.firstChild);
     });
@@ -953,5 +1090,6 @@
     ScoringModule.testBankTests(tool.id).forEach((t) => { if (t.quiz) ScoringModule.normalizeQuiz(t); });
     original(tool, container);
     mergeBankView(tool, container);
+    container.appendChild(buildSharedSection(tool, container));
   };
 })();
