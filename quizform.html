@@ -101,7 +101,7 @@
         if (!res.ok) throw new Error("http " + res.status);
         return res.json();
       }
-      let sid = "", form = null, answers = {}, attempt = 1, maxAtt = 0, endAt = 0, timerId = null, submitting = false;
+      let sid = "", form = null, answers = {}, attempt = 1, maxAtt = 0, endAt = 0, timerId = null, submitting = false, showAtt = false;
       const step = (w) => { $("id-form").hidden = w !== "id"; $("quiz-form").hidden = w !== "quiz"; $("done").hidden = w !== "done"; $("sub").hidden = w === "done"; };
       const questions = () => form.config.sections.flatMap((s) => s.questions);
 
@@ -181,9 +181,9 @@
         try {
           const r = await rpc("quiz_open", { p_token: token, p_school_id: value });
           if (r && r.status === "ok") {
-            sid = value; form = r; answers = {}; attempt = r.attempt || 1; maxAtt = r.max || 0; submitting = false;
+            sid = value; form = r; answers = {}; attempt = r.attempt || 1; maxAtt = r.max || 0; submitting = false; showAtt = !!(r.config && r.config.showAttempts);
             $("send").disabled = false;
-            $("who").textContent = (r.name ? "Hello, " + r.name : "") + (maxAtt ? ` — attempt ${attempt} of ${maxAtt}` : attempt > 1 ? ` — attempt ${attempt}` : "");
+            $("who").textContent = (r.name ? "Hello, " + r.name : "") + (showAtt ? (maxAtt ? ` — attempt ${attempt} of ${maxAtt}` : attempt > 1 ? ` — attempt ${attempt}` : "") : "");
             say(""); render(); step("quiz"); startTimer(r);
           } else if (r && r.status === "no_attempts") {
             say(`You have already used all ${r.max} attempt(s) allowed for this quiz.`, true);
@@ -199,7 +199,7 @@
         $("done-msg").textContent = auto ? "Time's up. Your answers were submitted." : "Your answers have been saved.";
         const left = maxAtt === 0 ? Infinity : maxAtt - attempt;
         $("again").hidden = !(left > 0);
-        if (left > 0 && left !== Infinity) $("again").textContent = `Take it again (${left} attempt${left === 1 ? "" : "s"} left)`;
+        if (showAtt && left > 0 && left !== Infinity) $("again").textContent = `Take it again (${left} attempt${left === 1 ? "" : "s"} left)`;
         else $("again").textContent = "Take it again";
         say(""); step("done");
       }
