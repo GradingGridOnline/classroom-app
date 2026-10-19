@@ -1058,10 +1058,6 @@
 
       const group = h("div", "qz-actions");
       group.appendChild(button("Edit Questions", "btn btn-primary btn-small", go("build")));
-      group.appendChild(menuButton("Scores", "#0f7d73", [
-        { label: "Results", onClick: go("results") },
-        { label: `Review & Regrade (${students})`, onClick: go("review") },
-      ]));
       const qrItems = !quiz.token
         ? [{
           label: "Launch QR Code",
@@ -1098,8 +1094,26 @@
           },
         ];
       group.appendChild(menuButton("QR Code", "#c2571a", qrItems));
+      group.appendChild(menuButton("Results", "#0f7d73", [
+        { label: "Show Results", onClick: go("results") },
+        { label: `Review Results (${students})`, onClick: go("review") },
+        {
+          label: "Re-Calculate Results",
+          onClick: guard(async () => {
+            ScoringModule.regradeQuiz(tool.id, t.id);
+            flush();
+            say(`Results for "${t.name}" re-calculated.`);
+            rerender();
+          }),
+        },
+      ]));
       group.appendChild(shareBtn);
+      // Keep the bank's own Delete button (same behavior); drop Details / Re-match for quizzes.
       const actions = tr.children[5];
+      Array.from(actions.querySelectorAll("button")).forEach((b) => {
+        if (b.textContent.trim() === "Delete") group.appendChild(b);
+        else if (["Details", "Hide", "Re-match"].includes(b.textContent.trim())) b.remove();
+      });
       actions.insertBefore(group, actions.firstChild);
     });
   }
