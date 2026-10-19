@@ -1048,7 +1048,7 @@
       const quiz = ScoringModule.normalizeQuiz(t);
       const go = (view) => () => { editing.set(tool.id, t.id); viewOf.set(tool.id, view); rerender(); };
       const students = new Set(quiz.submissions.map((x) => x.sid)).size;
-      tr.children[4].textContent = `${kindName(quiz)}${quiz.token ? " · QR open" : ""}`;
+      tr.children[4].textContent = quiz.token ? "QR open" : "";
       const maxCell = tr.children[1];
       maxCell.textContent = "";
       const maxText = h("span", "", String(ScoringModule.quizTotal(quiz)));
@@ -1116,6 +1116,24 @@
       });
       actions.insertBefore(group, actions.firstChild);
     });
+
+    // New narrow "Type" column right after the name.
+    const headRow = table && table.querySelector("thead tr");
+    if (headRow && headRow.children.length === 6) {
+      const th = h("th", "", "Type");
+      headRow.insertBefore(th, headRow.children[1]);
+      mains.forEach((tr, i) => {
+        const t = tests[i];
+        if (!tr || !t) return;
+        const td = h("td", "", t.quiz ? kindName(ScoringModule.normalizeQuiz(t)) : "Uploaded scores");
+        td.style.whiteSpace = "nowrap";
+        td.style.fontSize = "0.85em";
+        tr.insertBefore(td, tr.children[1]);
+      });
+      tbody.querySelectorAll("td[colspan]").forEach((td) => {
+        if (td.colSpan === 6) td.colSpan = 7;
+      });
+    }
   }
 
   // ---------- hook into the Test & Quiz Bank view ----------
