@@ -1,0 +1,64 @@
+/* ===== Section headers: one style everywhere =====
+   Each header is a solid bar in a darkened version of the current theme's color
+   (same look as the Test & Quiz Bank and QR Forms sections). Loaded last. */
+:root { --hdr-bg: color-mix(in srgb, var(--green) 62%, #000); }
+
+/* Settings headers (Roster email, Seating, Attendance, Scoring, each tool) */
+.attendance-settings-header,
+/* Course list, templates, archived courses (not the course title or the Global Settings page title) */
+#course-section .section-header:not(:has(#course-detail-title)),
+#course-section summary > .section-header,
+/* Seating chart and roster panels */
+.unseated-panel > h3,
+.banks-section > h3,
+.group-list-section > h3,
+#mapping-panel > h3,
+/* Global Settings blocks */
+#settings-section .settings-block > h3,
+/* Report Card */
+#printcard-view > .attendance-settings-block > h4,
+#reportcard-email-section > h4 {
+  background: var(--hdr-bg);
+  color: #fff;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+}
+.attendance-settings-header,
+#course-section .section-header:not(:has(#course-detail-title)),
+#course-section summary > .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+#course-section summary > .section-header { display: inline-flex; margin: 0; }
+
+/* Text inside the bars stays white; buttons inside them sit on a light chip so they stay readable. */
+.attendance-settings-header h3,
+#course-section .section-header h2,
+.unseated-panel > h3,
+.banks-section > h3,
+.group-list-section > h3,
+#mapping-panel > h3,
+#settings-section .settings-block > h3,
+#printcard-view > .attendance-settings-block > h4,
+#reportcard-email-section > h4 {
+  color: #fff;
+  margin-top: 0;
+  text-shadow: none;
+}
+.attendance-settings-header h3 { font-size: 1.05rem; }
+#course-section .section-header h2 { font-size: 1.2rem; margin: 0; }
+.attendance-settings-header .btn,
+#course-section .section-header .btn,
+#course-section .section-header select {
+  background: var(--card);
+  color: var(--ink);
+}
+#course-section .section-header .hint,
+#course-section .section-header label { color: #fff; }
+#course-section .count-badge { background: var(--card); color: var(--ink); }
