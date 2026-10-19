@@ -1,14 +1,14 @@
 /* ===== Dark theme =====
    Warm near-black surfaces with clearly lighter panels, a rich brown header band
-   and vivid colors (mint green primary, orange accent), taken from a dark calendar app.
+   and vivid colors (cream primary, orange accent), taken from a dark calendar app.
    Loaded after style.css and grid.css. */
 [data-theme="dark"] {
   --paper: #1b1a19;        /* page + inner bands */
   --card: #353230;         /* panels, tiles, menus */
   --ink: #f7f5f2;          /* main text */
   --ink-soft: #b0ada8;     /* secondary text */
-  --green: #2fd08a;        /* primary / interactive (muted green) */
-  --green-dark: #7ff0b8;   /* headings + secondary-button text (light mint) */
+  --green: #e4dfd3;        /* primary / interactive (cream) */
+  --green-dark: #f3efe6;   /* headings + secondary-button text (light cream) */
   --marker: #ffa01f;       /* accent (orange) */
   --line: #615e5a;         /* borders / grid lines */
   --font-heading: -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -17,7 +17,7 @@
   --radius-small: 5px;
   --card-shadow: 0 0 0 1px #4a4743, 0 2px 8px rgba(0, 0, 0, 0.6);
   --glow: none;
-  --focus-glow: 0 0 0 2px rgba(143, 211, 168, 0.35);
+  --focus-glow: 0 0 0 2px rgba(228, 223, 211, 0.4);
   --th-bg: #5a403d;        /* column headers (the calendar's brown sidebar) */
   --td-bg: #292725;        /* cells below the headers */
   color-scheme: dark;
@@ -29,7 +29,7 @@
 /* --green-dark is a hover BACKGROUND in two places: use a deeper green there. */
 [data-theme="dark"] .btn-primary:hover,
 [data-theme="dark"] .session-present-btn:hover {
-  background: #22b676;
+  background: #ffffff;
 }
 /* Text boxes and drop-downs */
 [data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
@@ -55,3 +55,9 @@
 
 /* Bright fills get dark text (js/autocontrast.js does this automatically for everything else). */
 [data-theme="dark"] .btn-primary { color: #0d0d0d; }
+
+/* Neutral header bars (the cream main color is too light for white header text). */
+html[data-theme="dark"] { --hdr-bg: #5b5651; }
+/* Active-tab / selected markers and accents stay colorful */
+[data-theme="dark"] .btn-primary { background: #e4dfd3; color: #0d0d0d; }
+[data-theme="dark"] .btn-primary:hover { color: #0d0d0d; }

@@ -5,8 +5,8 @@
 (function () {
   const st = document.createElement("style");
   st.textContent = `
-    .pres-section.pres-qrf { border-color: color-mix(in srgb, var(--green) 62%, #000); background: color-mix(in srgb, var(--green) 10%, var(--card)); }
-    .pres-section.pres-qrf > .pres-section-head { background: color-mix(in srgb, var(--green) 62%, #000); color: #fff; border-bottom: 0; }
+    .pres-section.pres-qrf { border-color: var(--hdr-bg); background: color-mix(in srgb, var(--green) 10%, var(--card)); }
+    .pres-section.pres-qrf > .pres-section-head { background: var(--hdr-bg); color: #fff; border-bottom: 0; }
   `;
   document.head.appendChild(st);
 
