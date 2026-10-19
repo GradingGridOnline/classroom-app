@@ -62,3 +62,29 @@
 #course-section .section-header .hint,
 #course-section .section-header label { color: #fff; }
 #course-section .count-badge { background: var(--card); color: var(--ink); }
+
+/* Presentation Calc sections on every page (Scores, Student Groups, Rubrics, QR Forms) */
+.pres-section {
+  border-color: var(--hdr-bg);
+  background: color-mix(in srgb, var(--green) 10%, var(--card));
+}
+.pres-section > .pres-section-head {
+  background: var(--hdr-bg);
+  color: #fff;
+  border-bottom: 0;
+}
+
+/* Settings sub-sections in every module and scoring tool (First column, Rows, Columns, Categories, Scoring Tools, Label bank, ...) */
+.attendance-settings-block > h4,
+.attendance-settings-body > h4,
+[id$="settings-body"] > h4 {
+  background: var(--hdr-bg);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-shadow: none;
+}
