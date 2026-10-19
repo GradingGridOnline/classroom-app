@@ -9,6 +9,7 @@ const THEMES = [
   { id: "cyberpunk", label: "Cyberpunk" },
   { id: "basic", label: "Basic" },
   { id: "tron-legacy", label: "Tron: Legacy" },
+  { id: "dark", label: "Dark" },
 ];
 
 const TEXT_SIZES = [

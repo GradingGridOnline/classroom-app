@@ -1,0 +1,55 @@
+/* ===== Dark theme =====
+   Warm charcoal surfaces with a brown-tinted header band and soft
+   muted event colors (mint green primary, orange / purple / salmon / olive
+   / blue accents), taken from a dark calendar app.
+   Loaded after style.css and grid.css. */
+[data-theme="dark"] {
+  --paper: #262524;        /* page + inner bands */
+  --card: #2e2d2c;         /* panels, tiles, menus */
+  --ink: #ebe9e6;          /* main text */
+  --ink-soft: #8f8d8a;     /* secondary text */
+  --green: #3f6b57;        /* primary / interactive (muted green) */
+  --green-dark: #b9e4cb;   /* headings + secondary-button text (light mint) */
+  --marker: #ffa33a;       /* accent (orange) */
+  --line: #3f3e3c;         /* borders / grid lines */
+  --font-heading: -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 6px;
+  --radius-small: 5px;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --glow: none;
+  --focus-glow: 0 0 0 2px rgba(143, 211, 168, 0.35);
+  --th-bg: #3a3030;        /* column headers (the calendar's brown sidebar) */
+  --td-bg: #2f2d2c;        /* cells below the headers */
+  color-scheme: dark;
+}
+[data-theme="dark"] body {
+  background: #262524;
+  color: var(--ink);
+}
+/* --green-dark is a hover BACKGROUND in two places: use a deeper green there. */
+[data-theme="dark"] .btn-primary:hover,
+[data-theme="dark"] .session-present-btn:hover {
+  background: #2f5645;
+}
+/* Text boxes and drop-downs */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: #3a3938;
+  color: var(--ink);
+  border: 1px solid #55524f;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--ink-soft);
+}
+[data-theme="dark"] table th,
+[data-theme="dark"] .attendance-table thead th,
+[data-theme="dark"] .roster-table thead th {
+  color: var(--ink);
+}
+/* Status messages: soft mint */
+[data-theme="dark"] .result {
+  color: #9fd9b4;
+}
