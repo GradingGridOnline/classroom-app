@@ -1,14 +1,15 @@
 // ===== Progress Tracker: "Give full credit" tool =====
 // Load AFTER app.js (and trackercolumns.js). Adds a collapsible tool above the tracker grid:
-// pick a column, pick the rows (and sub-rows, if the tracker has them), and it types the
-// full-credit score into every selected box in one click. The score defaults to the column's
+// pick a column, then pick who gets it — chosen student/group rows (all their boxes in that column)
+// or chosen sub-rows (that sub-row for every student/group) — and it types the
+// full-credit score into every matching box in one click. The score defaults to the column's
 // maximum and can be changed. Boxes switched off with "Choose boxes", and Test/Quiz columns
 // (which take their scores from a test), are skipped.
 
 (function () {
   const state = new Map(); // toolId -> { open, colId, rows:Set|null (null = all), subs:Set|null, value, msg }
   const get = (toolId) => {
-    if (!state.has(toolId)) state.set(toolId, { open: false, colId: "", rows: new Set(), subs: null, value: "", msg: "" });
+    if (!state.has(toolId)) state.set(toolId, { open: false, colId: "", rows: new Set(), subSel: new Set(), target: "rows", value: "", msg: "" });
     return state.get(toolId);
   };
 
@@ -71,14 +72,35 @@
       line1.append(l1, l2);
       body.appendChild(line1);
 
-      // rows
+      // what to give full credit to
       const rows = ScoringModule.getTableIdentityRows(tool.id);
-      const mkList = (title, items, selected, onChange) => {
+      const subs = cfg.subRows.map((x) => ({ key: x.id, label: x.name }));
+      if (st.target !== "subs" || subs.length === 0) st.target = "rows";
+      const rowWord = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
+
+      const pick = document.createElement("div");
+      pick.style.cssText = "display:flex;gap:18px;align-items:center;flex-wrap:wrap;";
+      const pl = document.createElement("strong");
+      pl.textContent = "Give full credit to:";
+      pick.appendChild(pl);
+      [["rows", `${rowWord} rows (all of their boxes in this column)`], ["subs", "Sub-rows (that sub-row for every " + rowWord.toLowerCase() + ")"]].forEach(([v, text]) => {
+        if (v === "subs" && subs.length === 0) return;
+        const lab = document.createElement("label");
+        lab.style.cssText = "display:inline-flex;gap:5px;align-items:center;";
+        const rb = document.createElement("input");
+        rb.type = "radio";
+        rb.name = `fc-target-${tool.id}`;
+        rb.checked = st.target === v;
+        rb.addEventListener("change", () => { st.target = v; rerender(); });
+        lab.append(rb, document.createTextNode(text));
+        pick.appendChild(lab);
+      });
+      body.appendChild(pick);
+
+      const mkList = (items, selected, onChange) => {
         const wrap = document.createElement("div");
         const head = document.createElement("div");
         head.style.cssText = "display:flex;gap:10px;align-items:center;margin-bottom:4px;";
-        const t = document.createElement("strong");
-        t.textContent = title;
         const all = document.createElement("button");
         all.type = "button";
         all.className = "btn btn-ghost btn-small";
@@ -89,7 +111,7 @@
         none.className = "btn btn-ghost btn-small";
         none.textContent = "Select none";
         none.addEventListener("click", () => { onChange(new Set()); rerender(); });
-        head.append(t, all, none);
+        head.append(all, none);
         wrap.appendChild(head);
         const box = document.createElement("div");
         box.style.cssText = "display:flex;flex-wrap:wrap;gap:4px 16px;max-height:180px;overflow:auto;padding:6px;border:1px solid var(--line);border-radius:4px;";
@@ -103,7 +125,7 @@
             const next = new Set(selected);
             if (cb.checked) next.add(i.key); else next.delete(i.key);
             onChange(next);
-            updateBtn();
+            rerenderBtn();
           });
           lab.append(cb, document.createTextNode(i.label));
           box.appendChild(lab);
@@ -111,19 +133,21 @@
         wrap.appendChild(box);
         return wrap;
       };
-      const rowLabel = cfg.firstColumn.mode === "groups" ? "Groups" : "Rows (students)";
-      if (rows.length === 0) {
-        const p = document.createElement("p");
-        p.className = "hint";
-        p.textContent = "No rows yet.";
-        body.appendChild(p);
+
+      let chosen;
+      if (st.target === "rows") {
+        if (rows.length === 0) {
+          const p = document.createElement("p");
+          p.className = "hint";
+          p.textContent = "No rows yet.";
+          body.appendChild(p);
+        } else {
+          body.appendChild(mkList(rows, st.rows, (x) => { st.rows = x; }));
+        }
+        chosen = () => st.rows;
       } else {
-        body.appendChild(mkList(rowLabel, rows, st.rows, (s) => { st.rows = s; }));
-      }
-      const subs = cfg.subRows.map((s) => ({ key: s.id, label: s.name }));
-      if (subs.length > 0) {
-        if (st.subs === null) st.subs = new Set(subs.map((s) => s.key));
-        body.appendChild(mkList("Sub-rows", subs, st.subs, (s) => { st.subs = s; }));
+        body.appendChild(mkList(subs, st.subSel, (x) => { st.subSel = x; }));
+        chosen = () => st.subSel;
       }
 
       // go
@@ -133,31 +157,33 @@
       const msg = document.createElement("span");
       msg.className = "result";
       msg.textContent = st.msg;
-      const updateBtn = () => {
-        const n = st.rows.size * (subs.length ? st.subs.size : 1);
-        go.textContent = `Assign full credit to ${n} box${n === 1 ? "" : "es"}`;
+      const rerenderBtn = () => {
+        const n = chosen().size;
+        go.textContent = st.target === "rows"
+          ? `Give full credit to ${n} ${rowWord.toLowerCase()}${n === 1 ? "" : "s"}`
+          : `Give full credit to ${n} sub-row${n === 1 ? "" : "s"}`;
         go.disabled = n === 0;
       };
-      updateBtn();
+      rerenderBtn();
       go.addEventListener("click", async () => {
         const v = String(val.value).trim();
         if (v === "" || Number.isNaN(Number(v))) { st.msg = "Enter the full-credit score first."; rerender(); return; }
         let done = 0, skipped = 0;
+        const put = (lineId, subId) => {
+          if (!ScoringModule.isTableCellOn(tool.id, lineId, col.id, subId)) { skipped++; return; }
+          ScoringModule.setTableValue(tool.id, lineId, col.id, v, subId);
+          done++;
+        };
         try {
-          st.rows.forEach((lineId) => {
-            if (!rows.some((r) => r.key === lineId)) return;
-            if (subs.length) {
-              st.subs.forEach((subId) => {
-                if (!ScoringModule.isTableCellOn(tool.id, lineId, col.id, subId)) { skipped++; return; }
-                ScoringModule.setTableValue(tool.id, lineId, col.id, v, subId);
-                done++;
-              });
-            } else {
-              if (!ScoringModule.isTableCellOn(tool.id, lineId, col.id)) { skipped++; return; }
-              ScoringModule.setTableValue(tool.id, lineId, col.id, v);
-              done++;
-            }
-          });
+          if (st.target === "rows") {
+            st.rows.forEach((lineId) => {
+              if (!rows.some((r) => r.key === lineId)) return;
+              if (subs.length) subs.forEach((sub) => put(lineId, sub.key));
+              else put(lineId);
+            });
+          } else {
+            st.subSel.forEach((subId) => rows.forEach((r) => put(r.key, subId)));
+          }
           st.msg = `Gave ${v} in "${col.name}" to ${done} box${done === 1 ? "" : "es"}` + (skipped ? ` (${skipped} switched-off box${skipped === 1 ? "" : "es"} skipped)` : "") + ".";
         } catch (err) {
           st.msg = `Stopped: ${err.message}`;
