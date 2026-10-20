@@ -72,10 +72,13 @@
     box.checked = mode === "columns";
     const track = document.createElement("span");
     track.className = "tracker-switch-track";
-    const text = document.createElement("span");
-    text.className = "tracker-switch-text";
-    text.textContent = mode === "columns" ? "Main Scores takes: Columns" : "Main Scores takes: Total Score";
-    label.append(box, track, text);
+    const mk = (txt, on) => {
+      const t = document.createElement("span");
+      t.className = "tracker-switch-text" + (on ? " active" : "");
+      t.textContent = txt;
+      return t;
+    };
+    label.append(mk("Total Score", mode !== "columns"), box, track, mk("Columns", mode === "columns"));
     box.addEventListener("change", async () => {
       ScoringModule.setTableSourceMode(tool.id, box.checked ? "columns" : "total");
       if (typeof saveScoringThen === "function") await saveScoringThen(() => {});

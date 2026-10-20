@@ -2,6 +2,8 @@
 // In the app's tables (Roster, Attendance, Scoring, Progress Tracker,
 // Presentation Calc scores, Rubrics):
 //   Enter        moves down to the box below (Shift+Enter: up)
+//   Arrow keys   move to the box above / below / left / right (Left / Right only when the
+//                cursor is at the edge of the text, or all of it is highlighted)
 //   Tab          moves right to the next box (Shift+Tab: left); at the end of
 //                a row it continues at the start of the next one
 // Pressing Tab on the last box of a table, or Enter on the last row, behaves
@@ -9,8 +11,7 @@
 // left alone.
 
 (function () {
-  const GRID_SELECTOR =
-    "table.attendance-table, table.roster-table, table.rubric-active-grid, table.rubric-points-grid, table.rubric-bank-grid";
+  const GRID_SELECTOR = "table";
   const CONTROL_SELECTOR =
     'input:not([type="checkbox"]):not([type="hidden"]):not([type="file"]):not([type="button"]):not([type="submit"]), select';
 
@@ -128,17 +129,39 @@
     setTimeout(ensure, 40);
   }
 
+  const ARROWS = { ArrowUp: [1, -1], ArrowDown: [1, 1], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+
+  function arrowTarget(el, key) {
+    const [vertical, dir] = ARROWS[key];
+    if (el.tagName === "SELECT") return null; // arrows change a drop-down's choice
+    if (el.type === "number" && vertical) return null;
+    const textual = typeof el.selectionStart === "number" && el.selectionStart !== null;
+    if (!vertical && textual) {
+      const a = el.selectionStart, b = el.selectionEnd, len = el.value.length;
+      const all = a === 0 && b === len;
+      if (!all && !(a === b && (dir > 0 ? a === len : a === 0))) return null;
+    }
+    if (vertical) return findVertical(el, dir);
+    const t = findHorizontal(el, dir);
+    return t && t.closest("tr") === el.closest("tr") ? t : null; // arrows don't jump to another row
+  }
+
   document.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
-    if (e.key !== "Enter" && e.key !== "Tab") return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const isArrow = e.key in ARROWS;
+    if (e.key !== "Enter" && e.key !== "Tab" && !isArrow) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || (isArrow && e.shiftKey)) return;
 
     const el = e.target;
-    if (!(el instanceof HTMLElement) || !el.matches(CONTROL_SELECTOR)) return;
+    if (!(el instanceof HTMLElement) || !el.matches(CONTROL_SELECTOR) || el.hasAttribute("data-nonav")) return;
     const cell = el.closest("td, th");
     if (!cell || !cell.closest(GRID_SELECTOR)) return;
 
-    const target = e.key === "Enter" ? findVertical(el, e.shiftKey ? -1 : 1) : findHorizontal(el, e.shiftKey ? -1 : 1);
+    const target = isArrow
+      ? arrowTarget(el, e.key)
+      : e.key === "Enter"
+      ? findVertical(el, e.shiftKey ? -1 : 1)
+      : findHorizontal(el, e.shiftKey ? -1 : 1);
     if (!target) return;
     e.preventDefault();
     goTo(target);

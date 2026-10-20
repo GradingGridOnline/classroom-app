@@ -39,7 +39,7 @@
     const rowWord = cfg.firstColumn.mode === "groups" ? "group" : "student";
     // Valid selections only (columns / sub-rows may have been removed)
     st.cols = new Set([...st.cols].filter((id) => cols.some((c) => c.id === id)));
-    st.lines = new Set([...st.lines].filter((id) => id === "rows" || cfg.subRows.some((s) => s.id === id)));
+    st.lines = new Set([...st.lines].filter((id) => (id === "rows" && !cfg.subRows.length) || cfg.subRows.some((s) => s.id === id)));
 
     if (cols.length === 0) {
       const p = document.createElement("p");
@@ -68,7 +68,7 @@
       };
       const checkbox = (label, checked, onChange) => {
         const lab = document.createElement("label");
-        lab.style.cssText = "display:inline-flex;gap:6px;align-items:center;white-space:nowrap;";
+        lab.style.cssText = "display:inline-grid;grid-template-columns:auto max-content;gap:6px;align-items:center;white-space:nowrap;";
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = checked;
@@ -83,7 +83,7 @@
         none: smallBtn("Select none", () => { st.cols = new Set(); rerender(); }),
       });
       const colRow = document.createElement("div");
-      colRow.style.cssText = "display:flex;flex-direction:row;flex-wrap:wrap;gap:6px 20px;";
+      colRow.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(max-content,auto));gap:6px 24px;justify-content:start;";
       cols.forEach((c) => {
         const label = (c.name || "(unnamed)") + (cfg.mode === "max" && c.maxPoints > 0 ? ` (${c.maxPoints})` : "");
         colRow.appendChild(checkbox(label, st.cols.has(c.id), (on) => { if (on) st.cols.add(c.id); else st.cols.delete(c.id); }));
@@ -94,9 +94,10 @@
       // 2. Rows, then each sub-row, one under the other
       const linesWrap = section("Fill in", null);
       const list = document.createElement("div");
-      list.style.cssText = "display:flex;flex-direction:column;gap:4px;";
-      const rowsLabel = cfg.subRows.length ? "Rows (typed in directly — only counted when there are no sub-rows)" : "Rows";
-      list.appendChild(checkbox(rowsLabel, st.lines.has("rows"), (on) => { if (on) st.lines.add("rows"); else st.lines.delete("rows"); }));
+      list.style.cssText = "display:grid;grid-template-columns:max-content;gap:6px;justify-items:start;";
+      if (!cfg.subRows.length) {
+        list.appendChild(checkbox("Rows", st.lines.has("rows"), (on) => { if (on) st.lines.add("rows"); else st.lines.delete("rows"); }));
+      }
       cfg.subRows.forEach((sub) => {
         list.appendChild(checkbox(sub.name, st.lines.has(sub.id), (on) => { if (on) st.lines.add(sub.id); else st.lines.delete(sub.id); }));
       });
@@ -125,7 +126,7 @@
       const updateBtn = () => {
         const n = st.cols.size * st.lines.size;
         go.disabled = n === 0;
-        go.textContent = n === 0 ? "Choose columns and rows" : `Give full credit to every ${rowWord} in ${st.cols.size} column${st.cols.size === 1 ? "" : "s"} × ${st.lines.size} line${st.lines.size === 1 ? "" : "s"}`;
+        go.textContent = n === 0 ? "Choose columns and rows" : `Give full credit to every ${rowWord} in ${st.cols.size} column${st.cols.size === 1 ? "" : "s"} × ${st.lines.size} ${cfg.subRows.length ? "sub-row" : "line"}${st.lines.size === 1 ? "" : "s"}`;
       };
       updateBtn();
       go.addEventListener("click", async () => {
