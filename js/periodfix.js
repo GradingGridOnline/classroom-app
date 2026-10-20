@@ -7,6 +7,12 @@
 (function () {
   let chain = Promise.resolve();
 
+  // A copy of the period list is kept in this browser too, so a period you set can never be
+  // lost if the server copy fails to save or comes back empty. { periods, synced }
+  const bkKey = () => "ggo-periods-bk:" + ((storage && storage.session && storage.session.user && storage.session.user.id) || "x");
+  const readBk = () => { try { return JSON.parse(localStorage.getItem(bkKey())); } catch (e) { return null; } };
+  const writeBk = (synced) => { try { localStorage.setItem(bkKey(), JSON.stringify({ periods: PeriodsModule.periods, synced })); } catch (e) {} };
+
   async function persist() {
     const want = JSON.stringify(PeriodsModule.periods);
     await PeriodsModule.save();
@@ -26,15 +32,41 @@
       return;
     }
     el.periodsStatus.textContent = "Saving…";
+    writeBk(false);
     chain = chain
       .then(persist)
-      .then(() => { el.periodsStatus.textContent = "Saved ✓"; })
+      .then(() => { writeBk(true); el.periodsStatus.textContent = "Saved ✓"; })
       .catch((err) => {
         el.periodsStatus.textContent = `Couldn't save periods: ${err.message}`;
         el.periodsStatus.style.color = "#d3302f";
       });
     if (after) after(); // the screen updates at once; the save finishes in the background
   };
+
+  // Whenever periods are loaded: if the server copy is empty or older than this browser's copy, restore and re-save.
+  const origLoad = PeriodsModule.load;
+  PeriodsModule.load = async function (...args) {
+    const r = await origLoad.apply(this, args);
+    const bk = readBk();
+    const stale = bk && Array.isArray(bk.periods) && bk.periods.length && (bk.synced === false || this.periods.length === 0);
+    if (stale) {
+      this.periods = bk.periods;
+      window.savePeriodsThen(() => { renderPeriodsList(); renderCourseList(); });
+      setTimeout(() => { el.periodsStatus.textContent = "Your periods were restored from this browser's backup and saved again ✓"; }, 1500);
+    } else {
+      writeBk(true);
+      el.periodsStatus.textContent = this.periods.length ? `${this.periods.length} period(s) loaded from your account.` : "";
+    }
+    return this.periods;
+  };
+
+  // The app may already have loaded the periods before this file finished loading: check once more now.
+  if (storage && storage.isSignedIn && storage.isSignedIn()) {
+    chain = chain
+      .then(() => PeriodsModule.load())
+      .then(() => { renderPeriodsList(); renderCourseList(); })
+      .catch(() => {});
+  }
 
   // Opening Settings: show what is actually stored (not a stale copy), so what you see is what's saved.
   const origOpen = window.openSettings;
