@@ -5,6 +5,44 @@
 // message next to "Save Periods" says exactly what.
 
 (function () {
+  // ----- Periods now live INSIDE courses.json (the same file as your course list) -----
+  // courses.json is the file that has always saved reliably, so the period list is stored there
+  // too. periods.json is still written as a spare copy, and is read only if courses.json has no
+  // periods yet (so periods saved the old way carry over automatically).
+  let known = null; // the period list as last read from / written to the server
+  const P = SupabaseProvider.prototype;
+  const rawLoad = P.loadFile;
+  const rawSave = P.saveFile;
+  P.loadFile = async function (name) {
+    if (name === "courses.json") {
+      const d = await rawLoad.call(this, name);
+      if (d && Array.isArray(d.periods)) known = d.periods;
+      return d;
+    }
+    if (name === "periods.json") {
+      const d = await rawLoad.call(this, "courses.json");
+      if (d && Array.isArray(d.periods)) { known = d.periods; return { periods: d.periods }; }
+      const old = await rawLoad.call(this, name); // not moved yet: use the old file
+      if (old && Array.isArray(old.periods)) known = old.periods;
+      return old;
+    }
+    return rawLoad.call(this, name);
+  };
+  P.saveFile = async function (name, data) {
+    if (name === "courses.json") {
+      const d = Object.assign({}, data);
+      if (!Array.isArray(d.periods) && known) d.periods = known;
+      return rawSave.call(this, name, d);
+    }
+    if (name === "periods.json") {
+      known = data.periods;
+      const cur = (await rawLoad.call(this, "courses.json")) || { courses: [], sortMode: "manual" };
+      await rawSave.call(this, "courses.json", Object.assign({}, cur, { periods: data.periods }));
+      return rawSave.call(this, name, data); // spare copy
+    }
+    return rawSave.call(this, name, data);
+  };
+
   let chain = Promise.resolve();
 
   // A copy of the period list is kept in this browser too, so a period you set can never be
