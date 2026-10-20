@@ -1,15 +1,16 @@
-// ===== Progress Tracker: "Give full credit" tool =====
-// Load AFTER app.js (and trackercolumns.js). Adds a collapsible tool above the tracker grid:
-// pick a column, then pick who gets it — chosen student/group rows (all their boxes in that column)
-// or chosen sub-rows (that sub-row for every student/group) — and it types the
-// full-credit score into every matching box in one click. The score defaults to the column's
-// maximum and can be changed. Boxes switched off with "Choose boxes", and Test/Quiz columns
-// (which take their scores from a test), are skipped.
+// ===== Progress Tracker: "Give full credit" tool (in bulk) =====
+// Load AFTER app.js (and trackercolumns.js). A collapsible tool above the tracker grid:
+//   1. tick the COLUMNS to include (listed left to right),
+//   2. tick what to fill: "Rows" and/or each sub-row,
+//   3. click the button — every student/group gets full credit in those boxes.
+// Full credit = the column's own maximum score. For a column with no maximum set, the optional
+// "score for columns without a maximum" box is used. Boxes switched off with "Choose boxes" and
+// Test/Quiz columns (which take their scores from a test) are skipped.
 
 (function () {
-  const state = new Map(); // toolId -> { open, colId, rows:Set|null (null = all), subs:Set|null, value, msg }
+  const state = new Map(); // toolId -> { open, cols:Set, lines:Set, fallback, msg }
   const get = (toolId) => {
-    if (!state.has(toolId)) state.set(toolId, { open: false, colId: "", rows: new Set(), subSel: new Set(), target: "rows", value: "", msg: "" });
+    if (!state.has(toolId)) state.set(toolId, { open: false, cols: new Set(), lines: new Set(), fallback: "", msg: "" });
     return state.get(toolId);
   };
 
@@ -30,10 +31,15 @@
     sum.style.cssText = "cursor:pointer;font-weight:700;";
     det.appendChild(sum);
 
-    const cols = cfg.columns.filter((c) => c.type !== "test");
     const body = document.createElement("div");
-    body.style.cssText = "display:flex;flex-direction:column;gap:10px;margin-top:10px;";
+    body.style.cssText = "display:flex;flex-direction:column;gap:12px;margin-top:10px;";
     det.appendChild(body);
+
+    const cols = cfg.columns.filter((c) => c.type !== "test");
+    const rowWord = cfg.firstColumn.mode === "groups" ? "group" : "student";
+    // Valid selections only (columns / sub-rows may have been removed)
+    st.cols = new Set([...st.cols].filter((id) => cols.some((c) => c.id === id)));
+    st.lines = new Set([...st.lines].filter((id) => id === "rows" || cfg.subRows.some((s) => s.id === id)));
 
     if (cols.length === 0) {
       const p = document.createElement("p");
@@ -41,163 +47,119 @@
       p.textContent = "Add score columns in this tracker's Settings first.";
       body.appendChild(p);
     } else {
-      if (!cols.some((c) => c.id === st.colId)) st.colId = cols[0].id;
-      const col = cols.find((c) => c.id === st.colId);
-
-      // column + score
-      const line1 = document.createElement("div");
-      line1.style.cssText = "display:flex;gap:10px;align-items:center;flex-wrap:wrap;";
-      const l1 = document.createElement("label");
-      l1.textContent = "Column: ";
-      const colSel = document.createElement("select");
-      cols.forEach((c) => {
-        const o = document.createElement("option");
-        o.value = c.id;
-        o.textContent = c.name || "(unnamed column)";
-        if (c.id === st.colId) o.selected = true;
-        colSel.appendChild(o);
-      });
-      colSel.addEventListener("change", () => { st.colId = colSel.value; st.value = ""; rerender(); });
-      l1.appendChild(colSel);
-      const l2 = document.createElement("label");
-      l2.textContent = "Full credit score: ";
-      const val = document.createElement("input");
-      val.type = "text";
-      val.inputMode = "decimal";
-      val.style.width = "5em";
-      val.value = st.value !== "" ? st.value : col.maxPoints > 0 ? String(col.maxPoints) : "";
-      val.placeholder = col.maxPoints > 0 ? "" : "e.g. 5";
-      val.addEventListener("input", () => { st.value = val.value; });
-      l2.appendChild(val);
-      line1.append(l1, l2);
-      body.appendChild(line1);
-
-      // what to give full credit to
-      const rows = ScoringModule.getTableIdentityRows(tool.id);
-      const subs = cfg.subRows.map((x) => ({ key: x.id, label: x.name }));
-      if (st.target !== "subs" || subs.length === 0) st.target = "rows";
-      const rowWord = cfg.firstColumn.mode === "groups" ? "Group" : "Student";
-
-      const pick = document.createElement("div");
-      pick.style.cssText = "display:flex;gap:18px;align-items:center;flex-wrap:wrap;";
-      const pl = document.createElement("strong");
-      pl.textContent = "Give full credit to:";
-      pick.appendChild(pl);
-      [["rows", `${rowWord} rows (all of their boxes in this column)`], ["subs", "Sub-rows (that sub-row for every " + rowWord.toLowerCase() + ")"]].forEach(([v, text]) => {
-        if (v === "subs" && subs.length === 0) return;
-        const lab = document.createElement("label");
-        lab.style.cssText = "display:inline-flex;gap:5px;align-items:center;";
-        const rb = document.createElement("input");
-        rb.type = "radio";
-        rb.name = `fc-target-${tool.id}`;
-        rb.checked = st.target === v;
-        rb.addEventListener("change", () => { st.target = v; rerender(); });
-        lab.append(rb, document.createTextNode(text));
-        pick.appendChild(lab);
-      });
-      body.appendChild(pick);
-
-      const mkList = (items, selected, onChange) => {
+      const section = (title, selectAll) => {
         const wrap = document.createElement("div");
         const head = document.createElement("div");
         head.style.cssText = "display:flex;gap:10px;align-items:center;margin-bottom:4px;";
-        const all = document.createElement("button");
-        all.type = "button";
-        all.className = "btn btn-ghost btn-small";
-        all.textContent = "Select all";
-        all.addEventListener("click", () => { onChange(new Set(items.map((i) => i.key))); rerender(); });
-        const none = document.createElement("button");
-        none.type = "button";
-        none.className = "btn btn-ghost btn-small";
-        none.textContent = "Select none";
-        none.addEventListener("click", () => { onChange(new Set()); rerender(); });
-        head.append(all, none);
+        const t = document.createElement("strong");
+        t.textContent = title;
+        head.appendChild(t);
+        if (selectAll) head.append(selectAll.all, selectAll.none);
         wrap.appendChild(head);
-        const box = document.createElement("div");
-        box.style.cssText = "display:flex;flex-wrap:wrap;gap:4px 16px;max-height:180px;overflow:auto;padding:6px;border:1px solid var(--line);border-radius:4px;";
-        items.forEach((i) => {
-          const lab = document.createElement("label");
-          lab.style.cssText = "display:inline-flex;gap:5px;align-items:center;white-space:nowrap;";
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = selected.has(i.key);
-          cb.addEventListener("change", () => {
-            const next = new Set(selected);
-            if (cb.checked) next.add(i.key); else next.delete(i.key);
-            onChange(next);
-            rerenderBtn();
-          });
-          lab.append(cb, document.createTextNode(i.label));
-          box.appendChild(lab);
-        });
-        wrap.appendChild(box);
         return wrap;
       };
+      const smallBtn = (label, fn) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn-ghost btn-small";
+        b.textContent = label;
+        b.addEventListener("click", fn);
+        return b;
+      };
+      const checkbox = (label, checked, onChange) => {
+        const lab = document.createElement("label");
+        lab.style.cssText = "display:inline-flex;gap:6px;align-items:center;white-space:nowrap;";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = checked;
+        cb.addEventListener("change", () => { onChange(cb.checked); updateBtn(); });
+        lab.append(cb, document.createTextNode(label));
+        return lab;
+      };
 
-      let chosen;
-      if (st.target === "rows") {
-        if (rows.length === 0) {
-          const p = document.createElement("p");
-          p.className = "hint";
-          p.textContent = "No rows yet.";
-          body.appendChild(p);
-        } else {
-          body.appendChild(mkList(rows, st.rows, (x) => { st.rows = x; }));
-        }
-        chosen = () => st.rows;
-      } else {
-        body.appendChild(mkList(subs, st.subSel, (x) => { st.subSel = x; }));
-        chosen = () => st.subSel;
-      }
+      // 1. Columns, left to right
+      const colsWrap = section("Columns", {
+        all: smallBtn("Select all", () => { st.cols = new Set(cols.map((c) => c.id)); rerender(); }),
+        none: smallBtn("Select none", () => { st.cols = new Set(); rerender(); }),
+      });
+      const colRow = document.createElement("div");
+      colRow.style.cssText = "display:flex;flex-direction:row;flex-wrap:wrap;gap:6px 20px;";
+      cols.forEach((c) => {
+        const label = (c.name || "(unnamed)") + (cfg.mode === "max" && c.maxPoints > 0 ? ` (${c.maxPoints})` : "");
+        colRow.appendChild(checkbox(label, st.cols.has(c.id), (on) => { if (on) st.cols.add(c.id); else st.cols.delete(c.id); }));
+      });
+      colsWrap.appendChild(colRow);
+      body.appendChild(colsWrap);
 
-      // go
+      // 2. Rows, then each sub-row, one under the other
+      const linesWrap = section("Fill in", null);
+      const list = document.createElement("div");
+      list.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+      const rowsLabel = cfg.subRows.length ? "Rows (typed in directly — only counted when there are no sub-rows)" : "Rows";
+      list.appendChild(checkbox(rowsLabel, st.lines.has("rows"), (on) => { if (on) st.lines.add("rows"); else st.lines.delete("rows"); }));
+      cfg.subRows.forEach((sub) => {
+        list.appendChild(checkbox(sub.name, st.lines.has(sub.id), (on) => { if (on) st.lines.add(sub.id); else st.lines.delete(sub.id); }));
+      });
+      linesWrap.appendChild(list);
+      body.appendChild(linesWrap);
+
+      // 3. Score fallback + go
+      const fbLabel = document.createElement("label");
+      fbLabel.textContent = "Score for columns without a maximum: ";
+      const fb = document.createElement("input");
+      fb.type = "text";
+      fb.inputMode = "decimal";
+      fb.style.width = "5em";
+      fb.value = st.fallback;
+      fb.placeholder = "e.g. 5";
+      fb.addEventListener("input", () => { st.fallback = fb.value; });
+      fbLabel.appendChild(fb);
+      body.appendChild(fbLabel);
+
       const go = document.createElement("button");
       go.type = "button";
       go.className = "btn btn-primary btn-small";
       const msg = document.createElement("span");
       msg.className = "result";
       msg.textContent = st.msg;
-      const rerenderBtn = () => {
-        const n = chosen().size;
-        go.textContent = st.target === "rows"
-          ? `Give full credit to ${n} ${rowWord.toLowerCase()}${n === 1 ? "" : "s"}`
-          : `Give full credit to ${n} sub-row${n === 1 ? "" : "s"}`;
+      const updateBtn = () => {
+        const n = st.cols.size * st.lines.size;
         go.disabled = n === 0;
+        go.textContent = n === 0 ? "Choose columns and rows" : `Give full credit to every ${rowWord} in ${st.cols.size} column${st.cols.size === 1 ? "" : "s"} × ${st.lines.size} line${st.lines.size === 1 ? "" : "s"}`;
       };
-      rerenderBtn();
+      updateBtn();
       go.addEventListener("click", async () => {
-        const v = String(val.value).trim();
-        if (v === "" || Number.isNaN(Number(v))) { st.msg = "Enter the full-credit score first."; rerender(); return; }
-        let done = 0, skipped = 0;
-        const put = (lineId, subId) => {
-          if (!ScoringModule.isTableCellOn(tool.id, lineId, col.id, subId)) { skipped++; return; }
-          ScoringModule.setTableValue(tool.id, lineId, col.id, v, subId);
-          done++;
-        };
+        const lines = ScoringModule.getTableIdentityRows(tool.id);
+        let done = 0, off = 0;
+        const noMax = [];
         try {
-          if (st.target === "rows") {
-            st.rows.forEach((lineId) => {
-              if (!rows.some((r) => r.key === lineId)) return;
-              if (subs.length) subs.forEach((sub) => put(lineId, sub.key));
-              else put(lineId);
+          cols.filter((c) => st.cols.has(c.id)).forEach((col) => {
+            let score = col.maxPoints > 0 ? String(col.maxPoints) : String(st.fallback).trim();
+            if (score === "" || Number.isNaN(Number(score))) { noMax.push(col.name || "(unnamed)"); return; }
+            lines.forEach((r) => {
+              st.lines.forEach((ln) => {
+                const subId = ln === "rows" ? undefined : ln;
+                if (!ScoringModule.isTableCellOn(tool.id, r.key, col.id, subId)) { off++; return; }
+                ScoringModule.setTableValue(tool.id, r.key, col.id, score, subId);
+                done++;
+              });
             });
-          } else {
-            st.subSel.forEach((subId) => rows.forEach((r) => put(r.key, subId)));
-          }
-          st.msg = `Gave ${v} in "${col.name}" to ${done} box${done === 1 ? "" : "es"}` + (skipped ? ` (${skipped} switched-off box${skipped === 1 ? "" : "es"} skipped)` : "") + ".";
+          });
+          st.msg = `Filled ${done} box${done === 1 ? "" : "es"}.` +
+            (off ? ` ${off} switched-off box${off === 1 ? "" : "es"} skipped.` : "") +
+            (noMax.length ? ` No maximum set for: ${noMax.join(", ")} — enter a score above or set the maximum in Settings.` : "");
         } catch (err) {
           st.msg = `Stopped: ${err.message}`;
         }
         st.open = true;
         await saveScoringThen(rerender);
       });
-      const line3 = document.createElement("div");
-      line3.style.cssText = "display:flex;gap:12px;align-items:center;flex-wrap:wrap;";
-      line3.append(go, msg);
-      body.appendChild(line3);
+      const line = document.createElement("div");
+      line.style.cssText = "display:flex;gap:12px;align-items:center;flex-wrap:wrap;";
+      line.append(go, msg);
+      body.appendChild(line);
     }
 
-    // sit right under the switch row(s), above the grid
     const modeRows = container.querySelectorAll(".tracker-mode-row");
     const anchor = modeRows[modeRows.length - 1];
     if (anchor) anchor.insertAdjacentElement("afterend", det);
