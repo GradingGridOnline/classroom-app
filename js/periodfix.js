@@ -52,11 +52,13 @@
   const writeBk = (synced) => { try { localStorage.setItem(bkKey(), JSON.stringify({ periods: PeriodsModule.periods, synced })); } catch (e) {} };
 
   async function persist() {
-    const want = JSON.stringify(PeriodsModule.periods);
+    // The database may return fields in a different order, so compare with sorted fields.
+    const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.keys(x).sort().reduce((a, key) => { a[key] = x[key]; return a; }, {}) : x));
+    const want = canon(PeriodsModule.periods);
     await PeriodsModule.save();
     await CoursesModule.save(); // a removed period also clears that course's period
     const back = await storage.loadFile("periods.json"); // read it back to be sure
-    if (JSON.stringify((back && back.periods) || []) !== want) {
+    if (canon((back && back.periods) || []) !== want) {
       throw new Error("the saved copy doesn't match — please try again");
     }
   }
