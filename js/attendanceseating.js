@@ -164,4 +164,32 @@
       unseatedBox.appendChild(row);
     }
   };
+  // ----- desk colors by absences: orange at the limit, red beyond it -----
+  // Uses the "Absence warning limit" in Attendance Settings (same limit as the Table's Absences column).
+  const stStyle = document.createElement("style");
+  stStyle.textContent = `
+    .att-seat-card.att-abs-limit { background: #ffb74d !important; border-color: #e65100 !important; border-width: 2px; }
+    .att-seat-card.att-abs-over { background: #e57373 !important; border-color: #b71c1c !important; border-width: 2px; }
+    .att-seat-card.att-abs-limit, .att-seat-card.att-abs-over { color: #111 !important; }
+    .att-seat-card.att-abs-limit *:not(select):not(input):not(option), .att-seat-card.att-abs-over *:not(select):not(input):not(option) { color: #111 !important; }
+  `;
+  document.head.appendChild(stStyle);
+
+  function colorCard(card, studentId) {
+    const limit = AttendanceModule.settings.absenceLimit;
+    card.classList.remove("att-abs-limit", "att-abs-over");
+    if (!limit || limit <= 0) { card.removeAttribute("title"); return; }
+    const abs = AttendanceModule.stats(studentId).absences;
+    if (abs > limit) card.classList.add("att-abs-over");
+    else if (abs === limit) card.classList.add("att-abs-limit");
+    if (abs >= limit) card.title = `${abs} absence(s) — limit is ${limit}`;
+    else card.removeAttribute("title");
+  }
+  const origCard = window.buildAttendanceSeatCard;
+  window.buildAttendanceSeatCard = function (student, session) {
+    const card = origCard.apply(this, arguments);
+    colorCard(card, student.id);
+    card.querySelectorAll("select, input").forEach((c) => c.addEventListener("change", () => colorCard(card, student.id)));
+    return card;
+  };
 })();
