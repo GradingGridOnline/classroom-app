@@ -1,7 +1,8 @@
 // ===== Quiz editor + QR answer form for the Test & Quiz Bank =====
 // Load AFTER app.js. A quiz is a normal test in the bank (so Sources / Progress Tracker
 // pulling keep working) with an extra `quiz` field:
-//   quiz: { kind: "standard" | "answers",            ("answers" = Answer Collection: no question text)
+//   quiz: { kind: "standard" | "answers" | "survey",   (survey: same questions, no answer key and no points)
+//                     ("answers" = Answer Collection: no question text)
 //           settings: { labelStyle, defaultOptions, timeLimit (minutes, 0 = none),
 //                       attemptsAllowed (0 = unlimited), attemptRule: "best"|"latest"|"first" },
 //           sections: [{ id, title, questions: [{ id, type: "mc"|"blank", text, points,
@@ -103,7 +104,7 @@
     normalizeQuiz(test) {
       const q = test && test.quiz;
       if (!q) return null;
-      if (q.kind !== "answers") q.kind = "standard";
+      if (q.kind !== "answers" && q.kind !== "survey") q.kind = "standard";
       if (!q.settings || typeof q.settings !== "object") q.settings = {};
       const st = q.settings;
       if (!LABEL_STYLES.some(([id]) => id === st.labelStyle)) st.labelStyle = "upper";
@@ -121,7 +122,7 @@
         s.questions.forEach((x) => {
           if (!Array.isArray(x.choices)) x.choices = [];
           if (!Array.isArray(x.accepted)) x.accepted = [];
-          x.points = Number(x.points) || 0;
+          x.points = q.kind === "survey" ? 0 : Number(x.points) || 0;
           if (typeof x.correct !== "number") x.correct = 0;
         });
       });
@@ -158,7 +159,7 @@
         id: newId("test"), name: (name || "").trim() || "Untitled quiz", maxPoints: 0, sourceFile: "Quiz editor",
         rows: [], scores: {}, unmatched: [],
         quiz: {
-          kind: kind === "answers" ? "answers" : "standard",
+          kind: kind === "answers" ? "answers" : kind === "survey" ? "survey" : "standard",
           settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1, attemptRule: "best" },
           sections: [{ id: newId("sec"), title: "Section 1", questions: [] }],
           token: null, submissions: [],
@@ -220,6 +221,7 @@
       const quiz = this.normalizeQuiz(test);
       if (!quiz) return;
       test.maxPoints = this.quizTotal(quiz);
+      if (quiz.kind === "survey") { test.rows = []; test.maxPoints = 0; this._matchTestRows(test); return; } // surveys are not scored
       const bySid = new Map();
       quiz.submissions.forEach((s) => {
         if (!bySid.has(s.sid)) bySid.set(s.sid, []);
@@ -278,7 +280,7 @@
         sections: quiz.sections.map((s) => ({
           title: s.title,
           questions: s.questions.map((x) => ({
-            id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: x.points,
+            id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: quiz.kind === "survey" ? 0 : x.points,
             choices: x.type === "mc" ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
           })),
         })),
@@ -346,7 +348,7 @@
     },
     async ensureLoaded() { if (!this.loaded) await this.load(); },
     async save() { await storage.saveFile("sharedtests.json", { items: this.items }); },
-    kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : "Quiz") : "Test"; },
+    kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : item.quiz.kind === "survey" ? "Survey" : "Quiz") : "Test"; },
     /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
     snapshot(test, courseName) {
       const quiz = test.quiz ? ScoringModule.normalizeQuiz(test) : null;
@@ -423,7 +425,7 @@
     i.addEventListener("change", () => onChange(i.value));
     return i;
   }
-  const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : "Quiz");
+  const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : quiz.kind === "survey" ? "Survey" : "Quiz");
 
   // ---------- shared editor header ----------
   function editorHeader(tool, container, test, quiz, current) {
@@ -435,7 +437,7 @@
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
     bar.appendChild(left);
-    bar.appendChild(h("span", "count-badge", `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
+    bar.appendChild(h("span", "count-badge", quiz.kind === "survey" ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
     return bar;
   }
 
@@ -444,6 +446,7 @@
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
     const answersOnly = quiz.kind === "answers";
+    const isSurvey = quiz.kind === "survey";
     const style = quiz.settings.labelStyle;
     container.innerHTML = "";
     const rerender = () => renderScoringToolView(tool, container);
@@ -482,7 +485,7 @@
           rule.appendChild(o);
         });
         rule.addEventListener("change", () => { quiz.settings.attemptRule = rule.value; regrade(); });
-        addRow("Score that counts", rule);
+        if (!isSurvey) addRow("Score that counts", rule);
         const sa = h("input");
         sa.type = "checkbox";
         sa.checked = quiz.settings.showAttempts;
@@ -530,8 +533,10 @@
           text.style.maxWidth = "none";
           row.appendChild(text);
         }
-        row.appendChild(h("span", "hint", "pts"));
-        row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
+        if (!isSurvey) {
+          row.appendChild(h("span", "hint", "pts"));
+          row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
+        }
         row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
         row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
         box.appendChild(row);
@@ -552,6 +557,7 @@
             });
           }
           const keyRow = h("div", "mapping-row qz-keyrow");
+          if (isSurvey) keyRow.style.display = "none"; // surveys have no answer key
           keyRow.appendChild(h("label", "", "✔ Correct answer"));
           const sel = h("select");
           q.choices.forEach((c, ci) => {
@@ -563,6 +569,8 @@
           sel.addEventListener("change", () => { q.correct = Number(sel.value); regrade(); });
           keyRow.appendChild(sel);
           box.appendChild(keyRow);
+        } else if (isSurvey) {
+          box.appendChild(h("p", "hint", "Students type their own answer. Surveys have no answer key and no points."));
         } else {
           if (q.accepted.length === 0) q.accepted.push("");
           q.accepted.forEach((a, ai) => {
@@ -760,10 +768,190 @@
     refresh();
   }
 
+  // ---------- CSV export ----------
+  const sortedSubs = (quiz) => [...quiz.submissions].sort((a, b) => (a.name || a.sid).localeCompare(b.name || b.sid) || a.attempt - b.attempt);
+  const allQuestions = (quiz) => {
+    const out = [];
+    quiz.sections.forEach((sec) => sec.questions.forEach((q) => out.push({ q, sec })));
+    return out;
+  };
+  const optionText = (quiz, q, ans) => {
+    if (ans === undefined || ans === null || ans === "") return "";
+    if (q.type !== "mc") return String(ans);
+    const i = Number(ans);
+    const label = optionLabel(quiz.settings.labelStyle, i);
+    const t = quiz.kind === "answers" ? "" : (q.choices[i] || "");
+    return t ? `${label}: ${t}` : label;
+  };
+  function csvCell(v) {
+    let t = v === undefined || v === null ? "" : String(v);
+    if (/^[=+\-@\t\r]/.test(t) && Number.isNaN(Number(t))) t = "'" + t; // stops spreadsheets from running typed text as a formula
+    return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  }
+  function downloadCsv(filename, rows) {
+    const text = "\ufeff" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"); // BOM so Excel reads Japanese correctly
+    const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  const safeName = (name, suffix) => `${String(name || "quiz").replace(/[\\/:*?"<>|]+/g, "_").trim() || "quiz"} - ${suffix}.csv`;
+  const qHeader = (quiz, q, i) => (quiz.kind === "answers" || !q.text ? `Q${i + 1}` : `Q${i + 1}: ${q.text}`);
+
+  /** One row per attempt: who, when, score (graded types), and each answer. */
+  function exportResponses(test, quiz) {
+    const qs = allQuestions(quiz);
+    const graded = quiz.kind !== "survey";
+    const head = ["Student", "School ID", "Attempt", "Submitted"];
+    if (graded) head.push("Score", "Max score");
+    head.push("Edited by teacher", ...qs.map((x, i) => qHeader(quiz, x.q, i)));
+    const rows = [head];
+    sortedSubs(quiz).forEach((s) => {
+      const eff = ScoringModule.quizEffectiveAnswers(s);
+      const edited = qs.map((x, i) => (Object.prototype.hasOwnProperty.call(s.overrides, x.q.id) ? `Q${i + 1}` : "")).filter(Boolean).join(" ");
+      const row = [s.name || "", s.sid, s.attempt, s.at || ""];
+      if (graded) row.push(ScoringModule.gradeQuizSubmission(quiz, eff), ScoringModule.quizTotal(quiz));
+      row.push(edited, ...qs.map((x) => optionText(quiz, x.q, eff[x.q.id])));
+      rows.push(row);
+    });
+    downloadCsv(safeName(test.name, "responses"), rows);
+  }
+
+  /** Graded types: points earned on each question for every attempt, and which attempt counts. */
+  function exportScores(test, quiz) {
+    const qs = allQuestions(quiz);
+    const subs = sortedSubs(quiz);
+    const totals = new Map(subs.map((s) => [s, ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(s))]));
+    const counts = new Set();
+    const bySid = new Map();
+    subs.forEach((s) => { if (!bySid.has(s.sid)) bySid.set(s.sid, []); bySid.get(s.sid).push(s); });
+    bySid.forEach((list) => {
+      const rule = quiz.settings.attemptRule;
+      let pick = list[list.length - 1];
+      if (rule === "first") pick = list[0];
+      if (rule === "best") pick = list.reduce((b, s) => (totals.get(s) > totals.get(b) ? s : b), list[0]);
+      counts.add(pick);
+    });
+    const rows = [["Student", "School ID", "Attempt", ...qs.map((x, i) => `Q${i + 1} (${x.q.points} pt)`), "Total", "Max score", "Counts toward score"]];
+    subs.forEach((s) => {
+      const eff = ScoringModule.quizEffectiveAnswers(s);
+      rows.push([s.name || "", s.sid, s.attempt, ...qs.map((x) => ScoringModule.gradeQuizQuestion(x.q, eff[x.q.id])), totals.get(s), ScoringModule.quizTotal(quiz), counts.has(s) ? "Yes" : ""]);
+    });
+    downloadCsv(safeName(test.name, "scores"), rows);
+  }
+
+  /** Tallies per question (long form): every option or distinct typed answer, how many chose it, and % (plus % correct for graded types). */
+  function summaryTallies(quiz) {
+    return allQuestions(quiz).map(({ q, sec }, i) => {
+      const answers = quiz.submissions.map((s) => ScoringModule.quizEffectiveAnswers(s)[q.id]).map((a) => (a === undefined || a === null ? "" : a));
+      const answered = answers.filter((a) => a !== "");
+      const items = [];
+      if (q.type === "mc") {
+        q.choices.forEach((c, ci) => items.push({ label: optionText(quiz, q, ci), count: answered.filter((a) => Number(a) === ci).length, correct: quiz.kind !== "survey" && ci === q.correct }));
+      } else {
+        const m = new Map();
+        answered.forEach((a) => { const k = String(a).trim(); m.set(k, (m.get(k) || 0) + 1); });
+        [...m.entries()].sort((a, b) => b[1] - a[1]).forEach(([label, count]) => items.push({ label, count, correct: quiz.kind !== "survey" && ScoringModule.quizAnswerCorrect(q, label) }));
+      }
+      return { n: i + 1, q, sec, total: answers.length, answered: answered.length, items };
+    });
+  }
+  function exportSummary(test, quiz) {
+    const graded = quiz.kind !== "survey";
+    const rows = [["Question", "Section", "Question text", "Type", "Answer / option", "Count", "Percent of answers", ...(graded ? ["Correct answer"] : [])]];
+    summaryTallies(quiz).forEach((t) => {
+      const base = [`Q${t.n}`, t.sec.title || "", quiz.kind === "answers" ? "" : t.q.text, t.q.type === "mc" ? "Multiple choice" : "Fill in the blank"];
+      if (t.items.length === 0) rows.push([...base, "(no answers)", 0, "", ...(graded ? [""] : [])]);
+      t.items.forEach((it) => rows.push([...base, it.label, it.count, t.answered ? `${Math.round((1000 * it.count) / t.answered) / 10}%` : "", ...(graded ? [it.correct ? "Yes" : ""] : [])]));
+      rows.push([...base, "(no answer)", t.total - t.answered, "", ...(graded ? [""] : [])]);
+    });
+    downloadCsv(safeName(test.name, "summary"), rows);
+  }
+  function exportItems(test, quiz) {
+    const items = [{ label: "Responses (one row per attempt)", onClick: () => exportResponses(test, quiz) }];
+    if (quiz.kind !== "survey") items.push({ label: "Scores per question", onClick: () => exportScores(test, quiz) });
+    items.push({ label: "Question summary (counts per option)", onClick: () => exportSummary(test, quiz) });
+    return items;
+  }
+
+  // ---------- the survey results view: answers per student + a summary of every question ----------
+  function renderSurveyResults(tool, container, test, quiz) {
+    container.innerHTML = "";
+    container.appendChild(editorHeader(tool, container, test, quiz, "results"));
+    const { section, body } = makePresSection("Survey results");
+    section.classList.add("qz-sec-review");
+    container.appendChild(section);
+    if (quiz.submissions.length === 0) {
+      body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
+      return;
+    }
+    const bar = h("div", "qz-actions");
+    exportItems(test, quiz).forEach((it) => bar.appendChild(button(`Export CSV: ${it.label}`, "btn btn-ghost btn-small", it.onClick)));
+    body.appendChild(bar);
+
+    // summary
+    body.appendChild(h("h4", "", `Summary (${quiz.submissions.length} response${quiz.submissions.length === 1 ? "" : "s"})`));
+    summaryTallies(quiz).forEach((t) => {
+      const box = h("div", "category-manage-item");
+      box.style.marginBottom = "10px";
+      box.appendChild(h("strong", "", `Q${t.n}${quiz.kind !== "answers" && t.q.text ? ": " + t.q.text : ""}`));
+      const tbl = h("table", "roster-table");
+      tbl.style.maxWidth = "560px";
+      t.items.slice(0, 60).forEach((it) => {
+        const tr = h("tr");
+        tr.appendChild(h("td", "", it.label || "(blank)"));
+        const cnt = h("td", "", String(it.count));
+        cnt.style.textAlign = "right";
+        const pct = h("td");
+        pct.style.width = "200px";
+        const frac = t.answered ? it.count / t.answered : 0;
+        const barEl = h("div");
+        barEl.style.cssText = `height:14px;border-radius:7px;background:#0f7d73;width:${Math.round(frac * 100)}%;min-width:${it.count ? 3 : 0}px;`;
+        barEl.title = `${Math.round(frac * 100)}%`;
+        pct.appendChild(barEl);
+        tr.append(cnt, pct, h("td", "", `${Math.round(frac * 100)}%`));
+        tbl.appendChild(tr);
+      });
+      if (t.items.length === 0) tbl.appendChild(h("tr")).appendChild(h("td", "hint", "No answers."));
+      box.appendChild(tbl);
+      if (t.total - t.answered > 0) box.appendChild(h("p", "hint", `${t.total - t.answered} left blank.`));
+      body.appendChild(box);
+    });
+
+    // every answer, per student
+    body.appendChild(h("h4", "", "Every response"));
+    const qs = allQuestions(quiz);
+    const wrap = h("div", "attendance-table-wrap");
+    const table = h("table", "attendance-table");
+    const thead = h("thead");
+    const hr = h("tr");
+    ["Student", "Attempt", ...qs.map((x, i) => `Q${i + 1}`)].forEach((t) => hr.appendChild(h("th", "", t)));
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = h("tbody");
+    sortedSubs(quiz).forEach((s) => {
+      const eff = ScoringModule.quizEffectiveAnswers(s);
+      const tr = h("tr");
+      const nameTd = h("td", "", s.name || "(not on roster)");
+      nameTd.appendChild(h("div", "hint", s.sid));
+      tr.append(nameTd, h("td", "", String(s.attempt)));
+      qs.forEach((x) => tr.appendChild(h("td", "", optionText(quiz, x.q, eff[x.q.id]))));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    body.appendChild(wrap);
+  }
+
   // ---------- the results view: a read-only grid of ● / ✕ ----------
   function renderResults(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
+    if (quiz.kind === "survey") return renderSurveyResults(tool, container, test, quiz);
     const style = quiz.settings.labelStyle;
     container.innerHTML = "";
     container.appendChild(editorHeader(tool, container, test, quiz, "results"));
@@ -998,7 +1186,7 @@
     container.appendChild(section);
 
     const hint = body.querySelector("p.hint");
-    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or build a quiz (questions with text) or an Answer Collection (just question numbers and options, to match a paper test sheet) and collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
+    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or build a quiz (questions with text) an Answer Collection (just question numbers and options, to match a paper test sheet) or a Survey (a quiz with no scoring) and collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
 
     const create = (kind, label) => () => {
       const count = tests.filter((t) => t.quiz).length + 1;
@@ -1013,6 +1201,7 @@
     };
     const btns = body.querySelector(".panel-toolbar-buttons");
     if (btns) {
+      btns.insertBefore(button("+ New Survey", "btn btn-ghost", create("survey", "Survey")), btns.firstChild);
       btns.insertBefore(button("+ New Answer Collection", "btn btn-ghost", create("answers", "Answer Collection")), btns.firstChild);
       btns.insertBefore(button("+ New Quiz", "btn btn-ghost", create("standard", "Quiz")), btns.firstChild);
     }
@@ -1051,7 +1240,8 @@
       tr.children[4].textContent = quiz.token ? "QR open" : "";
       const maxCell = tr.children[1];
       maxCell.textContent = "";
-      const maxText = h("span", "", String(ScoringModule.quizTotal(quiz)));
+      const isSurvey = quiz.kind === "survey";
+      const maxText = h("span", "", isSurvey ? "—" : String(ScoringModule.quizTotal(quiz)));
       maxText.title = "Total of the question points. Change the points on the questions to change this.";
       maxText.style.fontWeight = "600";
       maxCell.appendChild(maxText);
@@ -1094,19 +1284,22 @@
           },
         ];
       group.appendChild(menuButton("QR Code", "#c2571a", qrItems));
-      group.appendChild(menuButton("Results", "#0f7d73", [
-        { label: "Show Results", onClick: go("results") },
-        { label: `Review Results (${students})`, onClick: go("review") },
-        {
-          label: "Re-Calculate Results",
-          onClick: guard(async () => {
-            ScoringModule.regradeQuiz(tool.id, t.id);
-            flush();
-            say(`Results for "${t.name}" re-calculated.`);
-            rerender();
-          }),
-        },
-      ]));
+      group.appendChild(isSurvey
+        ? button(`Show Results (${students})`, "btn btn-ghost btn-small qz-menu-btn", go("results"))
+        : menuButton("Results", "#0f7d73", [
+          { label: "Show Results", onClick: go("results") },
+          { label: `Review Results (${students})`, onClick: go("review") },
+          {
+            label: "Re-Calculate Results",
+            onClick: guard(async () => {
+              ScoringModule.regradeQuiz(tool.id, t.id);
+              flush();
+              say(`Results for "${t.name}" re-calculated.`);
+              rerender();
+            }),
+          },
+        ]));
+      group.appendChild(menuButton("Export CSV", "#4a5568", exportItems(t, quiz)));
       group.appendChild(shareBtn);
       // Keep the bank's own Delete button (same behavior); drop Details / Re-match for quizzes.
       const actions = tr.children[5];
