@@ -339,15 +339,17 @@
   // ---------- shared tests & quizzes (one list, visible from every course) ----------
   const MAX_SHARED_TESTS = 100;
   const SharedTests = {
-    items: [], // [{ id, name, maxPoints, quiz | null, sourceCourseName, createdAt }]
+    items: [], // [{ id, name, maxPoints, quiz | null, sourceCourseName, createdAt, section }]
+    sections: [], // [{ id, name, collapsed }]
     loaded: false,
     async load() {
       const data = await storage.loadFile("sharedtests.json");
       this.items = data && Array.isArray(data.items) ? data.items : [];
+      this.sections = data && Array.isArray(data.sections) ? data.sections.filter((s) => s && s.id) : [];
       this.loaded = true;
     },
     async ensureLoaded() { if (!this.loaded) await this.load(); },
-    async save() { await storage.saveFile("sharedtests.json", { items: this.items }); },
+    async save() { await storage.saveFile("sharedtests.json", { items: this.items, sections: this.sections }); },
     kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : item.quiz.kind === "survey" ? "Survey" : "Quiz") : "Test"; },
     /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
     snapshot(test, courseName) {
@@ -1117,57 +1119,55 @@
 
     const draw = () => {
       list.textContent = "";
-      const table = h("table", "roster-table");
-      const thead = h("thead");
-      const hr = h("tr");
-      ["Test / Quiz", "Max score", "Questions", "Type", "From course", ""].forEach((t) => hr.appendChild(h("th", "", t)));
-      thead.appendChild(hr);
-      table.appendChild(thead);
-      const tbody = h("tbody");
-      table.appendChild(tbody);
-      if (SharedTests.items.length === 0) {
-        const tr = h("tr");
-        const td = h("td", "hint", 'Nothing shared yet — use "Copy to Shared" on a test or quiz above.');
-        td.colSpan = 6;
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-      }
-      SharedTests.items.forEach((item) => {
-        const tr = h("tr");
-        const nameTd = h("td");
-        nameTd.appendChild(textInput(item.name, "", async (v) => {
-          try {
-            await SharedTests.rename(item.id, v);
-            say("Renamed.");
-          } catch (err) { say(`Couldn't do that: ${err.message}`); }
-          draw();
-        }));
-        tr.appendChild(nameTd);
-        tr.appendChild(h("td", "", item.maxPoints ? String(item.maxPoints) : "—"));
-        tr.appendChild(h("td", "", item.quiz ? String(item.quiz.sections.reduce((a, sec) => a + (sec.questions || []).length, 0)) : "—"));
-        tr.appendChild(h("td", "", SharedTests.kindOf(item)));
-        tr.appendChild(h("td", "hint", item.sourceCourseName || "—"));
-        const actions = h("td");
-        actions.appendChild(button("Add to this course", "btn btn-primary btn-small", () => {
-          try {
-            SharedTests.copyToCourse(tool.id, item);
-            flush();
-            say(`"${item.name}" added to this course.`);
-          } catch (err) { say(`Couldn't do that: ${err.message}`); return; }
-          rerender();
-        }));
-        actions.appendChild(button("Delete", "btn btn-ghost btn-small", async () => {
-          if (!confirm(`Remove "${item.name}" from the shared list? Copies already in courses are not affected.`)) return;
-          try {
-            await SharedTests.remove(item.id);
-            say(`"${item.name}" removed from the shared list.`);
-          } catch (err) { say(`Couldn't do that: ${err.message}`); }
-          draw();
-        }));
-        tr.appendChild(actions);
-        tbody.appendChild(tr);
-      });
-      list.appendChild(table);
+      list.appendChild(SectionedBank.build({
+        sections: SharedTests.sections,
+        items: SharedTests.items,
+        headers: ["Test / Quiz", "Max score", "Questions", "Type", "From course", "Section", "Order", ""],
+        emptyText: 'Nothing shared yet — use "Copy to Shared" on a test or quiz above.',
+        persist: () => SharedTests.save(),
+        redraw: draw,
+        buildRow(item, hp) {
+          const tr = h("tr");
+          const nameTd = h("td");
+          nameTd.appendChild(textInput(item.name, "", async (v) => {
+            try {
+              await SharedTests.rename(item.id, v);
+              say("Renamed.");
+            } catch (err) { say(`Couldn't do that: ${err.message}`); }
+            draw();
+          }));
+          tr.appendChild(nameTd);
+          tr.appendChild(h("td", "", item.maxPoints ? String(item.maxPoints) : "—"));
+          tr.appendChild(h("td", "", item.quiz ? String(item.quiz.sections.reduce((a, sec) => a + (sec.questions || []).length, 0)) : "—"));
+          tr.appendChild(h("td", "", SharedTests.kindOf(item)));
+          tr.appendChild(h("td", "hint", item.sourceCourseName || "—"));
+          const secTd = h("td");
+          secTd.appendChild(hp.sectionSelect(item));
+          tr.appendChild(secTd);
+          const orderTd = h("td");
+          orderTd.appendChild(hp.arrows(item));
+          tr.appendChild(orderTd);
+          const actions = h("td");
+          actions.appendChild(button("Add to this course", "btn btn-primary btn-small", () => {
+            try {
+              SharedTests.copyToCourse(tool.id, item);
+              flush();
+              say(`"${item.name}" added to this course.`);
+            } catch (err) { say(`Couldn't do that: ${err.message}`); return; }
+            rerender();
+          }));
+          actions.appendChild(button("Delete", "btn btn-ghost btn-small", async () => {
+            if (!confirm(`Remove "${item.name}" from the shared list? Copies already in courses are not affected.`)) return;
+            try {
+              await SharedTests.remove(item.id);
+              say(`"${item.name}" removed from the shared list.`);
+            } catch (err) { say(`Couldn't do that: ${err.message}`); }
+            draw();
+          }));
+          tr.appendChild(actions);
+          return tr;
+        },
+      }));
     };
     SharedTests.ensureLoaded().then(draw).catch((err) => {
       list.textContent = "";

@@ -7763,7 +7763,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
     { name: "courses", mod: CoursesModule, scoped: false, snap: () => ({ courses: CoursesModule.courses, sortMode: CoursesModule.sortMode }) },
     { name: "periods", mod: PeriodsModule, scoped: false, snap: () => ({ periods: PeriodsModule.periods }) },
     { name: "templates", mod: TemplatesModule, scoped: false, snap: () => ({ templates: TemplatesModule.templates }) },
-    { name: "rubricbank", mod: RubricBankModule, scoped: false, snap: () => ({ rubrics: RubricBankModule.rubrics }) },
+    { name: "rubricbank", mod: RubricBankModule, scoped: false, snap: () => ({ rubrics: RubricBankModule.rubrics, sections: RubricBankModule.sections }) },
     { name: "roster", mod: RosterModule, scoped: true, snap: () => ({ students: RosterModule.students }) },
     {
       name: "seating", mod: SeatingModule, scoped: true,
