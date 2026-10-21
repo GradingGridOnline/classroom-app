@@ -1279,6 +1279,14 @@ function printPeriodLine(course) {
   return time ? `${period.name} (${time})` : period.name;
 }
 
+/** "&n=<course name>&p=<period and time>" for the QR pop-out windows, so the course shows above the code. */
+function qrCourseQuery() {
+  const course = CoursesModule.find(RosterModule.currentCourseId);
+  if (!course) return "";
+  return `&n=${encodeURIComponent(course.name || "")}&p=${encodeURIComponent(printPeriodLine(course))}`;
+}
+window.qrCourseQuery = qrCourseQuery;
+
 /**
  * Builds a printable sheet of the current seating arrangement, from the
  * teacher's own viewpoint (same row/column order as the on-screen
@@ -5624,7 +5632,7 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
     actionsTd.className = "panel-toolbar-buttons";
     if (set.token) {
       action(actionsTd, "Show QR Code", async () => {
-        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(set.token))}`, "ggo-pres-qr", "width=480,height=620");
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(set.token))}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
         rerender();
       });
       action(actionsTd, "Get Responses", async () => {
@@ -5732,7 +5740,7 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
         );
         presFormsSave();
         rerender();
-        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}`, "ggo-pres-qr", "width=480,height=620");
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
       } catch (err) {
         presFormStatus.set(key, `Couldn't do that: ${err.message}`);
         rerender();
@@ -7208,14 +7216,14 @@ el.collectEmailBtn.addEventListener("click", async () => {
     renderEmailCollectButtons();
     renderEmailSettings();
     el.emailCollectStatus.textContent = "Form created — opening QR code…" + emailLeftOutNote(made.summary);
-    window.open("emailqr.html", "ggo-email-qr", "width=480,height=560");
+    window.open("emailqr.html?" + qrCourseQuery().slice(1), "ggo-email-qr", "width=480,height=560");
   } catch (err) {
     el.emailCollectStatus.textContent = `Couldn't create the form: ${err.message}`;
   }
 });
 
 el.showEmailQrBtn.addEventListener("click", () => {
-  window.open("emailqr.html", "ggo-email-qr", "width=480,height=560");
+  window.open("emailqr.html?" + qrCourseQuery().slice(1), "ggo-email-qr", "width=480,height=560");
 });
 
 el.deleteEmailFormBtn.addEventListener("click", async () => {

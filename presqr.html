@@ -31,10 +31,22 @@
       document.getElementById("h").textContent = titles[kind] || "Scan to score the presentations";
       document.getElementById("p").textContent = kind === "teacher" ? "Scan with your phone, then type your name." : "Scan with your phone, then enter your School ID.";
       document.getElementById("link").textContent = url;
+      var box = document.getElementById("qr");
+      var cn = q.get("n"), cp = q.get("p");
+      if (cn || cp) {
+        // inside the white tile, so the course name and period are included when the tile is copied as a picture
+        var cap = document.createElement("div");
+        cap.style.cssText = "margin:0 0 10px;color:#222;font-family:Georgia,serif;";
+        if (cn) { var a = document.createElement("div"); a.textContent = cn; a.style.cssText = "font-size:1.25rem;font-weight:700;"; cap.appendChild(a); }
+        if (cp) { var b = document.createElement("div"); b.textContent = cp; b.style.cssText = "font-size:1rem;color:#444;"; cap.appendChild(b); }
+        box.appendChild(cap);
+      }
+      var qrHolder = document.createElement("div");
+      box.appendChild(qrHolder);
       if (url && window.QRCode) {
-        new QRCode(document.getElementById("qr"), { text: url, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.M });
+        new QRCode(qrHolder, { text: url, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.M });
       } else {
-        document.getElementById("qr").textContent = "Couldn't make the QR code.";
+        box.appendChild(document.createTextNode("Couldn't make the QR code."));
       }
     })();
   </script>

@@ -1211,7 +1211,7 @@
     const stat = h("p", "result", statusMsg.get(statKey) || "");
     const say = (t) => { statusMsg.set(statKey, t); stat.textContent = t; };
     const guard = (fn) => async () => { try { await fn(); } catch (err) { say(`Couldn't do that: ${err.message}`); } };
-    const openQr = (url) => window.open(`presqr.html?k=quiz&u=${encodeURIComponent(url)}`, "ggo-quiz-qr", "width=480,height=620");
+    const openQr = (url) => window.open(`presqr.html?k=quiz&u=${encodeURIComponent(url)}${window.qrCourseQuery ? window.qrCourseQuery() : ""}`, "ggo-quiz-qr", "width=480,height=620");
     const table = body.querySelector("table.roster-table");
     if (table) table.parentNode.insertBefore(stat, table);
 
