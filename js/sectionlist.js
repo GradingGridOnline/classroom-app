@@ -203,6 +203,48 @@
     this.dirty = false;
   };
 
+  /**
+   * Fills a rubric drop-down by Rubric Bank section. Rubrics in an expanded section are listed under
+   * the section's title; a collapsed section shows only its title (collapse a section in the bank to
+   * hide its rubrics here). The rubric already chosen is always shown so the box never looks empty.
+   */
+  window.fillRubricSelect = function (select, selectedId) {
+    const secs = RubricBankModule.sections || [];
+    const opt = (rubric) => {
+      const o = document.createElement("option");
+      o.value = rubric.id;
+      o.textContent = rubric.text || "(untitled rubric)";
+      if (rubric.id === selectedId) o.selected = true;
+      return o;
+    };
+    const known = new Set(secs.map((s) => s.id));
+    const loose = RubricBankModule.rubrics.filter((r) => !r.section || !known.has(r.section));
+    loose.forEach((r) => select.appendChild(opt(r)));
+    secs.forEach((sec) => {
+      const list = RubricBankModule.rubrics.filter((r) => r.section === sec.id);
+      if (!list.length) return;
+      if (!sec.collapsed) {
+        const g = document.createElement("optgroup");
+        g.label = sec.name || "(unnamed section)";
+        list.forEach((r) => g.appendChild(opt(r)));
+        select.appendChild(g);
+      } else {
+        const chosen = list.find((r) => r.id === selectedId);
+        if (chosen) {
+          const g = document.createElement("optgroup");
+          g.label = `▸ ${sec.name || "(unnamed section)"} (collapsed)`;
+          g.appendChild(opt(chosen));
+          select.appendChild(g);
+        } else {
+          const h = document.createElement("option");
+          h.disabled = true;
+          h.textContent = `▸ ${sec.name || "(unnamed section)"} (collapsed — ${list.length})`;
+          select.appendChild(h);
+        }
+      }
+    });
+  };
+
   window.buildPresentationBankBlock = function (tool, cfg, rerender, status) {
     const block = document.createElement("div");
     block.className = "rubric-bank-block";

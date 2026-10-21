@@ -4944,7 +4944,8 @@ function buildPresentationActiveBlock(tool, cfg, kind, title, rerender, status) 
     blankOpt.value = "";
     blankOpt.textContent = "— Choose a rubric —";
     select.appendChild(blankOpt);
-    RubricBankModule.rubrics.forEach((rubric) => {
+    if (window.fillRubricSelect) window.fillRubricSelect(select, entry.rubricId); // grouped by Rubric Bank section
+    else RubricBankModule.rubrics.forEach((rubric) => {
       const opt = document.createElement("option");
       opt.value = rubric.id;
       opt.textContent = rubric.text || "(untitled rubric)";
