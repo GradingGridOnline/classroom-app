@@ -153,16 +153,19 @@
       }
     }
 
-    const unseated = RosterModule.students.filter((s) => !seatedIds.has(s.id));
-    if (unseated.length > 0) {
+    const addGroup = (title, list) => {
+      if (!list.length) return;
       const heading = document.createElement("h4");
-      heading.textContent = "Not seated";
+      heading.textContent = title;
       unseatedBox.appendChild(heading);
       const row = document.createElement("div");
       row.className = "att-seat-unseated-row";
-      unseated.forEach((st) => row.appendChild(buildAttendanceSeatCard(st, session)));
+      list.forEach((st) => row.appendChild(buildAttendanceSeatCard(st, session)));
       unseatedBox.appendChild(row);
-    }
+    };
+    const notAtDesk = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+    addGroup("Not seated", notAtDesk.filter((s) => !s.excludeFromSeating));
+    addGroup("Excluded Students", notAtDesk.filter((s) => s.excludeFromSeating));
   };
   // ----- desk colors by absences: orange at the limit, red beyond it -----
   // Uses the "Absence warning limit" in Attendance Settings (same limit as the Table's Absences column).

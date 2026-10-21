@@ -2064,7 +2064,9 @@ function buildAttendanceStudentRow(student) {
   excludeSeatingBtn.addEventListener("click", () => {
     RosterModule.toggleExcludeFromSeating(student.id);
     if (student.excludeFromSeating) {
-      SeatingModule.unseatStudent(student.id);
+      SeatingModule.parkStudent(student.id); // remembers the desk, so including them again restores it
+    } else {
+      SeatingModule.restoreStudent(student.id);
     }
     renderAttendance();
   });
@@ -7768,7 +7770,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
       snap: () => ({
         rows: SeatingModule.rows, cols: SeatingModule.cols, active: SeatingModule.active, seats: SeatingModule.seats,
         locks: SeatingModule.locks, groups: SeatingModule.groups, labels: SeatingModule.labels,
-        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, printSizes: SeatingModule.printSizes, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
+        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, printSizes: SeatingModule.printSizes, parked: SeatingModule.parked, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
       }),
     },
     {

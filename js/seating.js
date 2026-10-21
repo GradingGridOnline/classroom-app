@@ -48,6 +48,7 @@ const SeatingModule = {
   labels: {},
   printSections: ["none", "none", "none", "none", "none", "none", "none", "none"], // what each of the 8 printout sections shows (Seating Settings)
   printSizes: [100, 100, 100, 100, 100, 100, 100, 100], // relative width of each printout section (25/50/75/100)
+  parked: {}, // studentId -> { key, locked }: seat remembered for a student who is excluded from seating
   labelBank: [], // reusable label texts to pick from on a desk (Seating Settings)
   banks: SeatingModule_defaultBanks(),
   showGroupsInPopout: true,
@@ -84,6 +85,7 @@ const SeatingModule = {
           this.active[key] = true;
         }
       }
+      this.parked = data.parked && typeof data.parked === "object" ? data.parked : {};
       this.printSections = this._normalizeSections(data.printSections);
       this.printSizes = this._normalizeSizes(data.printSizes);
       this.banks = this._normalizeBanks(data.banks);
@@ -97,6 +99,7 @@ const SeatingModule = {
       this.groups = {};
       this.labels = {};
       this.labelBank = ["Do not sit here"];
+      this.parked = {};
       this.printSections = this._normalizeSections(null);
       this.printSizes = this._normalizeSizes(null);
       this.banks = SeatingModule_defaultBanks();
@@ -142,6 +145,7 @@ const SeatingModule = {
       groups: this.groups,
       labels: this.labels,
       labelBank: this.labelBank,
+      parked: this.parked,
       printSections: this.printSections,
       printSizes: this.printSizes,
       banks: this.banks,
@@ -275,6 +279,27 @@ const SeatingModule = {
     }
   },
 
+  /** Takes an excluded student off their desk but remembers where they sat, so including them again puts them back. */
+  parkStudent(studentId) {
+    const key = Object.keys(this.seats).find((k) => this.seats[k] === studentId);
+    if (!key) return;
+    if (!this.parked) this.parked = {};
+    this.parked[studentId] = { key, locked: !!this.locks[key] };
+    delete this.seats[key];
+    delete this.locks[key];
+  },
+
+  /** Returns a re-included student to their remembered desk, if that desk still exists and is free. */
+  restoreStudent(studentId) {
+    const p = this.parked && this.parked[studentId];
+    if (!p) return;
+    delete this.parked[studentId];
+    if (this.active[p.key] && !this.seats[p.key]) {
+      this.seats[p.key] = studentId;
+      if (p.locked) this.locks[p.key] = true;
+    }
+  },
+
   seatedStudentIds() {
     return new Set(Object.values(this.seats));
   },
@@ -370,6 +395,11 @@ const SeatingModule = {
     this.locks = { ...snapshot.locks };
     this.groups = { ...snapshot.groups };
     this.labels = { ...(snapshot.labels || {}) };
+    // Students excluded since this arrangement was saved are taken off their desks (remembered, so including them again restores the spot).
+    this.parked = {};
+    (typeof RosterModule !== "undefined" ? RosterModule.students : []).forEach((st) => {
+      if (st.excludeFromSeating) this.parkStudent(st.id);
+    });
   },
 
   async deleteBank(index) {
