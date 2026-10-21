@@ -173,6 +173,7 @@ const TemplatesModule = {
         labels: this._clone(seating.labels || {}),
         labelBank: [...(seating.labelBank || [])],
         printSections: Array.isArray(seating.printSections) ? [...seating.printSections] : undefined,
+        printSizes: Array.isArray(seating.printSizes) ? [...seating.printSizes] : undefined,
         showGroupsInPopout: seating.showGroupsInPopout !== false,
       };
     }

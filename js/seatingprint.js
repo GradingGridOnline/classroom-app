@@ -21,7 +21,7 @@
   const css = document.createElement("style");
   css.textContent = `
 .sp-top { display:flex; gap:8px; flex-shrink:0; margin:0 0 6px; height:${TOP_H}; }
-.sp-top > .sp-sec { flex:1 1 50%; min-width:0; }
+.sp-top > .sp-sec { flex:1 1 0; min-width:0; }
 .sp-top > .sp-sec.sp-nowrap { min-width:max-content; }
 .sp-bottom { display:flex; gap:8px; flex-shrink:0; height:${BOTTOM_H}; }
 .sp-bottom > .sp-sec { flex:1 1 0; min-width:0; }
@@ -37,19 +37,28 @@
 
 .sp-schem { max-width:760px; border:1px solid var(--line); border-radius:6px; padding:8px; background:var(--card); margin:0 0 14px; }
 .sp-schem-row { display:grid; gap:6px; }
+.sp-schem-cell { min-width:0; }
 .sp-schem-top { grid-template-columns:1fr 1fr; }
 .sp-schem-bottom { grid-template-columns:repeat(6, minmax(0,1fr)); }
 .sp-schem-box { position:relative; border:1px dashed var(--ink-soft); border-radius:4px; min-height:46px; background:color-mix(in srgb, var(--card) 85%, var(--line)); }
 .sp-schem-box.sp-on { border:1px solid var(--green); background:color-mix(in srgb, var(--green) 14%, var(--card)); }
 .sp-schem-num { position:absolute; top:2px; left:4px; font-weight:700; font-size:.75rem; color:var(--ink-soft); pointer-events:none; }
+.sp-schem-size { display:flex; justify-content:center; margin:3px 0; }
+.sp-schem-size select { font-size:.75rem; max-width:100%; }
 .sp-schem-box select { position:absolute; inset:0; width:100%; height:100%; opacity:0.001; cursor:pointer; font-size:14px; }
 .sp-schem-val { position:absolute; left:4px; right:4px; bottom:3px; font-size:.7rem; line-height:1.15; overflow:hidden; pointer-events:none; text-align:left; }
-.sp-schem-top .sp-schem-box:nth-child(2) .sp-schem-val { text-align:right; }
+.sp-schem-top .sp-schem-cell:nth-child(2) .sp-schem-val { text-align:right; }
 .sp-schem-mid { margin:6px 0 2px; height:70px; border:1px solid var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:.8rem; background:repeating-linear-gradient(45deg, transparent 0 8px, color-mix(in srgb, var(--line) 40%, transparent) 8px 9px); }
 .sp-schem-front { text-align:center; font-style:italic; font-size:.8rem; margin:2px 0 6px; color:var(--ink-soft); }
 `;
   document.head.appendChild(css);
 
+  const sizes = () => {
+    if (!Array.isArray(SeatingModule.printSizes)) SeatingModule.printSizes = [];
+    const arr = SeatingModule.printSizes;
+    while (arr.length < 8) arr.push(100);
+    return arr;
+  };
   const typeLabel = (id) => (TYPES.find((t) => t.id === id) || TYPES[0]).label;
   const sections = () => {
     if (!Array.isArray(SeatingModule.printSections)) SeatingModule.printSections = [];
@@ -77,6 +86,7 @@
     const big = slot <= 2;
     const box = document.createElement("div");
     box.className = "sp-sec";
+    box.style.flexGrow = String(sizes()[slot - 1] / 100);
     if (slot === 2) box.classList.add("sp-right");
     const label = (text) => {
       const l = document.createElement("span");
@@ -110,13 +120,12 @@
       label(BLANK_LABELS[type]);
     } else if (type === "excluded" || type === "special") {
       const list = RosterModule.students.filter((s) => (type === "excluded" ? s.excludeFromSeating : s.specialNeeds));
+      if (!list.length) return null; // nothing to show: no border, no label
       label(type === "excluded" ? "Not in seating chart" : "Special needs");
-      if (list.length) {
-        const t = document.createElement("div");
-        t.className = "sp-text";
-        t.textContent = list.map(studentName).join(", ");
-        box.appendChild(t);
-      }
+      const t = document.createElement("div");
+      t.className = "sp-text";
+      t.textContent = list.map(studentName).join(", ");
+      box.appendChild(t);
     }
     // "future" prints as an empty box
     return box;
@@ -128,7 +137,7 @@
     const arr = sections();
     [1, 2].forEach((slot) => {
       const s = buildSection(arr[slot - 1], slot, course) || document.createElement("div");
-      if (!s.classList.contains("sp-sec")) s.className = "sp-sec";
+      if (!s.classList.contains("sp-sec")) { s.className = "sp-sec"; s.style.flexGrow = String(sizes()[slot - 1] / 100); }
       if (slot === 2) s.classList.add("sp-right");
       row.appendChild(s);
     });
@@ -153,7 +162,7 @@
     heading.textContent = "Printed seating chart";
     const hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Click a numbered section to choose what prints there. Sections 1–2 go at the top; 3–8 go below “Front of Classroom”. Click Save Seating Chart to keep your choices.";
+    hint.textContent = "Click a numbered section to choose what prints there. Sections 1–2 go at the top; 3–8 go below “Front of Classroom”. The % box sets a section\u2019s width relative to the others. Click Save Seating Chart to keep your choices.";
     const schem = document.createElement("div");
     schem.className = "sp-schem";
 
@@ -185,7 +194,26 @@
       });
       refresh();
       b.append(num, val, sel);
-      return b;
+
+      const sizeWrap = document.createElement("div");
+      sizeWrap.className = "sp-schem-size";
+      const sz = document.createElement("select");
+      sz.title = `Section ${slot} size relative to the other sections`;
+      [100, 75, 50, 25].forEach((n) => {
+        const o = document.createElement("option");
+        o.value = String(n);
+        o.textContent = `${n}%`;
+        sz.appendChild(o);
+      });
+      sz.value = String(sizes()[slot - 1]);
+      sz.addEventListener("change", () => { sizes()[slot - 1] = Number(sz.value); });
+
+      const cell = document.createElement("div");
+      cell.className = "sp-schem-cell";
+      if (slot <= 2) cell.append(sizeWrap, b); // top sections: size above
+      else cell.append(b, sizeWrap); // bottom sections: size below
+      sizeWrap.appendChild(sz);
+      return cell;
     };
     const rowOf = (cls, slots) => {
       const r = document.createElement("div");

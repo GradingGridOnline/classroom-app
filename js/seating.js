@@ -47,6 +47,7 @@ const SeatingModule = {
   groups: {},
   labels: {},
   printSections: ["none", "none", "none", "none", "none", "none", "none", "none"], // what each of the 8 printout sections shows (Seating Settings)
+  printSizes: [100, 100, 100, 100, 100, 100, 100, 100], // relative width of each printout section (25/50/75/100)
   labelBank: [], // reusable label texts to pick from on a desk (Seating Settings)
   banks: SeatingModule_defaultBanks(),
   showGroupsInPopout: true,
@@ -84,6 +85,7 @@ const SeatingModule = {
         }
       }
       this.printSections = this._normalizeSections(data.printSections);
+      this.printSizes = this._normalizeSizes(data.printSizes);
       this.banks = this._normalizeBanks(data.banks);
       this.showGroupsInPopout = data.showGroupsInPopout !== false; // default true
     } else {
@@ -96,6 +98,7 @@ const SeatingModule = {
       this.labels = {};
       this.labelBank = ["Do not sit here"];
       this.printSections = this._normalizeSections(null);
+      this.printSizes = this._normalizeSizes(null);
       this.banks = SeatingModule_defaultBanks();
       this.showGroupsInPopout = true;
     }
@@ -105,6 +108,12 @@ const SeatingModule = {
   _normalizeSections(list) {
     const out = [];
     for (let i = 0; i < 8; i++) out.push(Array.isArray(list) && typeof list[i] === "string" ? list[i] : "none");
+    return out;
+  },
+
+  _normalizeSizes(list) {
+    const out = [];
+    for (let i = 0; i < 8; i++) out.push(Array.isArray(list) && [25, 50, 75, 100].includes(Number(list[i])) ? Number(list[i]) : 100);
     return out;
   },
 
@@ -134,6 +143,7 @@ const SeatingModule = {
       labels: this.labels,
       labelBank: this.labelBank,
       printSections: this.printSections,
+      printSizes: this.printSizes,
       banks: this.banks,
       showGroupsInPopout: this.showGroupsInPopout,
     });

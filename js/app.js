@@ -1677,6 +1677,7 @@ el.toggleSeatingSettingsBtn.addEventListener("click", () => {
 function renderSeatingSettings() {
   const body = el.seatingSettingsBody;
   body.innerHTML = "";
+  if (!seatingSettingsEditing) return; // the label bank and printout layout only show while Settings is open
   if (window.buildSeatingPrintSchematic) body.appendChild(window.buildSeatingPrintSchematic());
   const heading = document.createElement("h4");
   heading.textContent = "Label bank";
@@ -1686,16 +1687,6 @@ function renderSeatingSettings() {
   hint.className = "hint";
   hint.textContent = "Labels you can put on a desk: click a desk's 🏷 button, then choose one. Labelled desks are skipped by Auto-Fill.";
   body.appendChild(hint);
-
-  if (!seatingSettingsEditing) {
-    const summary = document.createElement("p");
-    summary.className = "hint";
-    summary.textContent = SeatingModule.labelBank.length
-      ? SeatingModule.labelBank.join("  •  ")
-      : "No labels yet — click Edit Settings to add some.";
-    body.appendChild(summary);
-    return;
-  }
 
   const list = document.createElement("ul");
   list.className = "label-bank-list";
@@ -7777,7 +7768,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
       snap: () => ({
         rows: SeatingModule.rows, cols: SeatingModule.cols, active: SeatingModule.active, seats: SeatingModule.seats,
         locks: SeatingModule.locks, groups: SeatingModule.groups, labels: SeatingModule.labels,
-        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
+        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, printSizes: SeatingModule.printSizes, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
       }),
     },
     {
