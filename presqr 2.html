@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scan with your phone</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center;
+           background: #f6f5f1; color: #2b2a28; font: 17px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+    h1 { font: 700 1.4rem Georgia, serif; color: #223d26; margin: 0 0 6px; }
+    p { color: #6b6560; margin: 0 0 18px; }
+    #qr { display: inline-block; padding: 16px; background: #fff; border: 1px solid #ddd8cd; border-radius: 10px; }
+    #link { word-break: break-all; font-size: 0.8rem; margin-top: 16px; }
+  </style>
+  <script src="js/qrpalette.js"></script>
+</head>
+<body>
+  <div>
+    <h1 id="h"></h1>
+    <p id="p"></p>
+    <div id="qr"></div>
+    <p id="link"></p>
+  </div>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var url = q.get("u") || "";
+      var kind = q.get("k");
+      var titles = { peer: "Scan to rate your group members", teacher: "Scan to enter teacher scores", quiz: "Scan to enter your quiz answers" };
+      document.getElementById("h").textContent = titles[kind] || "Scan to score the presentations";
+      document.getElementById("p").textContent = kind === "teacher" ? "Scan with your phone, then type your name." : "Scan with your phone, then enter your School ID.";
+      document.getElementById("link").textContent = url;
+      if (url && window.QRCode) {
+        new QRCode(document.getElementById("qr"), { text: url, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.M });
+      } else {
+        document.getElementById("qr").textContent = "Couldn't make the QR code.";
+      }
+    })();
+  </script>
+</body>
+</html>
