@@ -894,10 +894,24 @@ function renderRoster() {
     actionTd.appendChild(removeBtn);
     tr.appendChild(actionTd);
 
+    tr.appendChild(makeSpecialNeedsCell(student));
     tr.appendChild(makeNotesCell(student));
 
     el.rosterTbody.appendChild(tr);
   });
+}
+
+/** Special Needs: a checkbox (used by the "Students with Special Needs" section of the printed seating chart). */
+function makeSpecialNeedsCell(student) {
+  const td = document.createElement("td");
+  td.style.textAlign = "center";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!student.specialNeeds;
+  cb.title = "Special needs";
+  cb.addEventListener("change", () => RosterModule.updateStudent(student.id, { specialNeeds: cb.checked }));
+  td.appendChild(cb);
+  return td;
 }
 
 /** Notes: a wide one-line box that grows into a big text area while it has focus, then shrinks back to showing just the first line. */
@@ -1282,37 +1296,8 @@ function buildSeatingPrintSheet() {
   const sheet = document.createElement("div");
   sheet.className = "seating-print-sheet";
 
-  // Top-left corner: the course name, with the period (and its time, when the
-  // period has one) underneath. This always comes first, so it is always the
-  // top-left item on the page.
-  const courseName = (course && course.name) || el.courseDetailTitle.textContent.trim() || "Seating Chart";
-  const periodLabel = printPeriodLine(course);
-  const header = document.createElement("div");
-  header.className = "seating-print-header";
-  const heading = document.createElement("h2");
-  heading.textContent = courseName;
-  header.appendChild(heading);
-  if (periodLabel) {
-    const periodEl = document.createElement("p");
-    periodEl.className = "seating-print-period";
-    periodEl.textContent = periodLabel;
-    header.appendChild(periodEl);
-  }
-  sheet.appendChild(header);
-
-  // Students marked "Exclude from Seating" back on the Attendance tab
-  // never appear in the chart itself, so they're called out here
-  // instead — just under the course name, shown only when at least one exists.
-  const excludedStudents = RosterModule.students.filter((s) => s.excludeFromSeating);
-  if (excludedStudents.length > 0) {
-    const excludedEl = document.createElement("p");
-    excludedEl.className = "seating-print-excluded";
-    const names = excludedStudents
-      .map((s) => (s.classNumber ? `#${s.classNumber} ${s.name || "(unnamed)"}` : s.name || "(unnamed)"))
-      .join(", ");
-    excludedEl.textContent = `Not in seating chart: ${names}`;
-    sheet.appendChild(excludedEl);
-  }
+  // Sections 1 and 2 (top of the page) — chosen in Seating Settings (see seatingprint.js).
+  sheet.appendChild(buildSeatingPrintTop(course));
 
   const grid = document.createElement("div");
   grid.className = "seating-print-grid";
@@ -1421,13 +1406,9 @@ function buildSeatingPrintSheet() {
   frontLabel.textContent = "Front of Classroom";
   sheet.appendChild(frontLabel);
 
-  const boxRow = document.createElement("div");
-  boxRow.className = "seating-print-box-row";
-  boxRow.appendChild(buildSeatingPrintBox("Lesson Contents"));
-  boxRow.appendChild(buildSeatingPrintBox("Homework"));
-  boxRow.appendChild(buildSeatingPrintBox("Date of Lesson"));
-  boxRow.appendChild(buildSeatingPrintCourseBox(courseName, course));
-  sheet.appendChild(boxRow);
+  // Sections 3-8 (below "Front of Classroom").
+  const bottomRow = buildSeatingPrintBottom(course);
+  if (bottomRow) sheet.appendChild(bottomRow);
 
   return sheet;
 }
@@ -1696,6 +1677,7 @@ el.toggleSeatingSettingsBtn.addEventListener("click", () => {
 function renderSeatingSettings() {
   const body = el.seatingSettingsBody;
   body.innerHTML = "";
+  if (window.buildSeatingPrintSchematic) body.appendChild(window.buildSeatingPrintSchematic());
   const heading = document.createElement("h4");
   heading.textContent = "Label bank";
   body.appendChild(heading);
@@ -7795,7 +7777,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
       snap: () => ({
         rows: SeatingModule.rows, cols: SeatingModule.cols, active: SeatingModule.active, seats: SeatingModule.seats,
         locks: SeatingModule.locks, groups: SeatingModule.groups, labels: SeatingModule.labels,
-        labelBank: SeatingModule.labelBank, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
+        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
       }),
     },
     {

@@ -46,6 +46,7 @@ const SeatingModule = {
   locks: {},
   groups: {},
   labels: {},
+  printSections: ["none", "none", "none", "none", "none", "none", "none", "none"], // what each of the 8 printout sections shows (Seating Settings)
   labelBank: [], // reusable label texts to pick from on a desk (Seating Settings)
   banks: SeatingModule_defaultBanks(),
   showGroupsInPopout: true,
@@ -82,6 +83,7 @@ const SeatingModule = {
           this.active[key] = true;
         }
       }
+      this.printSections = this._normalizeSections(data.printSections);
       this.banks = this._normalizeBanks(data.banks);
       this.showGroupsInPopout = data.showGroupsInPopout !== false; // default true
     } else {
@@ -93,9 +95,17 @@ const SeatingModule = {
       this.groups = {};
       this.labels = {};
       this.labelBank = ["Do not sit here"];
+      this.printSections = this._normalizeSections(null);
       this.banks = SeatingModule_defaultBanks();
       this.showGroupsInPopout = true;
     }
+  },
+
+  /** Always returns exactly 8 section types (default "none"). */
+  _normalizeSections(list) {
+    const out = [];
+    for (let i = 0; i < 8; i++) out.push(Array.isArray(list) && typeof list[i] === "string" ? list[i] : "none");
+    return out;
   },
 
   /** Always returns an array of exactly MAX_BANKS { name, snapshot } slots, migrating older saved shapes. */
@@ -123,6 +133,7 @@ const SeatingModule = {
       groups: this.groups,
       labels: this.labels,
       labelBank: this.labelBank,
+      printSections: this.printSections,
       banks: this.banks,
       showGroupsInPopout: this.showGroupsInPopout,
     });

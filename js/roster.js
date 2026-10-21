@@ -28,6 +28,7 @@ const RosterModule = {
     this._backfillExclusionFlags();
     this._backfillEmail();
     this._backfillNotes();
+    this.students.forEach((s) => { if (typeof s.specialNeeds !== "boolean") s.specialNeeds = false; });
     return this.students;
   },
 
@@ -103,6 +104,7 @@ const RosterModule = {
       pronunciation: fields.pronunciation || "",
       email: fields.email || "",
       notes: fields.notes || "",
+      specialNeeds: false,
       excludeFromSeating: false,
       excludeFromScoring: false,
     };
@@ -159,9 +161,11 @@ const RosterModule = {
     // Notes survive an upload: a student whose name matches someone already on the roster keeps that student's notes.
     const nameKey = (name) => String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
     const oldNotes = new Map();
+    const oldSpecial = new Set();
     this.students.forEach((old) => {
       const key = nameKey(old.name);
       if (key && old.notes && !oldNotes.has(key)) oldNotes.set(key, old.notes);
+      if (key && old.specialNeeds) oldSpecial.add(key);
     });
 
     this.students = students.map((s, i) => ({
@@ -172,6 +176,7 @@ const RosterModule = {
       pronunciation: s.pronunciation || "",
       email: s.email || "",
       notes: s.notes || oldNotes.get(nameKey(s.name)) || "",
+      specialNeeds: oldSpecial.has(nameKey(s.name)),
       extra: s.extra && typeof s.extra === "object" ? { ...s.extra } : {},
       excludeFromSeating: false,
       excludeFromScoring: false,
