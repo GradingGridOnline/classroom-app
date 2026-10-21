@@ -1845,7 +1845,7 @@ el.trimEmptyBtn.addEventListener("click", () => {
 el.autoFillBtn.addEventListener("click", () => {
   const seatedIds = SeatingModule.seatedStudentIds();
   const unseatedIds = RosterModule.students
-    .filter((s) => !seatedIds.has(s.id))
+    .filter((s) => !seatedIds.has(s.id) && !s.excludeFromSeating)
     .map((s) => s.id);
   SeatingModule.autoFill(unseatedIds);
   selectedStudentId = null;
@@ -1854,7 +1854,7 @@ el.autoFillBtn.addEventListener("click", () => {
 
 el.autoFillNumericalBtn.addEventListener("click", () => {
   const seatedIds = SeatingModule.seatedStudentIds();
-  const unseatedStudents = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+  const unseatedStudents = RosterModule.students.filter((s) => !seatedIds.has(s.id) && !s.excludeFromSeating);
   SeatingModule.autoFillNumericalOrder(unseatedStudents);
   selectedStudentId = null;
   renderSeating();
