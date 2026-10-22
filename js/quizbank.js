@@ -342,14 +342,20 @@
     items: [], // [{ id, name, maxPoints, quiz | null, sourceCourseName, createdAt, section }]
     sections: [], // [{ id, name, collapsed }]
     loaded: false,
+    scope: "mine", // "mine" or a group id (groups are made in the Admin screen)
+    scopeLabel() { return this.scope === "mine" ? "Shared" : "the group's shared list"; },
     async load() {
-      const data = await storage.loadFile("sharedtests.json");
+      const data = this.scope === "mine" ? await storage.loadFile("sharedtests.json") : await window.GroupShare.loadDoc(this.scope, "tests");
       this.items = data && Array.isArray(data.items) ? data.items : [];
       this.sections = data && Array.isArray(data.sections) ? data.sections.filter((s) => s && s.id) : [];
       this.loaded = true;
     },
     async ensureLoaded() { if (!this.loaded) await this.load(); },
-    async save() { await storage.saveFile("sharedtests.json", { items: this.items, sections: this.sections }); },
+    async save() {
+      const doc = { items: this.items, sections: this.sections };
+      if (this.scope === "mine") await storage.saveFile("sharedtests.json", doc);
+      else await window.GroupShare.saveDoc(this.scope, "tests", doc);
+    },
     kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : item.quiz.kind === "survey" ? "Survey" : "Quiz") : "Test"; },
     /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
     snapshot(test, courseName) {
@@ -1115,7 +1121,29 @@
     body.appendChild(stat);
     const list = h("div");
     list.appendChild(h("p", "hint", "Loading shared tests…"));
-    body.appendChild(list);
+    // Group picker: shown only if the administrator has put this user in a group
+    const scopeRow = h("p", "hint");
+    scopeRow.hidden = true;
+    body.appendChild(scopeRow);
+    if (window.GroupShare) {
+      window.GroupShare.myGroups().then((groups) => {
+        if (!groups.length) { SharedTests.scope = "mine"; return; }
+        scopeRow.hidden = false;
+        scopeRow.appendChild(document.createTextNode("Showing: "));
+        const sel = document.createElement("select");
+        const o0 = document.createElement("option"); o0.value = "mine"; o0.textContent = "My own shared list"; sel.appendChild(o0);
+        groups.forEach((g) => { const o = document.createElement("option"); o.value = g.id; o.textContent = `Group: ${g.name}`; sel.appendChild(o); });
+        if (groups.some((g) => g.id === SharedTests.scope)) sel.value = SharedTests.scope; else SharedTests.scope = "mine";
+        sel.addEventListener("change", () => {
+          SharedTests.scope = sel.value; SharedTests.loaded = false;
+          list.textContent = ""; list.appendChild(h("p", "hint", "Loading…"));
+          SharedTests.ensureLoaded().then(draw).catch((err) => { list.textContent = ""; list.appendChild(h("p", "hint", `Couldn't load: ${err.message}`)); });
+        });
+        scopeRow.appendChild(sel);
+        scopeRow.appendChild(document.createTextNode("  (\"Copy to Shared\" above adds to the list shown here.)"));
+        if (SharedTests.scope !== "mine" && !SharedTests.loaded) { SharedTests.ensureLoaded().then(draw).catch(() => {}); }
+      });
+    }
 
     const draw = () => {
       list.textContent = "";
@@ -1225,7 +1253,7 @@
         say("Copying to Shared…");
         const course = window.CoursesModule && CoursesModule.find(RosterModule.currentCourseId);
         await SharedTests.addFromCourse(t, course ? course.name : "");
-        say(`"${t.name}" copied to Shared (students not included).`);
+        say(`"${t.name}" copied to ${SharedTests.scopeLabel()} (students not included).`);
         rerender();
       }));
       if (!t.quiz) {
