@@ -403,6 +403,10 @@
     reset.title = "Forget who sat next to whom in earlier random Auto-Fills";
     reset.addEventListener("click", () => { S.neighborHistory = []; say("Auto-Fill memory cleared."); });
     head.appendChild(reset);
+    const doneBtn = el("button", "btn btn-primary btn-small", "Done");
+    doneBtn.type = "button";
+    doneBtn.addEventListener("click", () => { sepPanel.hidden = true; });
+    head.appendChild(doneBtn);
     sepPanel.appendChild(head);
     sepPanel.appendChild(el("p", "hint", "Each pair is kept at least one empty desk apart (not side by side, front/back, or diagonal) whenever Auto-Fill randomizes. Choose student 1, then student 2. A student can be in several pairs — for example A↔B, A↔C and B↔C keep three students apart from one another. Students who sat together in a recent random Auto-Fill are also kept from sitting together again until every combination has been used. Click Save Seating Chart to keep these pairs."));
     S.separations.forEach((pair, i) => {
