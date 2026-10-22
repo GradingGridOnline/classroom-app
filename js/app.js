@@ -1495,16 +1495,16 @@ function buildDeskElement(r, c) {
   if (group) desk.style.setProperty("--group-hue", String(groupHueDeg(group)));
 
   desk.title = !active
-    ? "Click to add a desk here"
+    ? ""
     : student
     ? locked
       ? `${student.name} — locked (click the lock icon to unlock before removing)`
       : `${student.name} — click to remove`
     : label
-    ? `${label} — click to remove this desk, or select a student to seat here`
+    ? `${label} — select a student to seat here`
     : selectedStudentId
     ? "Click to seat the selected student here"
-    : "Select a student, or click to remove this desk";
+    : "Select a student, then click here to seat them (use Set Up Desks to add or remove desks)";
 
   const nameEl = document.createElement("span");
   nameEl.className = "desk-name";
@@ -1532,20 +1532,12 @@ function buildDeskElement(r, c) {
       nameEl.appendChild(idEl);
     }
   } else {
-    nameEl.textContent = !active ? "" : label ? label : "+";
+    nameEl.textContent = !active ? "" : label ? label : "";
   }
   desk.appendChild(nameEl);
 
   desk.addEventListener("click", () => {
-    if (!active) {
-      SeatingModule.activate(r, c);
-      if (selectedStudentId) {
-        SeatingModule.seatStudent(r, c, selectedStudentId);
-        selectedStudentId = null;
-      }
-      renderSeating();
-      return;
-    }
+    if (!active) return; // desks are added and removed with Set Up Desks, not by clicking here
     if (student) {
       if (locked) return; // unlock first
       SeatingModule.unseatAt(r, c);
@@ -1553,9 +1545,6 @@ function buildDeskElement(r, c) {
     } else if (selectedStudentId) {
       SeatingModule.seatStudent(r, c, selectedStudentId);
       selectedStudentId = null;
-      renderSeating();
-    } else {
-      SeatingModule.deactivate(r, c);
       renderSeating();
     }
   });
@@ -1592,11 +1581,12 @@ function buildDeskElement(r, c) {
     });
     desk.appendChild(groupInput);
 
-    const labelBtn = document.createElement("button");
-    labelBtn.type = "button";
-    labelBtn.className = "desk-label-btn" + (label ? " desk-label-btn-active" : "");
-    labelBtn.textContent = "🏷";
-    labelBtn.title = label ? `Label: "${label}" — click to edit or clear` : "Add a label to this desk";
+    const labelBtn = document.createElement("input");
+    labelBtn.type = "text";
+    labelBtn.readOnly = true; // a small box that opens the label menu when clicked
+    labelBtn.className = "desk-label-box" + (label ? " desk-label-box-active" : "");
+    labelBtn.value = "label";
+    labelBtn.title = label ? `Label: "${label}" — click to change or clear` : "Add a label to this desk";
     labelBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openDeskLabelMenu(labelBtn, r, c, label);

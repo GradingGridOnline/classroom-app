@@ -84,6 +84,11 @@
 .ds-cell.pv-add { background:color-mix(in srgb, #2e8b57 55%, transparent); border:1px solid #2e8b57; }
 .ds-cell.pv-erase { background:color-mix(in srgb, #d3302f 45%, transparent); border:1px solid #d3302f; }
 .ds-front { text-align:center; font-style:italic; font-size:.8rem; color:var(--ink-soft); width:max-content; min-width:100%; }
+.desk-inactive { cursor:default; } .desk-inactive:hover { opacity:.4; border-color:var(--line); }
+.desk-label-box { position:absolute; top:2px; right:2px; width:2.9em; height:15px; padding:0 2px; box-sizing:border-box; text-align:center; font-size:.58rem; line-height:13px; border:1px solid var(--line); border-radius:3px; background:var(--card); color:var(--ink-soft); cursor:pointer; opacity:.6; }
+.desk-label-box:hover, .desk-label-box-active { opacity:1; }
+.desk-label-box-active { border-color:var(--green); color:var(--ink); font-weight:700; }
+.desk-label-box:focus { outline:none; }
 .ds-size { display:flex; align-items:center; gap:6px; margin-top:4px; font-weight:700; }
 .ds-size input { width:3.2em; text-align:center; }
 `;
