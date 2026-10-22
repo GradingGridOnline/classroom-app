@@ -504,6 +504,28 @@
     origRender.apply(this, arguments);
     const table = document.querySelector(".group-list-table");
     if (!table) return;
+    // a "Copy" button between each student's email address and group number
+    const headRow = table.querySelector("thead tr");
+    if (headRow && headRow.children.length === 6) headRow.insertBefore(document.createElement("th"), headRow.children[5]);
+    table.querySelectorAll("tbody tr").forEach((tr) => {
+      if (tr.children.length === 1) { tr.children[0].colSpan = 7; return; }
+      if (tr.children.length !== 6) return;
+      const email = tr.children[4].textContent.trim();
+      const td = document.createElement("td");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-ghost btn-small";
+      btn.textContent = "Copy";
+      btn.disabled = !email;
+      btn.title = email ? `Copy ${email}` : "No email address";
+      btn.addEventListener("click", async () => {
+        const ok = await copy(email);
+        note.textContent = ok ? `Copied ${email}.` : "Couldn't copy — your browser blocked the clipboard.";
+        if (!bar.isConnected) return;
+      });
+      td.appendChild(btn);
+      tr.insertBefore(td, tr.children[5]);
+    });
     if (!bar.isConnected) table.parentNode.insertBefore(bar, table);
     bar.textContent = "";
     const groups = new Map();
