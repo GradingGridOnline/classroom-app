@@ -23,14 +23,100 @@
     return a;
   };
 
-  /** Random seating. Excluded students are never seated; if there are more free desks than students, the unused desks are the ones at the BACK of the room (the top rows), because the front (bottom) rows are filled first. */
+  const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const NEIGHBORS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+  const parseKey = (k) => k.split("-").map(Number);
+  const adjacent = (k1, k2) => { const [r1, c1] = parseKey(k1), [r2, c2] = parseKey(k2); return Math.max(Math.abs(r1 - r2), Math.abs(c1 - c2)) <= 1; };
+
+  /** Where each student currently sits: id -> desk key. */
+  const seatMap = () => { const m = new Map(); for (const k in S.seats) m.set(S.seats[k], k); return m; };
+  /** Complete separation pairs (both students chosen, different, still on the roster and not excluded). */
+  S.activeSeparations = function () {
+    const ok = new Set(RosterModule.students.filter((st) => !st.excludeFromSeating).map((st) => st.id));
+    return (this.separations || []).filter((p) => p[0] && p[1] && p[0] !== p[1] && ok.has(p[0]) && ok.has(p[1]));
+  };
+  S.maxSeparations = function () {
+    return Math.floor(RosterModule.students.filter((st) => !st.excludeFromSeating).length / 2);
+  };
+
+  /**
+   * Random seating of `students` onto free desks. Rules:
+   *  - students in a Keep-Apart pair always end up at least one empty desk apart (not touching, even diagonally);
+   *  - students who sat next to each other in an earlier random Auto-Fill are not put next to each other again,
+   *    until no such arrangement is possible any more — then that memory starts over;
+   *  - if there are more free desks than students, the unused ones are at the back of the room.
+   * Returns { seated, apartFailed: [names], cycled: bool }.
+   */
   S.autoFillRandom = function (students) {
     const desks = [];
-    for (let r = this.rows - 1; r >= 0; r--) for (let c = 0; c < this.cols; c++) if (freeDesk(r, c)) desks.push([r, c]);
-    const chosen = desks.slice(0, students.length);
-    const order = shuffle(students);
-    chosen.forEach(([r, c], i) => { this.seats[this.key(r, c)] = order[i].id; });
-    return chosen.length;
+    for (let r = this.rows - 1; r >= 0; r--) for (let c = 0; c < this.cols; c++) if (freeDesk(r, c)) desks.push(this.key(r, c));
+    const pairs = this.activeSeparations();
+    const partners = new Map();
+    pairs.forEach(([a, b]) => { (partners.get(a) || partners.set(a, []).get(a)).push(b); (partners.get(b) || partners.set(b, []).get(b)).push(a); });
+
+    const attempt = (deskSet, useHistory, hist) => {
+      const placed = new Map(seatMap());               // id -> key (existing seats + new ones)
+      const occupant = new Map(Object.entries(this.seats).map(([k, id]) => [k, id]));
+      const open = new Set(deskSet);
+      const result = [];
+      // students with partners first: they are the hardest to place
+      const order = shuffle(students).sort((x, y) => (partners.has(y.id) ? 1 : 0) - (partners.has(x.id) ? 1 : 0));
+      for (const st of order) {
+        const cands = [];
+        for (const k of open) {
+          let ok = true;
+          for (const pid of partners.get(st.id) || []) { const pk = placed.get(pid); if (pk && adjacent(k, pk)) { ok = false; break; } }
+          if (ok && useHistory) {
+            const [r, c] = parseKey(k);
+            for (const [dr, dc] of NEIGHBORS) {
+              const other = occupant.get(`${r + dr}-${c + dc}`);
+              if (other && hist.has(pairKey(st.id, other))) { ok = false; break; }
+            }
+          }
+          if (ok) cands.push(k);
+        }
+        if (!cands.length) return null;
+        const pick = cands[Math.floor(Math.random() * cands.length)];
+        open.delete(pick); placed.set(st.id, pick); occupant.set(pick, st.id); result.push([pick, st.id]);
+      }
+      return result;
+    };
+    const tryMany = (deskSet, useHistory, hist, tries) => {
+      for (let i = 0; i < tries; i++) { const r = attempt(deskSet, useHistory, hist); if (r) return r; }
+      return null;
+    };
+
+    const front = desks.slice(0, students.length);
+    let hist = new Set(this.neighborHistory || []);
+    let cycled = false;
+    let result = tryMany(front, true, hist, 300);
+    if (!result && hist.size) { // every arrangement avoiding the old neighbors has been used: start the memory over
+      cycled = true; hist = new Set();
+      result = tryMany(front, false, hist, 300);
+    }
+    if (!result && desks.length > front.length) result = tryMany(desks, false, hist, 300); // keep-apart pairs may need desks further back
+    let apartFailed = [];
+    if (!result) { // no way to keep every pair apart: seat anyway, and say which pairs touch
+      const order = shuffle(students);
+      result = front.map((k, i) => [k, order[i].id]);
+    }
+    result.forEach(([k, id]) => { this.seats[k] = id; });
+    const pos = seatMap();
+    pairs.forEach(([a, b]) => {
+      if (pos.has(a) && pos.has(b) && adjacent(pos.get(a), pos.get(b))) {
+        const nm = (id) => (RosterModule.students.find((x) => x.id === id) || {}).name || "?";
+        apartFailed.push(`${nm(a)} & ${nm(b)}`);
+      }
+    });
+    // remember who is next to whom now
+    const keep = cycled ? new Set() : new Set(this.neighborHistory || []);
+    const occ = new Map(Object.entries(this.seats));
+    for (const [k, id] of occ) {
+      const [r, c] = parseKey(k);
+      for (const [dr, dc] of NEIGHBORS) { const other = occ.get(`${r + dr}-${c + dc}`); if (other) keep.add(pairKey(id, other)); }
+    }
+    this.neighborHistory = [...keep];
+    return { seated: result.length, apartFailed, cycled };
   };
   /** Class Number order, starting at the bottom-left desk and filling along each row to the right, then up a row. */
   S.autoFillNumericalRows = function (students) {
@@ -271,6 +357,82 @@
     afterFill(fn(students), what, students);
   };
 
+  const randomFill = () => {
+    const students = eligible();
+    if (!students.length) { say("Everyone who can be seated already has a desk."); return; }
+    const res = S.autoFillRandom(students);
+    selectedStudentId = null;
+    redrawChart();
+    const left = students.length - res.seated;
+    say(`Auto-Fill: seated ${res.seated} student${res.seated === 1 ? "" : "s"}.` +
+      (left > 0 ? ` ${left} could not be seated — no free desks left.` : "") +
+      (res.cycled ? " Every new neighbor combination has now been used, so the \"not next to the same people\" memory started over." : "") +
+      (res.apartFailed.length ? ` Couldn't keep apart: ${res.apartFailed.join(", ")} (not enough room).` : ""));
+    if (!sepPanel.hidden) drawSep();
+  };
+
+  // ---------- Keep Students Apart panel ----------
+  const sepPanel = el("div");
+  sepPanel.id = "sep-setup";
+  sepPanel.hidden = true;
+  sepPanel.style.cssText = "margin:0 0 14px;padding:10px 12px;border:2px solid var(--green);border-radius:8px;background:color-mix(in srgb, var(--green) 8%, var(--card));";
+  function studentOptions(select, chosen, taken) {
+    const blank = el("option", "", "— choose a student —");
+    blank.value = "";
+    select.appendChild(blank);
+    RosterModule.students.filter((st) => !st.excludeFromSeating)
+      .sort((a, b) => (a.classNumber || 1e9) - (b.classNumber || 1e9))
+      .forEach((st) => {
+        const o = el("option", "", `${st.classNumber ? "#" + st.classNumber + " " : ""}${st.name || "(unnamed)"}${st.schoolId ? " (" + st.schoolId + ")" : ""}`);
+        o.value = st.id;
+        if (st.id === chosen) o.selected = true;
+        if (taken.has(st.id) && st.id !== chosen) o.disabled = true;
+        select.appendChild(o);
+      });
+  }
+  function drawSep() {
+    sepPanel.textContent = "";
+    const max = S.maxSeparations();
+    if (!Array.isArray(S.separations)) S.separations = [];
+    const head = el("div");
+    head.style.cssText = "display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:6px;";
+    head.appendChild(el("strong", "", "Keep Students Apart"));
+    head.appendChild(el("span", "hint", `${S.separations.length} of ${max} pairs`));
+    const reset = el("button", "btn btn-ghost btn-small", "Reset \"not next to the same people\" memory");
+    reset.type = "button";
+    reset.title = "Forget who sat next to whom in earlier random Auto-Fills";
+    reset.addEventListener("click", () => { S.neighborHistory = []; say("Auto-Fill memory cleared."); });
+    head.appendChild(reset);
+    sepPanel.appendChild(head);
+    sepPanel.appendChild(el("p", "hint", "Each pair is kept at least one empty desk apart (not side by side, front/back, or diagonal) whenever Auto-Fill randomizes. Choose student 1, then student 2. Students who sat together in a recent random Auto-Fill are also kept from sitting together again until every combination has been used. Click Save Seating Chart to keep these pairs."));
+    const taken = new Set(S.separations.flat().filter(Boolean));
+    S.separations.forEach((pair, i) => {
+      const row = el("div");
+      row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0;";
+      row.appendChild(el("span", "hint", `Pair ${i + 1}`));
+      [0, 1].forEach((slot) => {
+        const sel = el("select");
+        const takenOthers = new Set([...taken].filter((id) => id !== pair[slot]));
+        studentOptions(sel, pair[slot], takenOthers);
+        sel.addEventListener("change", () => { pair[slot] = sel.value; drawSep(); });
+        row.appendChild(sel);
+        if (slot === 0) row.appendChild(el("span", "", "↔"));
+      });
+      const rm = el("button", "btn btn-ghost btn-small", "×");
+      rm.type = "button";
+      rm.title = "Remove this pair";
+      rm.addEventListener("click", () => { S.separations.splice(i, 1); drawSep(); });
+      row.appendChild(rm);
+      sepPanel.appendChild(row);
+    });
+    const add = el("button", "btn btn-ghost btn-small", "+ Add pair");
+    add.type = "button";
+    add.disabled = S.separations.length >= max;
+    add.title = add.disabled ? `At most ${max} pairs (half the class)` : "";
+    add.addEventListener("click", () => { S.separations.push(["", ""]); drawSep(); });
+    sepPanel.appendChild(add);
+  }
+
   const trim = () => {
     const res = S.trimUnusedDesks();
     if (res === "none") { say("Nothing to trim — no students are seated yet."); return; }
@@ -295,12 +457,14 @@
       buttonsBar.firstChild
     );
     buttonsBar.insertBefore(
-      splitButton("Auto-Fill", "Randomly seats everyone who has no desk (excluded students are skipped)", fill("Auto-Fill", (st) => S.autoFillRandom(st)), [
+      splitButton("Auto-Fill", "Randomly seats everyone who has no desk (excluded students are skipped)", randomFill, [
+        { label: "Keep Students Apart…", title: "Pairs of students Auto-Fill keeps at least one desk apart", onClick: () => { sepPanel.hidden = !sepPanel.hidden; if (!sepPanel.hidden) drawSep(); } },
         { label: "Numerical Order — Columns", title: "Class Number order: bottom-left desk, up the column, then the next column", onClick: fill("Numerical order (columns)", (st) => { const before = S.seatedStudentIds().size; S.autoFillNumericalOrder(st); return S.seatedStudentIds().size - before; }) },
         { label: "Numerical Order — Rows", title: "Class Number order: bottom-left desk, along the row, then the row above", onClick: fill("Numerical order (rows)", (st) => S.autoFillNumericalRows(st)) },
       ]),
       buttonsBar.children[1]
     );
     toolbar.insertAdjacentElement("afterend", panel);
+    panel.insertAdjacentElement("afterend", sepPanel);
   }
 })();

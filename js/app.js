@@ -7769,7 +7769,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
       snap: () => ({
         rows: SeatingModule.rows, cols: SeatingModule.cols, active: SeatingModule.active, seats: SeatingModule.seats,
         locks: SeatingModule.locks, groups: SeatingModule.groups, labels: SeatingModule.labels,
-        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, printSizes: SeatingModule.printSizes, parked: SeatingModule.parked, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
+        labelBank: SeatingModule.labelBank, printSections: SeatingModule.printSections, printSizes: SeatingModule.printSizes, parked: SeatingModule.parked, separations: SeatingModule.separations, neighborHistory: SeatingModule.neighborHistory, banks: SeatingModule.banks, showGroupsInPopout: SeatingModule.showGroupsInPopout,
       }),
     },
     {

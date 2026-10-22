@@ -48,6 +48,8 @@ const SeatingModule = {
   labels: {},
   printSections: ["none", "none", "none", "none", "none", "none", "none", "none"], // what each of the 8 printout sections shows (Seating Settings)
   printSizes: [100, 100, 100, 100, 100, 100, 100, 100], // relative width of each printout section (25/50/75/100)
+  separations: [], // [[studentIdA, studentIdB], ...] pairs Auto-Fill keeps at least one desk apart
+  neighborHistory: [], // "idA|idB" pairs that sat next to each other in earlier random Auto-Fills
   parked: {}, // studentId -> { key, locked }: seat remembered for a student who is excluded from seating
   labelBank: [], // reusable label texts to pick from on a desk (Seating Settings)
   banks: SeatingModule_defaultBanks(),
@@ -86,6 +88,8 @@ const SeatingModule = {
         }
       }
       this.parked = data.parked && typeof data.parked === "object" ? data.parked : {};
+      this.separations = Array.isArray(data.separations) ? data.separations.filter((p) => Array.isArray(p) && p.length === 2) : [];
+      this.neighborHistory = Array.isArray(data.neighborHistory) ? data.neighborHistory.filter((x) => typeof x === "string") : [];
       this.printSections = this._normalizeSections(data.printSections);
       this.printSizes = this._normalizeSizes(data.printSizes);
       this.banks = this._normalizeBanks(data.banks);
@@ -100,6 +104,8 @@ const SeatingModule = {
       this.labels = {};
       this.labelBank = ["Do not sit here"];
       this.parked = {};
+      this.separations = [];
+      this.neighborHistory = [];
       this.printSections = this._normalizeSections(null);
       this.printSizes = this._normalizeSizes(null);
       this.banks = SeatingModule_defaultBanks();
@@ -146,6 +152,8 @@ const SeatingModule = {
       labels: this.labels,
       labelBank: this.labelBank,
       parked: this.parked,
+      separations: this.separations,
+      neighborHistory: this.neighborHistory,
       printSections: this.printSections,
       printSizes: this.printSizes,
       banks: this.banks,
