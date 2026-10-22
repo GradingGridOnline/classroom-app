@@ -133,14 +133,31 @@
   let drag = null;
   const N = MAX_GRID_SIZE; // the drawing area is always the largest classroom; the chart's size follows the desks drawn
 
+  /** The chart is exactly as big as the desks drawn: empty rows/columns above and to the left of the first desk are dropped (everything shifts up/left), and the size follows the farthest desk. */
   function resizeToDesks() {
-    let R = 1, C = 1;
+    let minR = Infinity, minC = Infinity, maxR = -1, maxC = -1;
     for (const key in S.active) {
       const [r, c] = key.split("-").map(Number);
-      R = Math.max(R, r + 1);
-      C = Math.max(C, c + 1);
+      minR = Math.min(minR, r); minC = Math.min(minC, c);
+      maxR = Math.max(maxR, r); maxC = Math.max(maxC, c);
     }
-    if (R !== S.rows || C !== S.cols) S.setSize(R, C);
+    if (maxR < 0) { S.setSize(1, 1); return; }
+    if (minR > 0 || minC > 0) {
+      const shift = (map) => {
+        const out = {};
+        for (const key in map) { const [r, c] = key.split("-").map(Number); out[`${r - minR}-${c - minC}`] = map[key]; }
+        return out;
+      };
+      ["active", "seats", "locks", "groups", "labels"].forEach((k) => {
+        // keep only entries that sit at or after the first desk (anything earlier belonged to a removed desk)
+        const kept = {};
+        for (const key in S[k]) { const [r, c] = key.split("-").map(Number); if (r >= minR && c >= minC) kept[key] = S[k][key]; }
+        S[k] = shift(kept);
+      });
+      maxR -= minR; maxC -= minC;
+    }
+    S.rows = Math.max(1, Math.min(MAX_GRID_SIZE, maxR + 1));
+    S.cols = Math.max(1, Math.min(MAX_GRID_SIZE, maxC + 1));
   }
 
   function drawSetup() {
