@@ -165,6 +165,19 @@
     S.cols = Math.max(1, Math.min(MAX_GRID_SIZE, maxC + 1));
   }
 
+  // The drawing area shows the classroom anchored at its BOTTOM-left (the front of the room, desk number one).
+  const rowOffset = () => N - Math.min(N, S.rows); // blank schematic rows above the chart
+  const toRow = (displayRow) => displayRow - rowOffset();
+  /** Moves every desk (and its seat/lock/group/label) down by k rows, making room above for new desks. */
+  function shiftDown(k) {
+    ["active", "seats", "locks", "groups", "labels"].forEach((m) => {
+      const out = {};
+      for (const key in S[m]) { const [r, c] = key.split("-").map(Number); out[`${r + k}-${c}`] = S[m][key]; }
+      S[m] = out;
+    });
+    S.rows += k;
+  }
+
   function drawSetup() {
     panel.textContent = "";
     panel.appendChild(el("p", "hint", "Drag across blank spaces to add desks; drag across empty desks to remove them. Click one spot to add or remove a single desk. A desk with a student in it is never removed. Top = back of the classroom. Click Set Up Desks again to close."));
@@ -175,8 +188,9 @@
       for (let c = 0; c < N; c++) {
         const cell = el("div", "ds-cell");
         cell.dataset.r = r; cell.dataset.c = c;
-        if (S.isActive(r, c)) cell.classList.add("on");
-        if (isSeated(r, c)) { cell.classList.add("seated"); cell.textContent = "●"; cell.title = "A student sits here"; }
+        const rr = toRow(r);
+        if (S.isActive(rr, c)) cell.classList.add("on");
+        if (isSeated(rr, c)) { cell.classList.add("seated"); cell.textContent = "●"; cell.title = "A student sits here"; }
         grid.appendChild(cell);
       }
     }
@@ -207,7 +221,7 @@
     e.preventDefault();
     const a = { r: +cell.dataset.r, c: +cell.dataset.c };
     // starting on a desk erases; starting on a blank space draws
-    drag = { a, b: a, erase: S.isActive(a.r, a.c) };
+    drag = { a, b: a, erase: S.isActive(toRow(a.r), a.c) };
   });
   panel.addEventListener("pointermove", (e) => {
     if (!drag) return;
@@ -222,14 +236,19 @@
     drag = null;
     const R = rect(a, b);
     let refused = 0;
+    const off = rowOffset();
+    let lift = 0;
+    if (!erase && R.r1 - off < 0) { lift = off - R.r1; shiftDown(lift); } // drawing above the chart: add rows at the back
     for (let r = R.r1; r <= R.r2; r++) {
+      const ir = r - off + lift;
       for (let c = R.c1; c <= R.c2; c++) {
+        if (ir < 0 || ir >= S.rows + (erase ? 0 : N)) continue;
         if (erase) {
-          if (!S.isActive(r, c)) continue;
-          if (S.studentAt(r, c)) { refused++; continue; }
-          S.deactivate(r, c);
-        } else if (!S.isActive(r, c)) {
-          S.activate(r, c);
+          if (!S.isActive(ir, c)) continue;
+          if (S.studentAt(ir, c)) { refused++; continue; }
+          S.deactivate(ir, c);
+        } else if (!S.isActive(ir, c)) {
+          S.activate(ir, c);
         }
       }
     }
