@@ -404,17 +404,21 @@
     reset.addEventListener("click", () => { S.neighborHistory = []; say("Auto-Fill memory cleared."); });
     head.appendChild(reset);
     sepPanel.appendChild(head);
-    sepPanel.appendChild(el("p", "hint", "Each pair is kept at least one empty desk apart (not side by side, front/back, or diagonal) whenever Auto-Fill randomizes. Choose student 1, then student 2. Students who sat together in a recent random Auto-Fill are also kept from sitting together again until every combination has been used. Click Save Seating Chart to keep these pairs."));
-    const taken = new Set(S.separations.flat().filter(Boolean));
+    sepPanel.appendChild(el("p", "hint", "Each pair is kept at least one empty desk apart (not side by side, front/back, or diagonal) whenever Auto-Fill randomizes. Choose student 1, then student 2. A student can be in several pairs — for example A↔B, A↔C and B↔C keep three students apart from one another. Students who sat together in a recent random Auto-Fill are also kept from sitting together again until every combination has been used. Click Save Seating Chart to keep these pairs."));
     S.separations.forEach((pair, i) => {
       const row = el("div");
       row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0;";
       row.appendChild(el("span", "hint", `Pair ${i + 1}`));
       [0, 1].forEach((slot) => {
         const sel = el("select");
-        const takenOthers = new Set([...taken].filter((id) => id !== pair[slot]));
-        studentOptions(sel, pair[slot], takenOthers);
-        sel.addEventListener("change", () => { pair[slot] = sel.value; drawSep(); });
+        const other = pair[1 - slot];
+        studentOptions(sel, pair[slot], new Set(other ? [other] : [])); // a student can be in several pairs, but not paired with themselves
+        sel.addEventListener("change", () => {
+          pair[slot] = sel.value;
+          const dup = S.separations.some((q, qi) => qi !== i && pair[0] && pair[1] && ((q[0] === pair[0] && q[1] === pair[1]) || (q[0] === pair[1] && q[1] === pair[0])));
+          if (dup) { pair[slot] = ""; say("That pair is already listed."); }
+          drawSep();
+        });
         row.appendChild(sel);
         if (slot === 0) row.appendChild(el("span", "", "↔"));
       });
