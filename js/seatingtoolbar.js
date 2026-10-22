@@ -476,3 +476,65 @@
     panel.insertAdjacentElement("afterend", sepPanel);
   }
 })();
+
+// ===== Group Assignments: one "copy emails" button per group =====
+(function () {
+  const origRender = window.renderGroupList;
+  if (typeof origRender !== "function") return;
+  const bar = document.createElement("div");
+  bar.id = "group-email-bar";
+  bar.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;";
+  const note = document.createElement("span");
+  note.className = "result";
+
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+    return ok;
+  }
+
+  window.renderGroupList = function () {
+    origRender.apply(this, arguments);
+    const table = document.querySelector(".group-list-table");
+    if (!table) return;
+    if (!bar.isConnected) table.parentNode.insertBefore(bar, table);
+    bar.textContent = "";
+    const groups = new Map();
+    computeGroupListEntries().forEach(({ student, group }) => {
+      if (!group) return;
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(student);
+    });
+    if (!groups.size) return;
+    const label = document.createElement("span");
+    label.className = "hint";
+    label.textContent = "Copy a group's email addresses:";
+    bar.appendChild(label);
+    [...groups.keys()].sort((a, b) => a - b).forEach((g) => {
+      const members = groups.get(g);
+      const emails = members.map((m) => String(m.email || "").trim()).filter(Boolean);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn-ghost btn-small";
+      b.textContent = `Group ${g} (${members.length})`;
+      b.title = emails.length ? "Copies this group's email addresses, separated by commas" : "No email addresses for this group";
+      b.addEventListener("click", async () => {
+        if (!emails.length) { note.textContent = `Group ${g}: none of these students has an email address.`; return; }
+        const ok = await copy(emails.join(", "));
+        const missing = members.length - emails.length;
+        note.textContent = ok
+          ? `Copied ${emails.length} email address${emails.length === 1 ? "" : "es"} from Group ${g}.` + (missing ? ` ${missing} student${missing === 1 ? " has" : "s have"} no email address.` : "")
+          : "Couldn't copy — your browser blocked the clipboard.";
+      });
+      bar.appendChild(b);
+    });
+    bar.appendChild(note);
+  };
+})();
