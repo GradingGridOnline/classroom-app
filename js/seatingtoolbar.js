@@ -130,32 +130,27 @@
   const panel = el("div");
   panel.id = "desk-setup";
   panel.hidden = true;
-  let mode = "add"; // what dragging a rectangle does: add or erase desks
   let drag = null;
+  const N = MAX_GRID_SIZE; // the drawing area is always the largest classroom; the chart's size follows the desks drawn
+
+  function resizeToDesks() {
+    let R = 1, C = 1;
+    for (const key in S.active) {
+      const [r, c] = key.split("-").map(Number);
+      R = Math.max(R, r + 1);
+      C = Math.max(C, c + 1);
+    }
+    if (R !== S.rows || C !== S.cols) S.setSize(R, C);
+  }
 
   function drawSetup() {
     panel.textContent = "";
-    const top = el("div", "ds-top");
-    top.appendChild(el("strong", "", "Set Up Desks"));
-    const modes = el("span");
-    [["add", "Draw desks"], ["erase", "Erase desks"]].forEach(([id, text]) => {
-      const b = el("button", "btn btn-small " + (mode === id ? "btn-primary" : "btn-ghost"), text);
-      b.type = "button";
-      b.addEventListener("click", () => { mode = id; drawSetup(); });
-      modes.appendChild(b);
-    });
-    top.appendChild(modes);
-    const done = el("button", "btn btn-ghost btn-small", "Done");
-    done.type = "button";
-    done.addEventListener("click", () => { panel.hidden = true; });
-    top.appendChild(done);
-    panel.appendChild(top);
-    panel.appendChild(el("p", "hint", "Drag across the grid to draw (or erase) a block of desks, or click one spot to add or delete a single desk. A desk with a student in it can't be deleted. Top = back of the classroom."));
+    panel.appendChild(el("p", "hint", "Drag across blank spaces to add desks; drag across empty desks to remove them. Click one spot to add or remove a single desk. A desk with a student in it is never removed. Top = back of the classroom. Click Set Up Desks again to close."));
 
     const grid = el("div", "ds-grid");
-    grid.style.gridTemplateColumns = `repeat(${S.cols}, 30px)`;
-    for (let r = 0; r < S.rows; r++) {
-      for (let c = 0; c < S.cols; c++) {
+    grid.style.gridTemplateColumns = `repeat(${N}, 30px)`;
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
         const cell = el("div", "ds-cell");
         cell.dataset.r = r; cell.dataset.c = c;
         if (S.isActive(r, c)) cell.classList.add("on");
@@ -164,40 +159,8 @@
       }
     }
     panel.appendChild(grid);
-    panel.appendChild(Object.assign(el("div", "ds-front", "Front of Classroom")));
-
-    const size = el("div", "ds-size");
-    const mk = (value, label) => {
-      const i = el("input");
-      i.type = "text";
-      i.inputMode = "numeric";
-      i.value = String(value);
-      i.title = label;
-      return i;
-    };
-    const ri = mk(S.rows, "Rows"), ci = mk(S.cols, "Columns");
-    const apply = () => {
-      const R = Math.max(1, Math.min(MAX_GRID_SIZE, Math.round(Number(ri.value) || S.rows)));
-      const C = Math.max(1, Math.min(MAX_GRID_SIZE, Math.round(Number(ci.value) || S.cols)));
-      const blocked = [];
-      for (const key in S.seats) {
-        if (!S.active[key]) continue;
-        const [r, c] = key.split("-").map(Number);
-        if (r >= R || c >= C) blocked.push(key);
-      }
-      if (blocked.length) {
-        say(`Can't shrink to ${R} × ${C}: ${blocked.length} desk${blocked.length === 1 ? "" : "s"} outside it still ${blocked.length === 1 ? "has" : "have"} a student. Move or remove them first.`);
-      } else {
-        S.setSize(R, C);
-        say(`Classroom is now ${R} × ${C}.`);
-      }
-      redrawChart();
-      drawSetup();
-    };
-    ri.addEventListener("change", apply);
-    ci.addEventListener("change", apply);
-    size.append(ri, el("span", "", "×"), ci, el("span", "hint", `rows × columns (up to ${MAX_GRID_SIZE} × ${MAX_GRID_SIZE})`));
-    panel.appendChild(size);
+    panel.appendChild(el("div", "ds-front", "Front of Classroom"));
+    panel.appendChild(el("div", "ds-size", `${S.rows} × ${S.cols}`));
   }
 
   const cellAt = (e) => {
@@ -206,40 +169,40 @@
     return c && panel.contains(c) ? c : null;
   };
   const rect = (a, b) => ({ r1: Math.min(a.r, b.r), r2: Math.max(a.r, b.r), c1: Math.min(a.c, b.c), c2: Math.max(a.c, b.c) });
-  function preview(a, b) {
+  function preview(a, b, erase) {
     const R = rect(a, b);
+    const multi = !(R.r1 === R.r2 && R.c1 === R.c2);
     panel.querySelectorAll(".ds-cell").forEach((cell) => {
       const r = +cell.dataset.r, c = +cell.dataset.c;
-      const inside = r >= R.r1 && r <= R.r2 && c >= R.c1 && c <= R.c2;
-      cell.classList.toggle("pv-add", inside && mode === "add" && !(R.r1 === R.r2 && R.c1 === R.c2));
-      cell.classList.toggle("pv-erase", inside && mode === "erase" && !(R.r1 === R.r2 && R.c1 === R.c2));
+      const inside = multi && r >= R.r1 && r <= R.r2 && c >= R.c1 && c <= R.c2;
+      cell.classList.toggle("pv-add", inside && !erase);
+      cell.classList.toggle("pv-erase", inside && erase);
     });
   }
   panel.addEventListener("pointerdown", (e) => {
     const cell = e.target.closest && e.target.closest(".ds-cell");
     if (!cell) return;
     e.preventDefault();
-    drag = { a: { r: +cell.dataset.r, c: +cell.dataset.c } };
-    drag.b = drag.a;
+    const a = { r: +cell.dataset.r, c: +cell.dataset.c };
+    // starting on a desk erases; starting on a blank space draws
+    drag = { a, b: a, erase: S.isActive(a.r, a.c) };
   });
   panel.addEventListener("pointermove", (e) => {
     if (!drag) return;
     const cell = cellAt(e);
     if (!cell) return;
     drag.b = { r: +cell.dataset.r, c: +cell.dataset.c };
-    preview(drag.a, drag.b);
+    preview(drag.a, drag.b, drag.erase);
   });
   window.addEventListener("pointerup", () => {
     if (!drag) return;
-    const { a, b } = drag;
+    const { a, b, erase } = drag;
     drag = null;
     const R = rect(a, b);
-    const single = R.r1 === R.r2 && R.c1 === R.c2;
     let refused = 0;
     for (let r = R.r1; r <= R.r2; r++) {
       for (let c = R.c1; c <= R.c2; c++) {
-        const wantErase = single ? S.isActive(r, c) : mode === "erase";
-        if (wantErase) {
+        if (erase) {
           if (!S.isActive(r, c)) continue;
           if (S.studentAt(r, c)) { refused++; continue; }
           S.deactivate(r, c);
@@ -248,7 +211,8 @@
         }
       }
     }
-    say(refused ? `${refused} desk${refused === 1 ? "" : "s"} with a student in ${refused === 1 ? "it was" : "them were"} not deleted.` : "");
+    resizeToDesks();
+    say(refused ? `${refused} desk${refused === 1 ? "" : "s"} with a student in ${refused === 1 ? "it was" : "them were"} not removed.` : "");
     redrawChart();
     drawSetup();
   });
