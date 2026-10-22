@@ -46,8 +46,8 @@ const SeatingModule = {
   locks: {},
   groups: {},
   labels: {},
-  printSections: ["none", "none", "none", "none", "none", "none", "none", "none"], // what each of the 8 printout sections shows (Seating Settings)
-  printSizes: [100, 100, 100, 100, 100, 100, 100, 100], // relative width of each printout section (25/50/75/100)
+  printSections: ["none", "none", "none", "none", "none", "none", "none", "none", "none"], // what each of the 9 printout sections shows (Seating Settings)
+  printSizes: [100, 100, 100, 100, 100, 100, 100, 100, 100], // relative width of each printout section (25/50/75/100)
   separations: [], // [[studentIdA, studentIdB], ...] pairs Auto-Fill keeps at least one desk apart
   neighborHistory: [], // "idA|idB" pairs that sat next to each other in earlier random Auto-Fills
   parked: {}, // studentId -> { key, locked }: seat remembered for a student who is excluded from seating
@@ -113,16 +113,18 @@ const SeatingModule = {
     }
   },
 
-  /** Always returns exactly 8 section types (default "none"). */
+  /** Always returns exactly 9 section types (default "none"). Older 8-section lists get a new, empty section 2. */
   _normalizeSections(list) {
+    if (Array.isArray(list) && list.length === 8) list = [list[0], "none", ...list.slice(1)];
     const out = [];
-    for (let i = 0; i < 8; i++) out.push(Array.isArray(list) && typeof list[i] === "string" ? list[i] : "none");
+    for (let i = 0; i < 9; i++) out.push(Array.isArray(list) && typeof list[i] === "string" ? list[i] : "none");
     return out;
   },
 
   _normalizeSizes(list) {
+    if (Array.isArray(list) && list.length === 8) list = [list[0], 100, ...list.slice(1)];
     const out = [];
-    for (let i = 0; i < 8; i++) out.push(Array.isArray(list) && [25, 50, 75, 100].includes(Number(list[i])) ? Number(list[i]) : 100);
+    for (let i = 0; i < 9; i++) out.push(Array.isArray(list) && [25, 50, 75, 100].includes(Number(list[i])) ? Number(list[i]) : 100);
     return out;
   },
 

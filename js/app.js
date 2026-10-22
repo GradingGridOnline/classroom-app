@@ -1304,7 +1304,7 @@ function buildSeatingPrintSheet() {
   const sheet = document.createElement("div");
   sheet.className = "seating-print-sheet";
 
-  // Sections 1 and 2 (top of the page) — chosen in Seating Settings (see seatingprint.js).
+  // Sections 1-3 (top of the page) — chosen in Seating Settings (see seatingprint.js).
   sheet.appendChild(buildSeatingPrintTop(course));
 
   const grid = document.createElement("div");

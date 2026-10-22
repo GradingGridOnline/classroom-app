@@ -1,6 +1,6 @@
-// ===== Printable seating chart: 8 editable sections + schematic in Seating Settings =====
-// Load AFTER app.js. Sections 1-2 sit at the top of the printout (1 left, 2 right); sections
-// 3-8 sit below "Front of Classroom". Each section shows one kind of information (or nothing).
+// ===== Printable seating chart: 9 editable sections + schematic in Seating Settings =====
+// Load AFTER app.js. Sections 1-3 sit at the top of the printout (1 left, 2 middle, 3 right); sections
+// 4-9 sit below "Front of Classroom". Each section shows one kind of information (or nothing).
 
 (function () {
   const TYPES = [
@@ -38,7 +38,7 @@
 .sp-schem { max-width:760px; border:1px solid var(--line); border-radius:6px; padding:8px; background:var(--card); margin:0 0 14px; }
 .sp-schem-row { display:grid; gap:6px; }
 .sp-schem-cell { min-width:0; }
-.sp-schem-top { grid-template-columns:1fr 1fr; }
+.sp-schem-top { grid-template-columns:1fr 1fr 1fr; }
 .sp-schem-bottom { grid-template-columns:repeat(6, minmax(0,1fr)); }
 .sp-schem-box { position:relative; border:1px dashed var(--ink-soft); border-radius:4px; min-height:46px; background:color-mix(in srgb, var(--card) 85%, var(--line)); }
 .sp-schem-box.sp-on { border:1px solid var(--green); background:color-mix(in srgb, var(--green) 14%, var(--card)); }
@@ -47,7 +47,7 @@
 .sp-schem-size select { font-size:.75rem; max-width:100%; }
 .sp-schem-box select { position:absolute; inset:0; width:100%; height:100%; opacity:0.001; cursor:pointer; font-size:14px; }
 .sp-schem-val { position:absolute; left:4px; right:4px; bottom:3px; font-size:.7rem; line-height:1.15; overflow:hidden; pointer-events:none; text-align:left; }
-.sp-schem-top .sp-schem-cell:nth-child(2) .sp-schem-val { text-align:right; }
+.sp-schem-top .sp-schem-cell:nth-child(3) .sp-schem-val { text-align:right; }
 .sp-schem-mid { margin:6px 0 2px; height:70px; border:1px solid var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:.8rem; background:repeating-linear-gradient(45deg, transparent 0 8px, color-mix(in srgb, var(--line) 40%, transparent) 8px 9px); }
 .sp-schem-front { text-align:center; font-style:italic; font-size:.8rem; margin:2px 0 6px; color:var(--ink-soft); }
 `;
@@ -56,14 +56,14 @@
   const sizes = () => {
     if (!Array.isArray(SeatingModule.printSizes)) SeatingModule.printSizes = [];
     const arr = SeatingModule.printSizes;
-    while (arr.length < 8) arr.push(100);
+    while (arr.length < 9) arr.push(100);
     return arr;
   };
   const typeLabel = (id) => (TYPES.find((t) => t.id === id) || TYPES[0]).label;
   const sections = () => {
     if (!Array.isArray(SeatingModule.printSections)) SeatingModule.printSections = [];
     const arr = SeatingModule.printSections;
-    while (arr.length < 8) arr.push("none");
+    while (arr.length < 9) arr.push("none");
     return arr;
   };
   const studentName = (s) => (s.classNumber ? `#${s.classNumber} ${s.name || "(unnamed)"}` : s.name || "(unnamed)");
@@ -83,11 +83,11 @@
   /** One section's element for the printout, or null when it shows nothing. */
   function buildSection(type, slot, course) {
     if (!type || type === "none") return null;
-    const big = slot <= 2;
+    const big = slot <= 3;
     const box = document.createElement("div");
     box.className = "sp-sec";
     box.style.flexGrow = String(sizes()[slot - 1] / 100);
-    if (slot === 2) box.classList.add("sp-right");
+    if (slot === 3) box.classList.add("sp-right");
     const label = (text) => {
       const l = document.createElement("span");
       l.className = "sp-label";
@@ -120,7 +120,8 @@
       label(BLANK_LABELS[type]);
     } else if (type === "excluded" || type === "special") {
       const list = RosterModule.students.filter((s) => (type === "excluded" ? s.excludeFromSeating : s.specialNeeds));
-      if (!list.length) return null; // nothing to show: no border, no label
+      // top sections (1-3): nothing to show means no border and no label; lower sections keep label + outline
+      if (!list.length && big) return null;
       label(type === "excluded" ? "Not in seating chart" : "Special needs");
       const t = document.createElement("div");
       t.className = "sp-text";
@@ -135,10 +136,10 @@
     const row = document.createElement("div");
     row.className = "sp-top";
     const arr = sections();
-    [1, 2].forEach((slot) => {
+    [1, 2, 3].forEach((slot) => {
       const s = buildSection(arr[slot - 1], slot, course) || document.createElement("div");
       if (!s.classList.contains("sp-sec")) { s.className = "sp-sec"; s.style.flexGrow = String(sizes()[slot - 1] / 100); }
-      if (slot === 2) s.classList.add("sp-right");
+      if (slot === 3) s.classList.add("sp-right");
       row.appendChild(s);
     });
     return row;
@@ -148,7 +149,7 @@
     const arr = sections();
     const row = document.createElement("div");
     row.className = "sp-bottom";
-    for (let slot = 3; slot <= 8; slot++) {
+    for (let slot = 4; slot <= 9; slot++) {
       const s = buildSection(arr[slot - 1], slot, course);
       if (s) row.appendChild(s);
     }
@@ -162,7 +163,7 @@
     heading.textContent = "Printed seating chart";
     const hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Click a numbered section to choose what prints there. Sections 1–2 go at the top; 3–8 go below “Front of Classroom”. The % box sets a section\u2019s width relative to the others. Click Save Seating Chart to keep your choices.";
+    hint.textContent = "Click a numbered section to choose what prints there. Sections 1–3 go at the top; 4–9 go below “Front of Classroom”. The % box sets a section\u2019s width relative to the others. Click Save Seating Chart to keep your choices.";
     const schem = document.createElement("div");
     schem.className = "sp-schem";
 
@@ -210,7 +211,7 @@
 
       const cell = document.createElement("div");
       cell.className = "sp-schem-cell";
-      if (slot <= 2) cell.append(sizeWrap, b); // top sections: size above
+      if (slot <= 3) cell.append(sizeWrap, b); // top sections: size above
       else cell.append(b, sizeWrap); // bottom sections: size below
       sizeWrap.appendChild(sz);
       return cell;
@@ -227,7 +228,7 @@
     const front = document.createElement("div");
     front.className = "sp-schem-front";
     front.textContent = "Front of Classroom";
-    schem.append(rowOf("sp-schem-top", [1, 2]), mid, front, rowOf("sp-schem-bottom", [3, 4, 5, 6, 7, 8]));
+    schem.append(rowOf("sp-schem-top", [1, 2, 3]), mid, front, rowOf("sp-schem-bottom", [4, 5, 6, 7, 8, 9]));
     wrap.append(heading, hint, schem);
     return wrap;
   };

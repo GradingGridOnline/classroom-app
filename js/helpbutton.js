@@ -109,7 +109,7 @@
 <p>Lists every seated student by group. Use the <b>Group N</b> buttons above the table to copy that group's email addresses (separated by commas) for pasting into OneDrive or an email. The <b>Copy</b> button on a row copies one student's address.</p>
 <h4>Seating Settings (click Edit Settings)</h4>
 <ul>
-<li><b>Printed seating chart</b> — a small page diagram with 8 sections. Click a section to choose what prints there: Class Information, Lesson Content, Homework, Date of Lesson, Recorded, Students Excluded from Seating, Students with Special Needs, Future Use, or Nothing. Sections 1–2 are at the top (1 left, 2 right); 3–8 are below “Front of Classroom”. The % box makes a section wider or narrower relative to the others. A list section with nobody in it prints nothing.</li>
+<li><b>Printed seating chart</b> — a small page diagram with 9 sections. Click a section to choose what prints there: Class Information, Lesson Content, Homework, Date of Lesson, Recorded, Students Excluded from Seating, Students with Special Needs, Future Use, or Nothing. Sections 1–3 are at the top (1 left, 2 middle, 3 right); 4–9 are below “Front of Classroom”. The % box makes a section wider or narrower relative to the others. A student-list section (excluded / special needs) with nobody in it prints nothing in sections 1–3, but in sections 4–9 it still prints its label and outline.</li>
 <li><b>Label bank</b> — the labels you can put on a desk. Add or remove them here.</li>
 </ul>
 <p>To keep a student out of the chart, use the <b>Seating</b> toggle beside their name on the Attendance tab.</p>`);
