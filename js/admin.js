@@ -15,7 +15,12 @@
 
   const css = mk("style");
   css.textContent = `
-#admin-btn { margin-right:8px; vertical-align:middle; }
+#admin-btn { vertical-align:middle; }
+div.settings-wrap { flex-direction:row; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+div.settings-wrap > #autosave-indicator { order:0; }
+div.settings-wrap > #settings-btn { order:1; }
+div.settings-wrap > #help-btn { order:2; margin:0; }
+div.settings-wrap > #admin-btn { order:3; margin:0; }
 #admin-overlay { position:fixed; inset:0; z-index:20001; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; padding:16px; }
 #admin-overlay[hidden] { display:none; }
 #admin-box { background:var(--card,#fff); color:var(--ink,#222); width:min(1100px,100%); height:min(780px,100%); border-radius:10px; border:2px solid var(--green); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,.5); }
@@ -45,7 +50,8 @@
     if (error) {
       let m = error.message || "The admin function failed.";
       try { if (error.context && error.context.json) { const j = await error.context.json(); if (j && j.error) m = j.error; } } catch (e) {}
-      if (/not found|404|Failed to send/i.test(m)) m = "The admin function isn't deployed yet (see the setup steps), or couldn't be reached.";
+      const status = error.context && error.context.status;
+      if (/not found|404|Failed to send/i.test(m)) m = `The admin function isn't deployed yet (see the setup steps), or couldn't be reached. [${status || ""} ${error.message || ""}]`;
       throw new Error(m);
     }
     if (data && data.error) throw new Error(data.error);
