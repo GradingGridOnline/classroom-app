@@ -33,6 +33,7 @@
     .locked { pointer-events:none; opacity:.7; }
     [hidden] { display:none !important; }
   </style>
+  <script src="js/qrapply.js"></script>
 </head>
 <body>
   <main class="card">
@@ -53,6 +54,7 @@
       <div id="questions"></div>
       <p id="missing" class="hint"></p>
       <button id="send" class="primary" type="submit">Submit</button>
+      <button id="blank" class="link" type="button" hidden>Submit with blank answers</button><br />
       <button id="change" class="link" type="button">That's not me / change ID</button>
     </form>
 
@@ -108,6 +110,7 @@
       function refresh() {
         const n = questions().filter((q) => answers[q.id] === undefined || answers[q.id] === "").length;
         $("missing").textContent = n ? n + " question(s) not answered yet." : "";
+        $("blank").hidden = !n;
       }
 
       function render() {
@@ -236,6 +239,13 @@
       });
       $("again").addEventListener("click", () => openQuiz(sid));
       $("change").addEventListener("click", () => { stopTimer(); sid = ""; form = null; say(""); step("id"); $("sid").select(); });
+
+      $("blank").addEventListener("click", () => {
+        const n = questions().filter((q) => answers[q.id] === undefined || answers[q.id] === "").length;
+        if (!n) return;
+        if (!confirm("Submit with " + n + " blank answer" + (n === 1 ? "" : "s") + "? Blank answers are saved as blank.")) return;
+        doSubmit(false);
+      });
 
       $("quiz-form").addEventListener("submit", (e) => {
         e.preventDefault();

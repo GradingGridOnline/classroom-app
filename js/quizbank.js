@@ -1285,11 +1285,11 @@
             flush();
             say(`QR code for "${t.name}" is open.`);
             rerender();
-            openQr(url);
+            openQr(url + (window.QRStyles ? QRStyles.query(quiz.style) : ""));
           }),
         }]
         : [
-          { label: "Show QR Code", onClick: () => openQr(QuizForms.urlFor(quiz.token)) },
+          { label: "Show QR Code", onClick: () => openQr(QuizForms.urlFor(quiz.token) + (window.QRStyles ? QRStyles.query(quiz.style) : "")) },
           {
             label: "Get Responses",
             onClick: guard(async () => {
@@ -1312,6 +1312,10 @@
           },
         ];
       group.appendChild(menuButton("QR Code", "#c2571a", qrItems));
+      if (window.QRStyles) {
+        QRStyles.ensureLoaded().catch(() => {});
+        group.appendChild(QRStyles.menuButton(() => quiz.style || null, (st) => { quiz.style = st || null; flush(); }, say, "btn btn-ghost btn-small qz-menu-btn"));
+      }
       group.appendChild(isSurvey
         ? button(`Show Results (${students})`, "btn btn-ghost btn-small qz-menu-btn", go("results"))
         : menuButton("Results", "#0f7d73", [

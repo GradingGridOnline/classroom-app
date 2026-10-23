@@ -49,6 +49,7 @@
     .done p { margin: 0; color: var(--ink-soft); }
     [hidden] { display: none !important; }
   </style>
+  <script src="js/qrapply.js"></script>
 </head>
 <body>
   <main class="card">
@@ -71,6 +72,7 @@
       <div id="questions"></div>
       <p id="missing" class="hint"></p>
       <button id="send-btn" class="primary" type="submit">Submit</button>
+      <button id="blank-btn" class="link" type="button" hidden>Submit with blank answers</button><br />
       <button id="change-id" class="link" type="button">That's not me / change ID</button>
     </form>
 
@@ -235,6 +237,7 @@
         const n = missingCount();
         $("missing").textContent = n > 0 ? n + " answer(s) still to choose." : "";
         $("send-btn").disabled = n > 0;
+        $("blank-btn").hidden = n === 0;
       }
 
       $("id-form").addEventListener("submit", async (e) => {
@@ -272,13 +275,24 @@
         schoolId = ""; form = null; say(""); showStep("id"); $("school-id").select();
       });
 
-      $("answer-form").addEventListener("submit", async (e) => {
+      $("blank-btn").addEventListener("click", () => {
+        const n = missingCount();
+        if (!n) return;
+        if (!confirm("Submit with " + n + " blank answer" + (n === 1 ? "" : "s") + "? Blank answers are saved as blank.")) return;
+        sendAnswers();
+      });
+
+      $("answer-form").addEventListener("submit", (e) => {
         e.preventDefault();
         if (missingCount() > 0) return;
+        sendAnswers();
+      });
+
+      async function sendAnswers() {
         let payload;
         if (kind !== "peer") payload = { scores: answers, comments: comments, global: globalComment };
         else payload = { ratings: answers };
-        $("send-btn").disabled = true; say("Saving…");
+        $("send-btn").disabled = true; $("blank-btn").disabled = true; say("Saving…");
         try {
           const result = await rpc("pres_submit", { p_token: token, p_school_id: schoolId, p_payload: payload });
           if (result === "ok") { say(""); showStep("done"); }
@@ -290,9 +304,10 @@
         } catch (err) {
           say(MESSAGES.network, true);
         } finally {
+          $("blank-btn").disabled = false;
           refreshMissing();
         }
-      });
+      }
 
       (async function start() {
         if (!token || !cfg.url) { say(MESSAGES.closed, true); return; }

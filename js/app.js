@@ -5623,9 +5623,13 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
     actionsTd.className = "panel-toolbar-buttons";
     if (set.token) {
       action(actionsTd, "Show QR Code", async () => {
-        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(set.token))}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(set.token) + (window.QRStyles ? QRStyles.query(set.style) : ""))}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
         rerender();
       });
+      if (window.QRStyles) {
+        QRStyles.ensureLoaded().catch(() => {});
+        actionsTd.appendChild(QRStyles.menuButton(() => set.style || null, (st) => { set.style = st || null; presFormsSave(); }, say));
+      }
       action(actionsTd, "Get Responses", async () => {
         say("Getting responses…");
         const result = await PresentationFormsModule.sync(tool.id, project.id, set.id);
