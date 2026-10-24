@@ -18,8 +18,8 @@
   --card-shadow: 0 0 0 1px #4a4743, 0 2px 8px rgba(0, 0, 0, 0.6);
   --glow: none;
   --focus-glow: 0 0 0 2px rgba(228, 223, 211, 0.4);
-  --th-bg: #5a403d;        /* column headers (the calendar's brown sidebar) */
-  --td-bg: #292725;        /* cells below the headers */
+  --th-bg: #4d4a47;        /* column headers: dark gray */
+  --td-bg: #2b2927;        /* cells below the headers */
   color-scheme: dark;
 }
 [data-theme="dark"] body {
@@ -61,3 +61,9 @@ html[data-theme="dark"] { --hdr-bg: #5b5651; }
 /* Active-tab / selected markers and accents stay colorful */
 [data-theme="dark"] .btn-primary { background: #e4dfd3; color: #0d0d0d; }
 [data-theme="dark"] .btn-primary:hover { color: #0d0d0d; }
+
+/* Colored sections keep their colored header bar as the accent, but their bodies stay neutral dark gray. */
+[data-theme="dark"] .pres-section,
+[data-theme="dark"] .pres-section.qz-sec-shared {
+  background: var(--card);
+}
