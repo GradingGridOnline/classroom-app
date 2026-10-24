@@ -1,0 +1,37 @@
+/* ===== Subtle motion: Tron: Legacy and Cyberpunk themes only =====
+   Smooth color changes on buttons, tabs, menus and fields; a quick fade when you switch tabs or open
+   a menu; a very gentle glow on the active tab. Nothing animates inside tables, so scrolling and
+   typing stay light. Turned off for people whose device asks for reduced motion, and when printing.
+   Loaded last. */
+:is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) :is(.btn, .tab-btn, button, .count-badge, .sb-toggle, .qts-sec-head, .pres-section-head, .course-item) {
+  transition: background-color .22s ease, color .22s ease, border-color .22s ease, box-shadow .25s ease, text-shadow .25s ease, filter .22s ease, opacity .2s ease;
+}
+:is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) :is(input, select, textarea) {
+  transition: background-color .2s ease, border-color .2s ease, box-shadow .22s ease;
+}
+:is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) :is(.btn, .tab-btn, button):not(:disabled):active {
+  transition-duration: .06s;
+  filter: brightness(1.25);
+}
+
+/* Switching tabs / opening a menu: a short fade and tiny slide */
+@keyframes ggo-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes ggo-menu-in { from { opacity: 0; transform: translateY(-3px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes ggo-glow-soft { 0%, 100% { text-shadow: 0 0 3px currentColor; } 50% { text-shadow: 0 0 9px currentColor; } }
+
+:is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) :is(.tab-panel, .scoring-mode-view):not([hidden]) {
+  animation: ggo-fade-in .22s ease-out;
+}
+:is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) :is(.qts-menu, .settings-menu, .qz-menu, [role="menu"]) {
+  animation: ggo-menu-in .14s ease-out;
+}
+:is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) .main-tab-row .tab-btn-active {
+  animation: ggo-glow-soft 4.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is([data-theme="tron-legacy"], [data-theme="cyberpunk"]) * { animation: none !important; transition: none !important; }
+}
+@media print {
+  * { animation: none !important; transition: none !important; }
+}
