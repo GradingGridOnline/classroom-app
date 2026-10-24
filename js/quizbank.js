@@ -796,7 +796,12 @@
     if (/^[=+\-@\t\r]/.test(t) && Number.isNaN(Number(t))) t = "'" + t; // stops spreadsheets from running typed text as a formula
     return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
   }
+  let exportSink = null; // set by QuizExport so the same row builders can produce Excel files
   function downloadCsv(filename, rows) {
+    if (exportSink) { exportSink(filename, rows); return; }
+    rawCsv(filename, rows);
+  }
+  function rawCsv(filename, rows) {
     const text = "\ufeff" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n"); // BOM so Excel reads Japanese correctly
     const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
@@ -879,6 +884,53 @@
     });
     downloadCsv(safeName(test.name, "summary"), rows);
   }
+  /** The questions and answer key (what is copied between lists; works for items with no answers). */
+  function exportQuestions(test, quiz) {
+    const rows = [["Section", "Q#", "Type", ...(quiz.kind === "answers" ? [] : ["Question text"]), ...(quiz.kind === "survey" ? [] : ["Points"]), "Options", ...(quiz.kind === "survey" ? [] : ["Correct answer", "Other accepted answers"])]];
+    let n = 0;
+    quiz.sections.forEach((sec) => (sec.questions || []).forEach((q) => {
+      n++;
+      const opts = q.type === "mc" ? q.choices.map((c, i) => `${optionLabel(quiz.settings.labelStyle, i)}${c && quiz.kind !== "answers" ? ": " + c : ""}`).join(" | ") : "";
+      const correct = q.type === "mc" ? optionLabel(quiz.settings.labelStyle, q.correct) : (q.accepted[0] || "");
+      rows.push([sec.title || "", `Q${n}`, q.type === "mc" ? "Multiple choice" : "Fill in the blank", ...(quiz.kind === "answers" ? [] : [q.text || ""]), ...(quiz.kind === "survey" ? [] : [q.points]), opts, ...(quiz.kind === "survey" ? [] : [correct, q.type === "blank" ? q.accepted.slice(1).filter(Boolean).join(" | ") : ""])]);
+    }));
+    downloadCsv(safeName(test.name, "questions"), rows);
+  }
+
+  /** Used by the QTS Bank: CSV / Excel menu entries for one item. isLib = a list item (no students' answers). */
+  window.QuizExport = {
+    download(name, rows, fmt) {
+      const base = String(name || "export").replace(/[\\/:*?"<>|]+/g, "_").trim() || "export";
+      if (fmt === "xlsx" && window.XLSX) {
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Sheet1");
+        XLSX.writeFile(wb, `${base.replace(/\.csv$/i, "")}.xlsx`);
+      } else {
+        rawCsv(/\.csv$/i.test(base) ? base : `${base}.csv`, rows);
+      }
+    },
+    items(test, isLib) {
+      const copy = JSON.parse(JSON.stringify(test));
+      const quiz = ScoringModule.normalizeQuiz(copy);
+      if (!quiz) return [];
+      const kinds = [["Questions & answer key", exportQuestions]];
+      if (!isLib) {
+        kinds.unshift(["Responses (one row per attempt)", exportResponses]);
+        if (quiz.kind !== "survey") kinds.push(["Scores per question", exportScores]);
+        kinds.push(["Question summary", exportSummary]);
+      }
+      const out = [];
+      kinds.forEach(([label, fn]) => ["csv", "xlsx"].forEach((fmt) => out.push({
+        label: `${fmt === "csv" ? "CSV" : "Excel"}: ${label}`,
+        onClick: () => {
+          exportSink = (filename, rows) => window.QuizExport.download(filename, rows, fmt);
+          try { fn(copy, quiz); } finally { exportSink = null; }
+        },
+      })));
+      return out;
+    },
+  };
+
   function exportItems(test, quiz) {
     const items = [{ label: "Responses (one row per attempt)", onClick: () => exportResponses(test, quiz) }];
     if (quiz.kind !== "survey") items.push({ label: "Scores per question", onClick: () => exportScores(test, quiz) });
@@ -1249,11 +1301,13 @@
     tests.forEach((t, i) => {
       const tr = mains[i];
       if (!tr) return;
-      const shareBtn = button("Copy to Shared", "btn btn-ghost btn-small qz-act-share", guard(async () => {
-        say("Copying to Shared…");
+      const shareBtn = button(window.QTSBank ? "Copy to QTS Bank" : "Copy to Shared", "btn btn-ghost btn-small qz-act-share", guard(async () => {
+        say("Copying…");
         const course = window.CoursesModule && CoursesModule.find(RosterModule.currentCourseId);
+        if (window.QTSBank) SharedTests.scope = "mine";
         await SharedTests.addFromCourse(t, course ? course.name : "");
-        say(`"${t.name}" copied to ${SharedTests.scopeLabel()} (students not included).`);
+        if (window.QTSBank) QTSBank.invalidate();
+        say(`"${t.name}" copied to ${window.QTSBank ? "the QTS Bank's Independent list" : SharedTests.scopeLabel()} (students not included).`);
         rerender();
       }));
       if (!t.quiz) {
@@ -1374,6 +1428,8 @@
     ScoringModule.testBankTests(tool.id).forEach((t) => { if (t.quiz) ScoringModule.normalizeQuiz(t); });
     original(tool, container);
     mergeBankView(tool, container);
-    container.appendChild(buildSharedSection(tool, container));
+    // The QTS Bank (js/qtsbank.js) replaces the old Shared list here: it holds every course's tests plus the Independent list.
+    if (window.QTSBank && QTSBank.buildSection) { SharedTests.scope = "mine"; container.appendChild(QTSBank.buildSection(tool, container)); }
+    else container.appendChild(buildSharedSection(tool, container));
   };
 })();

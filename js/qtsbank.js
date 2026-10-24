@@ -3,7 +3,8 @@
 // plus "Independent" (your own list not tied to any course — the same list as "Shared Tests & Quizzes" in each
 // Test & Quiz Bank) and one per group you belong to. Each item has an Actions menu (copy / move to a course, the
 // Independent list or a group) and an Export menu (CSV or Excel). Copying carries the questions and settings, not
-// students' answers or scores. Load AFTER app.js, quizbank.js and groupshare.js.
+// students' answers or scores. The same bank also appears inside every course's Test & Quiz Bank (with an
+// "Add to this course" button). Load AFTER app.js, quizbank.js and groupshare.js.
 
 (function () {
   const MAX_LIB = 100; // same cap as the Shared Tests & Quizzes list
@@ -11,7 +12,7 @@
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const rid = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const flush = () => { try { if (window.GGOAutosave && GGOAutosave.enabled()) GGOAutosave.flush(); } catch (e) {} };
-  const COLLAPSE_KEY = "ggo-qts-open";
+  const COLLAPSE_KEY = "ggo-qts-closed"; // sections are open unless you collapse them
 
   // ---------- the tab + panel ----------
   const reportBtn = document.getElementById("tab-reportcard-btn");
@@ -22,27 +23,18 @@
   const panel = mk("div", "tab-panel"); panel.id = "qts-panel"; panel.hidden = true;
   reportPanel.after(panel);
 
-  const origShowTab = window.showTab;
-  window.showTab = function (tab) {
-    origShowTab.apply(this, arguments);
-    const on = tab === "qts";
-    panel.hidden = !on;
-    tabBtn.classList.toggle("tab-btn-active", on);
-    if (on) refresh();
-  };
-  tabBtn.addEventListener("click", () => window.showTab("qts"));
 
   const css = mk("style");
   css.textContent = `
-#qts-panel .qts-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 8px; }
-#qts-panel .qts-head input[type=search] { flex:1; min-width:180px; max-width:340px; padding:6px 8px; }
-#qts-panel .qts-sec { border:1px solid var(--line); border-radius:8px; margin:10px 0; background:var(--card); }
-#qts-panel .qts-sec > .qts-sec-head { display:flex; align-items:center; gap:8px; width:100%; padding:8px 12px; border:0; background:var(--hdr-bg,#3d5a40); color:#fff; font:inherit; font-weight:700; text-align:left; cursor:pointer; border-radius:7px 7px 0 0; }
-#qts-panel .qts-sec.closed > .qts-sec-head { border-radius:7px; }
-#qts-panel .qts-sec-body { padding:8px 12px 12px; }
-#qts-panel .qts-sec h4 { margin:10px 0 4px; font-size:.95rem; }
-#qts-panel .qts-acts { display:flex; gap:4px; flex-wrap:wrap; }
-#qts-panel table.roster-table td { vertical-align:middle; }
+.qts-root .qts-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:0 0 8px; }
+.qts-root .qts-head input[type=search] { flex:1; min-width:180px; max-width:340px; padding:6px 8px; }
+.qts-root .qts-sec { border:1px solid var(--line); border-radius:8px; margin:10px 0; background:var(--card); }
+.qts-root .qts-sec > .qts-sec-head { display:flex; align-items:center; gap:8px; width:100%; padding:8px 12px; border:0; background:var(--hdr-bg,#3d5a40); color:#fff; font:inherit; font-weight:700; text-align:left; cursor:pointer; border-radius:7px 7px 0 0; }
+.qts-root .qts-sec.closed > .qts-sec-head { border-radius:7px; }
+.qts-root .qts-sec-body { padding:8px 12px 12px; }
+.qts-root .qts-sec h4 { margin:10px 0 4px; font-size:.95rem; }
+.qts-root .qts-acts { display:flex; gap:4px; flex-wrap:wrap; }
+.qts-root table.roster-table td { vertical-align:middle; }
 .qts-menu { position:fixed; z-index:20010; background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line,#ccc); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:4px; min-width:210px; max-height:70vh; overflow:auto; }
 .qts-menu button { display:block; width:100%; text-align:left; border:0; background:transparent; color:inherit; font:inherit; font-size:.9rem; padding:6px 8px; border-radius:5px; cursor:pointer; }
 .qts-menu button:hover { background:color-mix(in srgb, var(--green,#3d5a40) 16%, transparent); }
@@ -55,43 +47,47 @@
   document.head.appendChild(css);
 
   // ---------- data ----------
-  let model = null, filter = "", busy = false;
-  let openSet = new Set();
-  try { openSet = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || ["lib:mine"]); } catch (e) { openSet = new Set(["lib:mine"]); }
-  const saveOpen = () => { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...openSet])); } catch (e) {} };
+  let closedSet = new Set();
+  try { closedSet = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || []); } catch (e) { closedSet = new Set(); }
+  const saveOpen = () => { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...closedSet])); } catch (e) {} };
 
-  async function loadModel() {
-    if (window.GGOAutosave && GGOAutosave.enabled()) await GGOAutosave.flush();
+  // Reads are cached for two minutes (clicking Refresh, or any change made here, clears the cache) so the bank
+  // inside each Test & Quiz Bank doesn't re-read every course each time that screen redraws.
+  const cache = new Map();
+  const TTL = 120000;
+  async function cached(key, loader) {
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.t < TTL) return hit.v;
+    const v = await loader();
+    cache.set(key, { t: Date.now(), v });
+    return v;
+  }
+  const invalidate = () => cache.clear();
+
+  async function loadModel(opts) {
+    if (opts && opts.flush && window.GGOAutosave && GGOAutosave.enabled()) await GGOAutosave.flush();
     const m = { libs: [], courses: [] };
-    const mine = await storage.loadFile("sharedtests.json");
-    m.libs.push({ key: "mine", label: "Independent — not in any course", items: (mine && mine.items) || [], doc: mine || {} });
+    const mine = await cached("lib:mine", () => storage.loadFile("sharedtests.json"));
+    m.libs.push({ key: "mine", label: "Independent — not in any course", items: (mine && Array.isArray(mine.items) && mine.items) || [], doc: mine || {} });
     if (window.GroupShare) {
-      const groups = await GroupShare.myGroups(true);
-      for (const g of groups) {
+      let groups = [];
+      try { groups = await cached("groups", () => GroupShare.myGroups(true)); } catch (e) { groups = []; }
+      for (const g of groups || []) {
         try {
-          const d = await GroupShare.loadDoc(g.id, "tests");
-          m.libs.push({ key: g.id, label: `Group: ${g.name}`, items: (d && d.items) || [], doc: d || {} });
+          const d = await cached(`lib:${g.id}`, () => GroupShare.loadDoc(g.id, "tests"));
+          m.libs.push({ key: g.id, label: `Group: ${g.name}`, items: (d && Array.isArray(d.items) && d.items) || [], doc: d || {} });
         } catch (e) { m.libs.push({ key: g.id, label: `Group: ${g.name}`, items: [], doc: {}, error: e.message }); }
       }
     }
     for (const c of CoursesModule.activeCourses()) {
       const live = ScoringModule.currentCourseId === c.id;
-      const data = live ? { tools: ScoringModule.tools } : await storage.loadFile(`scoring-${c.id}.json`);
+      let data;
+      try { data = live ? { tools: ScoringModule.tools } : await cached(`scoring:${c.id}`, () => storage.loadFile(`scoring-${c.id}.json`)); } catch (e) { data = null; }
       const tools = ((data && data.tools) || []).filter((t) => t.type === "testbank")
         .map((t) => ({ toolId: t.id, toolName: t.name, tests: (t.config && Array.isArray(t.config.tests)) ? t.config.tests : [] }));
       m.courses.push({ id: c.id, name: c.name, tools });
     }
     return m;
-  }
-
-  async function refresh(msg) {
-    if (busy) return;
-    busy = true;
-    panel.textContent = "";
-    panel.appendChild(mk("p", "hint", "Loading your tests, quizzes and surveys…"));
-    try { model = await loadModel(); } catch (e) { panel.textContent = ""; panel.appendChild(mk("p", "hint", `Couldn't load: ${e.message}`)); busy = false; return; }
-    busy = false;
-    render(msg);
   }
 
   // ---------- item info ----------
@@ -134,17 +130,13 @@
   }
 
   // ---------- exports ----------
-  function exportItems(test) {
-    if (test.quiz && window.QuizExport) return window.QuizExport.items(test, !test.__hasData);
-    return [];
-  }
   function uploadedExport(test, fmt) {
     const rows = [["Student", "School ID", "Score", "Max score"]];
     (test.rows || []).forEach((r) => rows.push([r.name || "", r.schoolId || "", r.score === undefined ? "" : r.score, Number(test.maxPoints) || ""]));
     QuizExport.download(`${test.name || "test"} - scores`, rows, fmt);
   }
   function exportMenuItems(test, isLib) {
-    if (test.quiz) return window.QuizExport.items(test, isLib);
+    if (test.quiz) return window.QuizExport ? window.QuizExport.items(test, isLib) : [];
     if (isLib) return [];
     return [
       { label: "CSV: Scores", onClick: () => uploadedExport(test, "csv") },
@@ -153,13 +145,13 @@
   }
 
   // ---------- placing / removing ----------
-  const libDocOf = (key) => model.libs.find((l) => l.key === key);
   async function libLoad(key) { return key === "mine" ? await storage.loadFile("sharedtests.json") : await GroupShare.loadDoc(key, "tests"); }
   async function libSave(key, doc) {
     const out = { items: doc.items || [], sections: doc.sections || [] };
     if (key === "mine") await storage.saveFile("sharedtests.json", out); else await GroupShare.saveDoc(key, "tests", out);
+    invalidate();
     const S = window.SharedTestsModule;
-    if (S && S.scope === key) S.loaded = false; // the Test & Quiz Bank's Shared list re-reads next time
+    if (S && (S.scope === key || key === "mine")) S.loaded = false; // the Test & Quiz Bank's own Shared list re-reads next time
   }
   async function libAdd(key, item) {
     const d = (await libLoad(key)) || {}; d.items = d.items || [];
@@ -185,7 +177,7 @@
       const cfg = ScoringModule.getTestBankConfig(id);
       if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
       if (cfg.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`That bank is at its limit of ${MAX_TESTS_PER_BANK}.`);
-      cfg.tests.push(test); flush(); return;
+      cfg.tests.push(test); flush(); invalidate(); return;
     }
     const data = (await storage.loadFile(`scoring-${courseId}.json`)) || { categories: [], records: {}, weights: { attendance: 0 }, tools: [], presentationMigrated: true };
     data.tools = data.tools || [];
@@ -202,9 +194,10 @@
     if (tool.config.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`That bank is at its limit of ${MAX_TESTS_PER_BANK}.`);
     tool.config.tests.push(test);
     await storage.saveFile(`scoring-${courseId}.json`, data);
+    invalidate();
   }
   async function courseRemove(courseId, toolId, testId) {
-    if (ScoringModule.currentCourseId === courseId) { ScoringModule.removeTest(toolId, testId); flush(); return; }
+    if (ScoringModule.currentCourseId === courseId) { ScoringModule.removeTest(toolId, testId); flush(); invalidate(); return; }
     const data = await storage.loadFile(`scoring-${courseId}.json`);
     if (!data) return;
     const tool = (data.tools || []).find((t) => t.id === toolId);
@@ -218,10 +211,11 @@
       t.config.columns.forEach((col) => { if (col.testSource && col.testSource.toolId === toolId && col.testSource.testId === testId) col.testSource = { toolId: "", testId: "" }; });
     });
     await storage.saveFile(`scoring-${courseId}.json`, data);
+    invalidate();
   }
 
   // ---------- the copy / move dialog ----------
-  function chooseDestination(src, move) {
+  function chooseDestination(src, move, model) {
     return new Promise((resolve) => {
       const ov = mk("div"); ov.id = "qts-overlay";
       const box = mk("div"); box.id = "qts-box"; ov.appendChild(box);
@@ -264,122 +258,194 @@
     });
   }
 
-  async function transfer(src, move) {
-    if (move && !src.lib && src.test.quiz && src.test.quiz.token) { say("Close this quiz's QR code first (Test & Quiz Bank → QR Code → Close QR Code), then move it."); return; }
-    const dest = await chooseDestination(src, move);
-    if (!dest) return;
-    try {
-      say(`${move ? "Moving" : "Copying"}…`);
-      const snap = snapshotOf(src);
-      if (dest.kind === "lib") await libAdd(dest.id, snap);
-      else await courseAdd(dest.id, dest.toolId, courseTestFrom(snap));
-      if (move) {
-        if (src.lib) await libRemove(src.libKey, src.test.id);
-        else await courseRemove(src.courseId, src.toolId, src.test.id);
-      }
-      await refresh(`${move ? "Moved" : "Copied"} “${src.test.name}”.`);
-    } catch (e) { say(`Couldn't do that: ${e.message}`); }
-  }
+  // ---------- one view of the bank (used by the tab and inside each Test & Quiz Bank) ----------
+  // ctx (optional, inside a Test & Quiz Bank): { toolId, rerender }
+  let pendingMsg = "";
+  function makeView(host, ctx) {
+    ctx = ctx || {};
+    let model = null, filter = "", busy = false, statusEl = null;
+    const inTool = !!ctx.toolId;
+    host.classList.add("qts-root");
+    const say = (t) => { if (statusEl) statusEl.textContent = t; };
 
-  // ---------- rendering ----------
-  let statusEl = null;
-  function say(t) { if (statusEl) statusEl.textContent = t; }
+    async function refresh(msg, force) {
+      if (busy) return;
+      if (force) invalidate();
+      busy = true;
+      host.textContent = "";
+      host.appendChild(mk("p", "hint", "Loading your tests, quizzes and surveys…"));
+      try { model = await loadModel({ flush: !inTool }); }
+      catch (e) { host.textContent = ""; host.appendChild(mk("p", "hint", `Couldn't load: ${e.message}`)); busy = false; return; }
+      busy = false;
+      render(msg);
+    }
+    // after a change: the Test & Quiz Bank redraws itself (so its own list is current); the tab just reloads
+    const changed = async (msg) => {
+      invalidate();
+      if (inTool && ctx.rerender) { pendingMsg = msg || ""; ctx.rerender(); } else await refresh(msg);
+    };
 
-  function itemRow(src, cols) {
-    const t = src.test, i = info(t);
-    const tr = mk("tr");
-    tr.appendChild(mk("td", "", t.name || "(untitled)"));
-    tr.appendChild(mk("td", "", i.kind));
-    tr.appendChild(mk("td", "", i.questions == null ? "—" : String(i.questions)));
-    tr.appendChild(mk("td", "", i.max == null ? "—" : i.max ? String(i.max) : "—"));
-    if (src.lib) tr.appendChild(mk("td", "hint", t.sourceCourseName || "—"));
-    else { tr.appendChild(mk("td", "", i.quiz || i.answers ? String(i.answers) : "0")); tr.appendChild(mk("td", "", i.qr ? "QR open" : "")); }
-    const td = mk("td"); const acts = mk("div", "qts-acts");
-    acts.appendChild(menuButton("Actions", () => {
-      const items = [
-        { label: "Copy to…", onClick: () => transfer(src, false) },
-        { label: "Move to…", onClick: () => transfer(src, true) },
-      ];
+    async function transfer(src, move) {
+      if (move && !src.lib && src.test.quiz && src.test.quiz.token) { say("Close this quiz's QR code first (Test & Quiz Bank → QR Code → Close QR Code), then move it."); return; }
+      const dest = await chooseDestination(src, move, model);
+      if (!dest) return;
+      try {
+        say(`${move ? "Moving" : "Copying"}…`);
+        const snap = snapshotOf(src);
+        if (dest.kind === "lib") await libAdd(dest.id, snap);
+        else await courseAdd(dest.id, dest.toolId, courseTestFrom(snap));
+        if (move) {
+          if (src.lib) await libRemove(src.libKey, src.test.id);
+          else await courseRemove(src.courseId, src.toolId, src.test.id);
+        }
+        await changed(`${move ? "Moved" : "Copied"} “${src.test.name}”.`);
+      } catch (e) { say(`Couldn't do that: ${e.message}`); }
+    }
+
+    function itemRow(src) {
+      const t = src.test, i = info(t);
+      const tr = mk("tr");
+      tr.appendChild(mk("td", "", t.name || "(untitled)"));
+      tr.appendChild(mk("td", "", i.kind));
+      tr.appendChild(mk("td", "", i.questions == null ? "—" : String(i.questions)));
+      tr.appendChild(mk("td", "", i.max == null ? "—" : i.max ? String(i.max) : "—"));
       if (src.lib) {
-        items.push("-", {
-          label: "Rename…", onClick: async () => {
-            const v = prompt("New name:", t.name); if (v === null || !v.trim()) return;
-            try { const d = (await libLoad(src.libKey)) || {}; const it = (d.items || []).find((x) => x.id === t.id); if (it) { it.name = v.trim(); await libSave(src.libKey, d); } await refresh("Renamed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
-          },
-        }, {
-          label: "Delete", onClick: async () => {
-            if (!confirm(`Remove “${t.name}” from this list? Copies already in courses are not affected.`)) return;
-            try { await libRemove(src.libKey, t.id); await refresh("Removed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
-          },
+        tr.appendChild(mk("td", "hint", src.sectionName || "—"));
+        tr.appendChild(mk("td", "hint", t.sourceCourseName || "—"));
+      } else { tr.appendChild(mk("td", "", i.quiz || i.answers ? String(i.answers) : "0")); tr.appendChild(mk("td", "", i.qr ? "QR open" : "")); }
+      const td = mk("td"); const acts = mk("div", "qts-acts");
+      const here = inTool && !src.lib && src.courseId === ScoringModule.currentCourseId && src.toolId === ctx.toolId;
+      if (inTool && !here) {
+        const add = mk("button", "btn btn-primary btn-small", "Add to this course"); add.type = "button";
+        add.title = "Copy the questions and settings into this Test & Quiz Bank (this course's students are used)";
+        add.addEventListener("click", async () => {
+          try {
+            say("Adding…");
+            await courseAdd(ScoringModule.currentCourseId, ctx.toolId, courseTestFrom(snapshotOf(src)));
+            await changed(`“${t.name}” added to this course.`);
+          } catch (e) { say(`Couldn't do that: ${e.message}`); }
         });
+        acts.appendChild(add);
       }
-      return items;
-    }));
-    const ex = exportMenuItems(t, !!src.lib);
-    if (ex.length) acts.appendChild(menuButton("Export", () => ex));
-    td.appendChild(acts); tr.appendChild(td);
-    return tr;
-  }
+      acts.appendChild(menuButton("Actions", () => {
+        const items = [
+          { label: "Copy to…", onClick: () => transfer(src, false) },
+          { label: "Move to…", onClick: () => transfer(src, true) },
+        ];
+        if (src.lib) {
+          items.push("-", {
+            label: "Rename…", onClick: async () => {
+              const v = prompt("New name:", t.name); if (v === null || !v.trim()) return;
+              try { const d = (await libLoad(src.libKey)) || {}; const it = (d.items || []).find((x) => x.id === t.id); if (it) { it.name = v.trim(); await libSave(src.libKey, d); } await changed("Renamed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
+            },
+          }, {
+            label: "Delete", onClick: async () => {
+              if (!confirm(`Remove “${t.name}” from this list? Copies already in courses are not affected.`)) return;
+              try { await libRemove(src.libKey, t.id); await changed("Removed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
+            },
+          });
+        }
+        return items;
+      }));
+      const ex = exportMenuItems(t, !!src.lib);
+      if (ex.length) acts.appendChild(menuButton("Export", () => ex));
+      td.appendChild(acts); tr.appendChild(td);
+      return tr;
+    }
 
-  function table(headers) {
-    const tb = mk("table", "roster-table"); const hr = mk("tr");
-    headers.forEach((x) => hr.appendChild(mk("th", "", x)));
-    const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
-    const body = mk("tbody"); tb.appendChild(body);
-    return { tb, body };
-  }
-  function section(key, title, count) {
-    const f = filter;
-    const isOpen = f ? true : openSet.has(key);
-    const sec = mk("div", "qts-sec" + (isOpen ? "" : " closed"));
-    const head = mk("button", "qts-sec-head", `${isOpen ? "▾" : "▸"} ${title}  (${count})`); head.type = "button";
-    head.addEventListener("click", () => { if (openSet.has(key)) openSet.delete(key); else openSet.add(key); saveOpen(); render(); });
-    sec.appendChild(head);
-    const body = mk("div", "qts-sec-body"); body.hidden = !isOpen;
-    sec.appendChild(body);
-    return { sec, body };
-  }
-  const matches = (t) => !filter || String(t.name || "").toLowerCase().includes(filter);
+    function table(headers) {
+      const tb = mk("table", "roster-table"); const hr = mk("tr");
+      headers.forEach((x) => hr.appendChild(mk("th", "", x)));
+      const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
+      const body = mk("tbody"); tb.appendChild(body);
+      return { tb, body };
+    }
+    function section(key, title, count) {
+      const isOpen = filter ? true : !closedSet.has(key);
+      const sec = mk("div", "qts-sec" + (isOpen ? "" : " closed"));
+      const head = mk("button", "qts-sec-head", `${isOpen ? "▾" : "▸"} ${title}  (${count})`); head.type = "button";
+      head.addEventListener("click", () => { if (closedSet.has(key)) closedSet.delete(key); else closedSet.add(key); saveOpen(); render(); });
+      sec.appendChild(head);
+      const body = mk("div", "qts-sec-body"); body.hidden = !isOpen;
+      sec.appendChild(body);
+      return { sec, body };
+    }
+    const matches = (t) => !filter || String(t.name || "").toLowerCase().includes(filter);
 
-  function render(msg) {
-    panel.textContent = "";
-    const head = mk("div", "qts-head");
-    head.appendChild(mk("h3", "", "QTS Bank"));
-    const search = mk("input"); search.type = "search"; search.placeholder = "Search by name…"; search.value = filter;
-    search.addEventListener("input", () => { filter = search.value.trim().toLowerCase(); const pos = search.selectionStart; render(); const s = panel.querySelector("input[type=search]"); if (s) { s.focus(); s.setSelectionRange(pos, pos); } });
-    const re = mk("button", "btn btn-ghost btn-small", "Refresh"); re.type = "button"; re.addEventListener("click", () => refresh());
-    head.append(search, re);
-    panel.appendChild(head);
-    panel.appendChild(mk("p", "hint", "Every quiz, test and survey from your active courses, plus an Independent list that isn't tied to any course. Use Actions to copy or move one to another course, the Independent list or a group, and Export for CSV or Excel. Copies carry the questions and settings, not students' answers."));
-    statusEl = mk("p", "result", msg || ""); panel.appendChild(statusEl);
-    if (!model) return;
+    function render(msg) {
+      host.textContent = "";
+      const head = mk("div", "qts-head");
+      if (!inTool) head.appendChild(mk("h3", "", "QTS Bank"));
+      const search = mk("input"); search.type = "search"; search.placeholder = "Search by name…"; search.value = filter;
+      search.addEventListener("input", () => { filter = search.value.trim().toLowerCase(); const pos = search.selectionStart; render(); const s = host.querySelector("input[type=search]"); if (s) { s.focus(); s.setSelectionRange(pos, pos); } });
+      const re = mk("button", "btn btn-ghost btn-small", "Refresh"); re.type = "button"; re.addEventListener("click", () => refresh("", true));
+      head.append(search, re);
+      host.appendChild(head);
+      host.appendChild(mk("p", "hint", inTool
+        ? "Every quiz, test and survey from all your active courses, plus an Independent list that isn't tied to any course. “Add to this course” copies one into this Test & Quiz Bank (this course's students are used; nobody's answers travel). Actions copies or moves it elsewhere; Export gives CSV or Excel. This is the same bank as the QTS Bank tab."
+        : "Every quiz, test and survey from your active courses, plus an Independent list that isn't tied to any course. Use Actions to copy or move one to another course, the Independent list or a group, and Export for CSV or Excel. Copies carry the questions and settings, not students' answers."));
+      statusEl = mk("p", "result", msg || ""); host.appendChild(statusEl);
+      if (!model) return;
 
-    model.libs.forEach((lib) => {
-      const items = lib.items.filter(matches);
-      if (filter && !items.length) return;
-      const { sec, body } = section(`lib:${lib.key}`, lib.label, items.length);
-      if (lib.error) body.appendChild(mk("p", "hint", `Couldn't load this list: ${lib.error}`));
-      else if (!items.length) body.appendChild(mk("p", "hint", lib.key === "mine"
-        ? "Nothing here yet. Use “Copy to Shared” in a Test & Quiz Bank, or Actions → Copy to… → Independent on any item below."
-        : "Nothing shared in this group yet."));
-      else { const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "From course", ""]); items.forEach((t) => tbody.appendChild(itemRow({ lib: true, libKey: lib.key, test: t }))); body.appendChild(tb); }
-      panel.appendChild(sec);
-    });
-
-    model.courses.forEach((c) => {
-      const filtered = c.tools.map((t) => ({ ...t, shown: t.tests.filter(matches) }));
-      const total = filtered.reduce((a, t) => a + t.shown.length, 0);
-      if (filter && !total) return;
-      const { sec, body } = section(`course:${c.id}`, c.name, total);
-      if (!c.tools.length) body.appendChild(mk("p", "hint", "This course has no Test & Quiz Bank tab yet."));
-      filtered.forEach((t) => {
-        body.appendChild(mk("h4", "", `${t.toolName}`));
-        if (!t.shown.length) { body.appendChild(mk("p", "hint", filter ? "No matches." : "Empty.")); return; }
-        const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Students answered", "QR", ""]);
-        t.shown.forEach((test) => tbody.appendChild(itemRow({ lib: false, courseId: c.id, courseName: c.name, toolId: t.toolId, test })));
-        body.appendChild(tb);
+      model.libs.forEach((lib) => {
+        const secs = (lib.doc && Array.isArray(lib.doc.sections)) ? lib.doc.sections.filter((x) => x && x.id) : [];
+        const nameOf = (it) => { const sc = secs.find((x) => x.id === it.section); return sc ? (sc.name || "") : ""; };
+        const order = (it) => { const k = secs.findIndex((x) => x.id === it.section); return k < 0 ? secs.length : k; };
+        const items = lib.items.filter(matches).map((it, k) => ({ it, k })).sort((a, b) => order(a.it) - order(b.it) || a.k - b.k).map((x) => x.it);
+        if (filter && !items.length) return;
+        const { sec, body } = section(`lib:${lib.key}`, lib.label, items.length);
+        if (lib.error) body.appendChild(mk("p", "hint", `Couldn't load this list: ${lib.error}`));
+        else if (!items.length) body.appendChild(mk("p", "hint", lib.key === "mine"
+          ? "Nothing here yet. Use “Copy to QTS Bank” on a test or quiz in a Test & Quiz Bank, or Actions → Copy to… → Independent on any item below."
+          : "Nothing shared in this group yet."));
+        else { const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Section", "From course", ""]); items.forEach((t) => tbody.appendChild(itemRow({ lib: true, libKey: lib.key, test: t, sectionName: nameOf(t) }))); body.appendChild(tb); }
+        host.appendChild(sec);
       });
-      panel.appendChild(sec);
-    });
+
+      model.courses.forEach((c) => {
+        const filtered = c.tools.map((t) => ({ ...t, shown: t.tests.filter(matches) }));
+        const total = filtered.reduce((a, t) => a + t.shown.length, 0);
+        if (filter && !total) return;
+        const { sec, body } = section(`course:${c.id}`, c.name, total);
+        if (!c.tools.length) body.appendChild(mk("p", "hint", "This course has no Test & Quiz Bank tab yet."));
+        filtered.forEach((t) => {
+          body.appendChild(mk("h4", "", `${t.toolName}`));
+          if (!t.shown.length) { body.appendChild(mk("p", "hint", filter ? "No matches." : "Empty.")); return; }
+          const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Students answered", "QR", ""]);
+          t.shown.forEach((test) => tbody.appendChild(itemRow({ lib: false, courseId: c.id, courseName: c.name, toolId: t.toolId, test })));
+          body.appendChild(tb);
+        });
+        host.appendChild(sec);
+      });
+    }
+
+    return { refresh, render };
   }
+
+  // ---------- the tab ----------
+  const tabView = makeView(panel, null);
+  const origShowTab = window.showTab;
+  window.showTab = function (tab) {
+    origShowTab.apply(this, arguments);
+    const on = tab === "qts";
+    panel.hidden = !on;
+    tabBtn.classList.toggle("tab-btn-active", on);
+    if (on) tabView.refresh("", true);
+  };
+  tabBtn.addEventListener("click", () => window.showTab("qts"));
+
+  // ---------- inside a Test & Quiz Bank ----------
+  window.QTSBank = {
+    invalidate,
+    buildSection(tool, container) {
+      const { section, body } = makePresSection("QTS Bank — all tests, quizzes & surveys");
+      section.classList.add("qz-sec-shared");
+      const host = mk("div");
+      body.appendChild(host);
+      const view = makeView(host, { toolId: tool.id, rerender: () => renderScoringToolView(tool, container) });
+      const msg = pendingMsg; pendingMsg = "";
+      view.refresh(msg);
+      return section;
+    },
+  };
 })();
