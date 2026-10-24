@@ -2126,26 +2126,38 @@ function buildAttendanceRecordControls(student, session) {
     refreshAttendanceStatsRow(student.id);
   });
 
-  const infractionSelect = document.createElement("select");
-  infractionSelect.className = "attendance-infraction-select";
-  const noneOpt = document.createElement("option");
-  noneOpt.value = "";
-  noneOpt.textContent = "No infraction";
-  infractionSelect.appendChild(noneOpt);
-  AttendanceModule.settings.infractionOptions.forEach((opt) => {
-    const o = document.createElement("option");
-    o.value = opt;
-    o.textContent = opt;
-    if (opt === record.infraction) o.selected = true;
-    infractionSelect.appendChild(o);
-  });
-  applyInfractionColor(infractionSelect, record.infraction);
-  infractionSelect.addEventListener("change", async () => {
-    AttendanceModule.setRecord(student.id, session.id, { infraction: infractionSelect.value });
-    applyInfractionColor(infractionSelect, infractionSelect.value);
-    await saveAttendanceThen();
-    refreshAttendanceStatsRow(student.id);
-  });
+  // One dropdown per infraction: choosing one makes another appear below it, and so on.
+  const infractionStack = document.createElement("div");
+  infractionStack.className = "attendance-infraction-stack";
+  const drawInfractions = () => {
+    infractionStack.textContent = "";
+    const list = AttendanceModule.infractionsOf(AttendanceModule.getRecord(student.id, session.id));
+    const slots = list.length >= 12 ? list.length : list.length + 1;
+    for (let i = 0; i < slots; i++) {
+      const sel = document.createElement("select");
+      sel.className = "attendance-infraction-select";
+      const noneOpt = document.createElement("option");
+      noneOpt.value = "";
+      noneOpt.textContent = i === 0 ? "No infraction" : i < list.length ? "Remove this infraction" : "Add another infraction";
+      sel.appendChild(noneOpt);
+      AttendanceModule.settings.infractionOptions.forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        if (opt === list[i]) o.selected = true;
+        sel.appendChild(o);
+      });
+      applyInfractionColor(sel, list[i]);
+      sel.addEventListener("change", async () => {
+        AttendanceModule.setInfractionAt(student.id, session.id, i, sel.value);
+        drawInfractions();
+        await saveAttendanceThen();
+        refreshAttendanceStatsRow(student.id);
+      });
+      infractionStack.appendChild(sel);
+    }
+  };
+  drawInfractions();
 
   const memoInput = document.createElement("input");
   memoInput.type = "text";
@@ -2157,7 +2169,7 @@ function buildAttendanceRecordControls(student, session) {
     await saveAttendanceThen();
   });
 
-  return [codeSelect, infractionSelect, memoInput];
+  return [codeSelect, infractionStack, memoInput];
 }
 
 // Highlight colours are chosen by palette name; the shade itself comes from the current theme (the .att-hl-* rules in css/grid.css).
@@ -2289,7 +2301,7 @@ function defaultAttendanceSeatingSession() {
   const empty = sessions.find((sess) =>
     RosterModule.students.every((st) => {
       const rec = AttendanceModule.getRecord(st.id, sess.id);
-      return !rec.code && !rec.infraction && !rec.memo;
+      return !rec.code && AttendanceModule.infractionsOf(rec).length === 0 && !rec.memo;
     })
   );
   return (empty || sessions[sessions.length - 1]).id;

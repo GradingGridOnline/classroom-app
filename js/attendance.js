@@ -155,6 +155,23 @@ const AttendanceModule = {
     return this.records[this.recordKey(studentId, sessionId)] || { code: "", infraction: "", memo: "" };
   },
 
+  /** Every infraction recorded for one student in one class, in order (the first lives in `infraction`, the rest in `extraInfractions`). */
+  infractionsOf(rec) {
+    return [rec && rec.infraction, ...((rec && rec.extraInfractions) || [])].filter(Boolean);
+  },
+
+  /** Sets the infraction at a position (0 = first). Choosing "none" removes that one and the others move up. */
+  setInfractionAt(studentId, sessionId, index, value) {
+    const list = this.infractionsOf(this.getRecord(studentId, sessionId));
+    if (value) list[index] = value; else list.splice(index, 1);
+    const clean = list.filter(Boolean).slice(0, 12);
+    this.setRecord(studentId, sessionId, { infraction: clean[0] || "", extraInfractions: clean.slice(1) });
+  },
+
+  infractionPointsFor(rec) {
+    return this.infractionsOf(rec).reduce((a, i) => a + (this.settings.infractionPoints[i] ?? 0), 0);
+  },
+
   setRecord(studentId, sessionId, fields) {
     const key = this.recordKey(studentId, sessionId);
     const existing = this.records[key] || { code: "", infraction: "", memo: "" };
@@ -371,7 +388,7 @@ const AttendanceModule = {
           const record = this.getRecord(student.id, sessionId);
           if (!record.code) return "";
           let pts = this.settings.points[record.code] ?? 0;
-          if (record.infraction) pts += this.settings.infractionPoints[record.infraction] ?? 0;
+          pts += this.infractionPointsFor(record);
           return Math.round(pts * 100) / 100; // avoids results like 0.7999999999999999
         }
         const value = student[field];
@@ -394,7 +411,8 @@ const AttendanceModule = {
         number: s.number,
         date: s.date,
         code: rec.code || "",
-        infraction: rec.infraction || "",
+        infraction: this.infractionsOf(rec).join(", "),
+        infractions: this.infractionsOf(rec),
         memo: rec.memo || "",
       };
     });
@@ -411,7 +429,7 @@ const AttendanceModule = {
       classes++;
       if (!rec.code) return;
       earned += this.settings.points[rec.code] ?? 0;
-      if (rec.infraction) earned += this.settings.infractionPoints[rec.infraction] ?? 0;
+      earned += this.infractionPointsFor(rec);
     });
     return { earned: Math.round(earned * 100) / 100, possible: Math.round(classes * maxPerSession * 100) / 100 };
   },
@@ -435,7 +453,7 @@ const AttendanceModule = {
 
       counted++;
       let pts = this.settings.points[rec.code] ?? 0;
-      if (rec.infraction) pts += this.settings.infractionPoints[rec.infraction] ?? 0;
+      pts += this.infractionPointsFor(rec);
       totalPoints += pts;
     });
 

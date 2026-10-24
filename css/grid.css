@@ -1145,3 +1145,7 @@ html[data-textsize="large"] { font-size: 118%; }
 [data-theme="tron-legacy"] .unseated-item-selected .unseated-classnumber {
   background: rgba(6, 27, 36, 0.18);
 }
+
+/* Attendance: several infractions per class stack as extra dropdowns */
+.attendance-infraction-stack { display: block; }
+.attendance-infraction-stack > select.attendance-infraction-select { margin-bottom: 3px; }
