@@ -360,8 +360,10 @@
     /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
     snapshot(test, courseName) {
       const quiz = test.quiz ? ScoringModule.normalizeQuiz(test) : null;
+      if (quiz && !test.fam) test.fam = newId("fam"); // a family id lets the QTS Bank find and sync this quiz's copies
       return {
         id: newId("shared"),
+        fam: quiz ? test.fam : undefined,
         name: test.name,
         maxPoints: quiz ? ScoringModule.quizTotal(quiz) : Number(test.maxPoints) || 0,
         quiz: quiz ? JSON.parse(JSON.stringify({ kind: quiz.kind, settings: quiz.settings, sections: quiz.sections })) : null,
@@ -398,6 +400,7 @@
         sourceFile: item.quiz ? "Quiz editor" : "Shared test",
         rows: [], scores: {}, unmatched: [],
       };
+      if (item.fam && item.quiz) test.fam = item.fam;
       if (item.quiz) {
         test.quiz = { ...JSON.parse(JSON.stringify(item.quiz)), token: null, submissions: [] };
         ScoringModule.normalizeQuiz(test);
@@ -1306,6 +1309,7 @@
         const course = window.CoursesModule && CoursesModule.find(RosterModule.currentCourseId);
         if (window.QTSBank) SharedTests.scope = "mine";
         await SharedTests.addFromCourse(t, course ? course.name : "");
+        flush(); // saves the family id given to the original
         if (window.QTSBank) QTSBank.invalidate();
         say(`"${t.name}" copied to ${window.QTSBank ? "the QTS Bank's Independent list" : SharedTests.scopeLabel()} (students not included).`);
         rerender();

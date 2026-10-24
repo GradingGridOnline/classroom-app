@@ -5,6 +5,15 @@
 // Independent list or a group) and an Export menu (CSV or Excel). Copying carries the questions and settings, not
 // students' answers or scores. The same bank also appears inside every course's Test & Quiz Bank (with an
 // "Add to this course" button). Load AFTER app.js, quizbank.js and groupshare.js.
+//
+// INDEX: a small file (qtsindex.json) lists every course's tests/quizzes/surveys (name, type, counts, content
+// fingerprint). It is refreshed whenever a course's scoring file is saved, so opening the QTS Bank reads that one
+// small file instead of every course's full scoring data (which includes students' answers).
+//
+// SYNC: copies made through the QTS Bank (or "Copy to QTS Bank" / "Add to this course") share a family id (`fam`).
+// An item's Actions → "Sync with copies…" lists the other copies of the same quiz/survey, says which differ, and
+// lets you update this one from a copy, or send this one's questions and settings to a copy. Names, students'
+// answers, scores and QR links are never overwritten.
 
 (function () {
   const MAX_LIB = 100; // same cap as the Shared Tests & Quizzes list
@@ -51,8 +60,7 @@
   try { closedSet = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || []); } catch (e) { closedSet = new Set(); }
   const saveOpen = () => { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...closedSet])); } catch (e) {} };
 
-  // Reads are cached for two minutes (clicking Refresh, or any change made here, clears the cache) so the bank
-  // inside each Test & Quiz Bank doesn't re-read every course each time that screen redraws.
+  // Group lists are cached for two minutes (Refresh, or any change made here, clears the cache).
   const cache = new Map();
   const TTL = 120000;
   async function cached(key, loader) {
@@ -64,6 +72,113 @@
   }
   const invalidate = () => cache.clear();
 
+  // ---------- content fingerprints ----------
+  function stable(v) {
+    if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
+    if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}`;
+    return JSON.stringify(v === undefined ? null : v);
+  }
+  function fingerprint(str) { // cyrb53
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  /** The part of a quiz that is copied and synced: kind, settings, sections (not name, answers, scores, token). */
+  function contentOf(test) {
+    if (!test || !test.quiz) return null;
+    const t = { quiz: { kind: test.quiz.kind, settings: clone(test.quiz.settings || {}), sections: clone(test.quiz.sections || []) } };
+    const q = ScoringModule.normalizeQuiz(t);
+    return { kind: q.kind, settings: q.settings, sections: q.sections, max: q.kind === "survey" ? 0 : ScoringModule.quizTotal(q) };
+  }
+  function hashOf(test) {
+    const c = contentOf(test);
+    return c ? fingerprint(stable({ k: c.kind, s: c.settings, c: c.sections })) : "";
+  }
+  const KIND_LABEL = { quiz: "Quiz", answers: "Answer Collection", survey: "Survey", test: "Test (uploaded scores)" };
+  /** One-line facts about a full test object (what the index stores and the rows show). */
+  function describe(test) {
+    const quizOn = !!test.quiz;
+    let kind = "test", questions = null, max = Number(test.maxPoints) || 0, answers = Object.keys(test.scores || {}).length, qr = false;
+    if (quizOn) {
+      const c = contentOf(test);
+      kind = c.kind === "answers" ? "answers" : c.kind === "survey" ? "survey" : "quiz";
+      questions = c.sections.reduce((a, sec) => a + (sec.questions || []).length, 0);
+      max = kind === "survey" ? null : c.max;
+      answers = new Set((test.quiz.submissions || []).map((x) => x.sid)).size;
+      qr = !!test.quiz.token;
+    }
+    return { id: test.id, name: test.name || "", kind, questions, max, answers, qr, fam: test.fam || "", hash: quizOn ? hashOf(test) : "", contentAt: test.contentAt || test.createdAt || "" };
+  }
+
+  // ---------- the index (qtsindex.json) ----------
+  const INDEX_FILE = "qtsindex.json";
+  const isTmp = (id) => String(id).startsWith("tmpledit-");
+  function describeTools(tools) {
+    return (tools || []).filter((t) => t.type === "testbank").map((t) => ({
+      toolId: t.id, toolName: t.name,
+      tests: ((t.config && Array.isArray(t.config.tests)) ? t.config.tests : []).map(describe),
+    }));
+  }
+  /** Keeps each item's "content last changed" time: unchanged content keeps the old time, changed or new content gets now. */
+  function stampTimes(tools, prev) {
+    const now = new Date().toISOString();
+    const old = new Map();
+    ((prev && prev.tools) || []).forEach((t) => t.tests.forEach((x) => old.set(x.id, x)));
+    tools.forEach((t) => t.tests.forEach((x) => {
+      const o = old.get(x.id);
+      if (o) x.contentAt = o.hash === x.hash ? (o.contentAt || x.contentAt) : now;
+      else if (prev) x.contentAt = x.contentAt || now;
+    }));
+    return tools;
+  }
+  const Index = {
+    queue: new Map(), gone: new Set(), timer: null, running: null, rawSave: null, rawLoad: null,
+    queueCourse(courseId, tools) { if (isTmp(courseId)) return; this.gone.delete(courseId); this.queue.set(courseId, describeTools(tools)); this.arm(); },
+    queueDelete(courseId) { this.queue.delete(courseId); this.gone.add(courseId); this.arm(); },
+    arm() { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush().catch(() => {}), 1500); },
+    async flush() {
+      clearTimeout(this.timer);
+      if (this.running) { try { await this.running; } catch (e) {} }
+      if (!this.queue.size && !this.gone.size) return;
+      const q = new Map(this.queue), g = new Set(this.gone);
+      this.queue.clear(); this.gone.clear();
+      this.running = (async () => {
+        const idx = (await storage.loadFile(INDEX_FILE)) || {};
+        idx.courses = idx.courses || {};
+        q.forEach((tools, id) => { idx.courses[id] = { at: new Date().toISOString(), tools: stampTimes(tools, idx.courses[id]) }; });
+        g.forEach((id) => { delete idx.courses[id]; });
+        await storage.saveFile(INDEX_FILE, idx);
+      })();
+      try { await this.running; } finally { this.running = null; }
+    },
+    async load() { await this.flush().catch(() => {}); const d = await storage.loadFile(INDEX_FILE); return d && d.courses ? d : { courses: {} }; },
+  };
+  // Every save/delete of a course's scoring file refreshes that course's index entry.
+  function hookStorage(P) {
+    if (!P || P.__qtsHooked) return;
+    P.__qtsHooked = true;
+    const rawSave = P.saveFile, rawDelete = P.deleteFile;
+    P.saveFile = async function (name, data) {
+      const r = await rawSave.apply(this, arguments);
+      const m = /^scoring-(.+)\.json$/.exec(String(name));
+      if (m && data && Array.isArray(data.tools)) { try { Index.queueCourse(m[1], data.tools); } catch (e) {} }
+      return r;
+    };
+    if (rawDelete) {
+      P.deleteFile = async function (name) {
+        const r = await rawDelete.apply(this, arguments);
+        const m = /^scoring-(.+)\.json$/.exec(String(name));
+        if (m) Index.queueDelete(m[1]);
+        return r;
+      };
+    }
+  }
+  if (typeof SupabaseProvider !== "undefined") hookStorage(SupabaseProvider.prototype);
+  window.addEventListener("beforeunload", () => { try { if (Index.queue.size) Index.flush(); } catch (e) {} });
+
+  // ---------- reading everything ----------
   async function loadModel(opts) {
     if (opts && opts.flush && window.GGOAutosave && GGOAutosave.enabled()) await GGOAutosave.flush();
     const m = { libs: [], courses: [] };
@@ -79,26 +194,31 @@
         } catch (e) { m.libs.push({ key: g.id, label: `Group: ${g.name}`, items: [], doc: {}, error: e.message }); }
       }
     }
+    // Courses come from the small index; a course missing from it (or all of them after "Rebuild") is read once.
+    const idx = opts && opts.rebuild ? { courses: {} } : await Index.load();
+    let changedIdx = !!(opts && opts.rebuild);
     for (const c of CoursesModule.activeCourses()) {
-      const live = ScoringModule.currentCourseId === c.id;
-      let data;
-      try { data = live ? { tools: ScoringModule.tools } : await cached(`scoring:${c.id}`, () => storage.loadFile(`scoring-${c.id}.json`)); } catch (e) { data = null; }
-      const tools = ((data && data.tools) || []).filter((t) => t.type === "testbank")
-        .map((t) => ({ toolId: t.id, toolName: t.name, tests: (t.config && Array.isArray(t.config.tests)) ? t.config.tests : [] }));
-      m.courses.push({ id: c.id, name: c.name, tools });
+      let tools;
+      if (ScoringModule.currentCourseId === c.id) {
+        tools = stampTimes(describeTools(ScoringModule.tools), idx.courses[c.id]); // the open course is always read live
+      } else if (idx.courses[c.id]) {
+        tools = idx.courses[c.id].tools;
+      } else {
+        let data = null;
+        try { data = await storage.loadFile(`scoring-${c.id}.json`); } catch (e) { data = null; }
+        tools = describeTools((data && data.tools) || []);
+        idx.courses[c.id] = { at: new Date().toISOString(), tools };
+        changedIdx = true;
+      }
+      m.courses.push({ id: c.id, name: c.name, tools: tools.map((t) => ({ toolId: t.toolId, toolName: t.toolName, tests: t.tests })) });
     }
+    if (changedIdx) { try { await storage.saveFile(INDEX_FILE, idx); } catch (e) {} }
+    // Families: every copy of the same quiz/survey (same `fam`), wherever it lives.
+    m.fams = new Map();
+    const add = (fam, mem) => { if (!fam) return; if (!m.fams.has(fam)) m.fams.set(fam, []); m.fams.get(fam).push(mem); };
+    m.libs.forEach((l) => l.items.forEach((it) => { if (it.quiz && it.fam) add(it.fam, { kind: "lib", libKey: l.key, id: it.id, label: l.label.replace("Independent — not in any course", "Independent"), d: describe(it) }); }));
+    m.courses.forEach((c) => c.tools.forEach((t) => t.tests.forEach((x) => { if (x.fam) add(x.fam, { kind: "course", courseId: c.id, toolId: t.toolId, id: x.id, label: `${c.name} › ${t.toolName}`, d: x }); })));
     return m;
-  }
-
-  // ---------- item info ----------
-  function info(test) {
-    let quiz = null;
-    if (test.quiz) { const t = clone(test); quiz = ScoringModule.normalizeQuiz(t); }
-    const kind = quiz ? (quiz.kind === "answers" ? "Answer Collection" : quiz.kind === "survey" ? "Survey" : "Quiz") : "Test (uploaded scores)";
-    const questions = quiz ? quiz.sections.reduce((a, s) => a + (s.questions || []).length, 0) : null;
-    const max = quiz ? (quiz.kind === "survey" ? null : ScoringModule.quizTotal(quiz)) : Number(test.maxPoints) || 0;
-    const answers = quiz ? new Set((quiz.submissions || []).map((s) => s.sid)).size : Object.keys(test.scores || {}).length;
-    return { quiz, kind, questions, max, answers, qr: !!(test.quiz && test.quiz.token) };
   }
 
   // ---------- menus ----------
@@ -129,19 +249,64 @@
     return b;
   }
 
+  // ---------- finding the full item behind a row ----------
+  const live = (courseId) => ScoringModule.currentCourseId === courseId;
+  const nowIso = () => new Date().toISOString();
+  async function courseFile(courseId) { return await storage.loadFile(`scoring-${courseId}.json`); }
+  /** The complete test object (questions, answers…) for a row. Library items are already complete; other courses are read on demand. */
+  async function fullOf(ref) {
+    if (ref.lib || ref.kind === "lib") {
+      const l = (await libLoad(ref.libKey)) || {};
+      return (l.items || []).find((x) => x.id === ref.id || x.id === (ref.d && ref.d.id)) || null;
+    }
+    const id = ref.id || (ref.d && ref.d.id);
+    if (live(ref.courseId)) return ScoringModule.findTest(ref.toolId, id);
+    const data = await courseFile(ref.courseId);
+    const tool = ((data && data.tools) || []).find((t) => t.id === ref.toolId);
+    return (tool && tool.config && (tool.config.tests || []).find((x) => x.id === id)) || null;
+  }
+  /** Writes a change to one course test (live course: in memory + autosave; other course: that file). */
+  async function editCourseTest(ref, fn) {
+    const id = ref.id || (ref.d && ref.d.id);
+    if (live(ref.courseId)) { const t = ScoringModule.findTest(ref.toolId, id); if (!t) throw new Error("That item no longer exists."); const r = fn(t, true); flush(); invalidate(); return r; }
+    const data = await courseFile(ref.courseId);
+    const tool = ((data && data.tools) || []).find((x) => x.id === ref.toolId);
+    const t = tool && tool.config && (tool.config.tests || []).find((x) => x.id === id);
+    if (!t) throw new Error("That item no longer exists.");
+    const r = fn(t, false);
+    await storage.saveFile(`scoring-${ref.courseId}.json`, data);
+    invalidate();
+    return r;
+  }
+
   // ---------- exports ----------
+  function exportLabels(d, isLib) {
+    if (d.kind === "test") return isLib ? [] : [["CSV: Scores", "csv"], ["Excel: Scores", "xlsx"]];
+    if (!window.QuizExport) return [];
+    const stub = { name: "x", quiz: { kind: d.kind === "answers" ? "answers" : d.kind === "survey" ? "survey" : "standard", settings: {}, sections: [], submissions: [] } };
+    return window.QuizExport.items(stub, isLib).map((it) => [it.label, null]);
+  }
   function uploadedExport(test, fmt) {
     const rows = [["Student", "School ID", "Score", "Max score"]];
     (test.rows || []).forEach((r) => rows.push([r.name || "", r.schoolId || "", r.score === undefined ? "" : r.score, Number(test.maxPoints) || ""]));
     QuizExport.download(`${test.name || "test"} - scores`, rows, fmt);
   }
-  function exportMenuItems(test, isLib) {
-    if (test.quiz) return window.QuizExport ? window.QuizExport.items(test, isLib) : [];
-    if (isLib) return [];
-    return [
-      { label: "CSV: Scores", onClick: () => uploadedExport(test, "csv") },
-      { label: "Excel: Scores", onClick: () => uploadedExport(test, "xlsx") },
-    ];
+  function exportMenuItems(src, say) {
+    const isLib = !!src.lib;
+    return exportLabels(src.d, isLib).map(([label, fmt]) => ({
+      label,
+      onClick: async () => {
+        try {
+          say("Preparing export…");
+          const test = isLib ? src.test : await fullOf(src);
+          if (!test) throw new Error("That item no longer exists.");
+          if (!test.quiz) { uploadedExport(test, fmt); say(""); return; }
+          const hit = window.QuizExport.items(test, isLib).find((x) => x.label === label);
+          if (hit) hit.onClick();
+          say("");
+        } catch (e) { say(`Couldn't export: ${e.message}`); }
+      },
+    }));
   }
 
   // ---------- placing / removing ----------
@@ -156,22 +321,37 @@
   async function libAdd(key, item) {
     const d = (await libLoad(key)) || {}; d.items = d.items || [];
     if (d.items.length >= MAX_LIB) throw new Error(`That list is at its limit of ${MAX_LIB}.`);
+    item.contentAt = nowIso();
     d.items.push(item); await libSave(key, d);
   }
   async function libRemove(key, id) {
     const d = (await libLoad(key)) || {}; d.items = (d.items || []).filter((x) => x.id !== id); await libSave(key, d);
   }
-  function snapshotOf(src) {
-    if (src.lib) { const c = clone(src.test); c.id = rid("shared"); c.createdAt = new Date().toISOString(); return c; }
-    return window.SharedTestsModule.snapshot(clone(src.test), src.courseName || "");
+  /** Gives a quiz/survey a family id (once), so its copies can be found and synced. Returns the full item. */
+  async function ensureFam(src) {
+    const test = await fullOf(src);
+    if (!test) throw new Error("That item no longer exists.");
+    if (!test.quiz || test.fam) return test;
+    const fam = rid("fam");
+    if (src.lib) { const d = (await libLoad(src.libKey)) || {}; const it = (d.items || []).find((x) => x.id === test.id); if (it) { it.fam = fam; await libSave(src.libKey, d); } test.fam = fam; return test; }
+    await editCourseTest(src, (t) => { t.fam = fam; });
+    test.fam = fam;
+    return live(src.courseId) ? test : (await fullOf(src));
+  }
+  function snapshotOf(src, test) {
+    if (src.lib) { const c = clone(test); c.id = rid("shared"); c.createdAt = nowIso(); return c; }
+    const snap = window.SharedTestsModule.snapshot(clone(test), src.courseName || "");
+    if (test.fam) snap.fam = test.fam;
+    return snap;
   }
   function courseTestFrom(snap) {
-    const t = { id: rid("test"), name: snap.name, maxPoints: Number(snap.maxPoints) || 0, sourceFile: snap.quiz ? "Quiz editor" : "Shared test", rows: [], scores: {}, unmatched: [] };
+    const t = { id: rid("test"), name: snap.name, maxPoints: Number(snap.maxPoints) || 0, sourceFile: snap.quiz ? "Quiz editor" : "Shared test", rows: [], scores: {}, unmatched: [], createdAt: nowIso() };
+    if (snap.fam) t.fam = snap.fam;
     if (snap.quiz) t.quiz = { ...clone(snap.quiz), token: null, submissions: [] };
     return t;
   }
   async function courseAdd(courseId, toolId, test) {
-    if (ScoringModule.currentCourseId === courseId) {
+    if (live(courseId)) {
       let id = toolId;
       if (id === "__new") id = ScoringModule.addTool("testbank").id;
       const cfg = ScoringModule.getTestBankConfig(id);
@@ -197,7 +377,7 @@
     invalidate();
   }
   async function courseRemove(courseId, toolId, testId) {
-    if (ScoringModule.currentCourseId === courseId) { ScoringModule.removeTest(toolId, testId); flush(); invalidate(); return; }
+    if (live(courseId)) { ScoringModule.removeTest(toolId, testId); flush(); invalidate(); return; }
     const data = await storage.loadFile(`scoring-${courseId}.json`);
     if (!data) return;
     const tool = (data.tools || []).find((t) => t.id === toolId);
@@ -214,12 +394,85 @@
     invalidate();
   }
 
+  // ---------- syncing copies ----------
+  const sameSpot = (a, b) => a.kind === b.kind && a.id === b.id && (a.kind === "lib" ? a.libKey === b.libKey : a.courseId === b.courseId && a.toolId === b.toolId);
+  const selfOf = (src) => (src.lib ? { kind: "lib", libKey: src.libKey, id: src.d.id } : { kind: "course", courseId: src.courseId, toolId: src.toolId, id: src.d.id });
+  function othersOf(model, src) {
+    if (!src.d.fam) return [];
+    const me = selfOf(src);
+    return (model.fams.get(src.d.fam) || []).filter((x) => !sameSpot(x, me));
+  }
+  /** Replaces a copy's questions and settings. Its name, students' answers, scores and QR link stay as they are. */
+  async function applyContent(target, content) {
+    if (target.kind === "lib") {
+      const d = (await libLoad(target.libKey)) || {};
+      const it = (d.items || []).find((x) => x.id === target.id);
+      if (!it) throw new Error("That item no longer exists.");
+      it.quiz = { kind: content.kind, settings: clone(content.settings), sections: clone(content.sections) };
+      it.maxPoints = content.max; it.contentAt = nowIso();
+      await libSave(target.libKey, d);
+      return;
+    }
+    const probe = await fullOf(target);
+    if (!probe) throw new Error("That item no longer exists.");
+    if (probe.quiz && probe.quiz.token) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR Code → Close QR Code)");
+    if (!live(target.courseId) && probe.quiz && (probe.quiz.submissions || []).length) throw new Error("it has students' answers, which need regrading — open that course and update it from its own Test & Quiz Bank");
+    await editCourseTest(target, (t, isLive) => {
+      t.quiz = { ...(t.quiz || {}), kind: content.kind, settings: clone(content.settings), sections: clone(content.sections) };
+      if (!Array.isArray(t.quiz.submissions)) t.quiz.submissions = [];
+      t.maxPoints = content.max; t.contentAt = nowIso();
+      if (isLive) ScoringModule.regradeQuiz(target.toolId, t.id);
+    });
+  }
+  function syncDialog(src, model) {
+    return new Promise((resolve) => {
+      const others = othersOf(model, src), me = selfOf(src);
+      const ov = mk("div"); ov.id = "qts-overlay";
+      const box = mk("div"); box.id = "qts-box"; box.style.width = "min(680px,100%)"; ov.appendChild(box);
+      box.appendChild(mk("h3", "", `Sync “${src.d.name}”`));
+      box.appendChild(mk("p", "hint", "These are copies of the same quiz/survey. “Update this” takes the other copy's questions and settings. “Send this” overwrites the other copy with this one's. Names, students' answers, scores and QR links are never changed."));
+      const fmt = (iso) => (iso ? new Date(iso).toLocaleString() : "unknown");
+      const here = mk("p", "hint", `This copy: ${src.lib ? "library" : `${src.courseName}`} · content last changed ${fmt(src.d.contentAt)}`);
+      box.appendChild(here);
+      const done = (v) => { ov.remove(); resolve(v); };
+      if (!others.length) box.appendChild(mk("p", "", "No other copies found."));
+      others.forEach((o) => {
+        const same = o.d.hash === src.d.hash;
+        const row = mk("div"); row.style.cssText = "border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:8px 0;";
+        row.appendChild(mk("div", "", `${o.label} — “${o.d.name}”`));
+        const status = mk("div", "hint", same ? "✓ Same questions and settings" : `Different · theirs last changed ${fmt(o.d.contentAt)}`);
+        row.appendChild(status);
+        const acts = mk("div", "qts-actions"); acts.style.justifyContent = "flex-start";
+        const upd = mk("button", "btn btn-ghost btn-small", "Update this from it"); upd.type = "button"; upd.disabled = same;
+        const snd = mk("button", "btn btn-ghost btn-small", "Send this to it"); snd.type = "button"; snd.disabled = same;
+        const run = (dir) => async () => {
+          const fromRef = dir === "update" ? o : me, toRef = dir === "update" ? me : o;
+          if (!confirm(dir === "update" ? `Replace this copy's questions and settings with those from “${o.label}”?` : `Replace the questions and settings of “${o.label}” with this copy's?`)) return;
+          try {
+            status.textContent = "Working…";
+            const srcTest = await fullOf(fromRef);
+            if (!srcTest) throw new Error("the source item no longer exists");
+            await applyContent(toRef, contentOf(srcTest));
+            done({ ok: true, msg: dir === "update" ? `Updated “${src.d.name}” from ${o.label}.` : `Sent to ${o.label}.` });
+          } catch (e) { status.textContent = `Couldn't do that: ${e.message}`; }
+        };
+        upd.addEventListener("click", run("update")); snd.addEventListener("click", run("send"));
+        acts.append(upd, snd); row.appendChild(acts); box.appendChild(row);
+      });
+      const bar = mk("div", "qts-actions");
+      const close = mk("button", "btn btn-primary", "Close"); close.type = "button"; close.addEventListener("click", () => done(null));
+      bar.appendChild(close); box.appendChild(bar);
+      ov.addEventListener("mousedown", (e) => { if (e.target === ov) done(null); });
+      document.body.appendChild(ov);
+    });
+  }
+
   // ---------- the copy / move dialog ----------
   function chooseDestination(src, move, model) {
     return new Promise((resolve) => {
       const ov = mk("div"); ov.id = "qts-overlay";
       const box = mk("div"); box.id = "qts-box"; ov.appendChild(box);
-      box.appendChild(mk("h3", "", `${move ? "Move" : "Copy"} “${src.test.name}”`));
+      box.appendChild(mk("h3", "", `${move ? "Move" : "Copy"} “${src.d.name}”`));
       box.appendChild(mk("p", "hint", move
         ? "The questions and settings go to the new place; students' answers and scores do NOT travel. The original is then removed."
         : "The questions and settings are copied; students' answers and scores are not."));
@@ -268,13 +521,13 @@
     host.classList.add("qts-root");
     const say = (t) => { if (statusEl) statusEl.textContent = t; };
 
-    async function refresh(msg, force) {
+    async function refresh(msg, force, rebuild) {
       if (busy) return;
       if (force) invalidate();
       busy = true;
       host.textContent = "";
       host.appendChild(mk("p", "hint", "Loading your tests, quizzes and surveys…"));
-      try { model = await loadModel({ flush: !inTool }); }
+      try { model = await loadModel({ flush: !inTool, rebuild: !!rebuild }); }
       catch (e) { host.textContent = ""; host.appendChild(mk("p", "hint", `Couldn't load: ${e.message}`)); busy = false; return; }
       busy = false;
       render(msg);
@@ -282,37 +535,46 @@
     // after a change: the Test & Quiz Bank redraws itself (so its own list is current); the tab just reloads
     const changed = async (msg) => {
       invalidate();
+      try { await Index.flush(); } catch (e) {}
       if (inTool && ctx.rerender) { pendingMsg = msg || ""; ctx.rerender(); } else await refresh(msg);
     };
 
     async function transfer(src, move) {
-      if (move && !src.lib && src.test.quiz && src.test.quiz.token) { say("Close this quiz's QR code first (Test & Quiz Bank → QR Code → Close QR Code), then move it."); return; }
+      if (move && !src.lib && src.d.qr) { say("Close this quiz's QR code first (Test & Quiz Bank → QR Code → Close QR Code), then move it."); return; }
       const dest = await chooseDestination(src, move, model);
       if (!dest) return;
       try {
         say(`${move ? "Moving" : "Copying"}…`);
-        const snap = snapshotOf(src);
+        const test = await ensureFam(src); // quizzes/surveys get a family id so their copies can be synced
+        if (move && !src.lib && test.quiz && test.quiz.token) { say("Close this quiz's QR code first, then move it."); return; }
+        const snap = snapshotOf(src, test);
         if (dest.kind === "lib") await libAdd(dest.id, snap);
         else await courseAdd(dest.id, dest.toolId, courseTestFrom(snap));
         if (move) {
-          if (src.lib) await libRemove(src.libKey, src.test.id);
-          else await courseRemove(src.courseId, src.toolId, src.test.id);
+          if (src.lib) await libRemove(src.libKey, src.d.id);
+          else await courseRemove(src.courseId, src.toolId, src.d.id);
         }
-        await changed(`${move ? "Moved" : "Copied"} “${src.test.name}”.`);
+        await changed(`${move ? "Moved" : "Copied"} “${src.d.name}”.`);
       } catch (e) { say(`Couldn't do that: ${e.message}`); }
     }
 
     function itemRow(src) {
-      const t = src.test, i = info(t);
+      const d = src.d;
       const tr = mk("tr");
-      tr.appendChild(mk("td", "", t.name || "(untitled)"));
-      tr.appendChild(mk("td", "", i.kind));
-      tr.appendChild(mk("td", "", i.questions == null ? "—" : String(i.questions)));
-      tr.appendChild(mk("td", "", i.max == null ? "—" : i.max ? String(i.max) : "—"));
+      tr.appendChild(mk("td", "", d.name || "(untitled)"));
+      tr.appendChild(mk("td", "", KIND_LABEL[d.kind] || "Quiz"));
+      tr.appendChild(mk("td", "", d.questions == null ? "—" : String(d.questions)));
+      tr.appendChild(mk("td", "", d.max == null ? "—" : d.max ? String(d.max) : "—"));
       if (src.lib) {
         tr.appendChild(mk("td", "hint", src.sectionName || "—"));
-        tr.appendChild(mk("td", "hint", t.sourceCourseName || "—"));
-      } else { tr.appendChild(mk("td", "", i.quiz || i.answers ? String(i.answers) : "0")); tr.appendChild(mk("td", "", i.qr ? "QR open" : "")); }
+        tr.appendChild(mk("td", "hint", src.test.sourceCourseName || "—"));
+      } else { tr.appendChild(mk("td", "", String(d.answers || 0))); tr.appendChild(mk("td", "", d.qr ? "QR open" : "")); }
+      const others = othersOf(model, src);
+      const diff = others.filter((x) => x.d.hash !== d.hash).length;
+      const syncTd = mk("td", others.length ? "" : "hint");
+      syncTd.textContent = !others.length ? "—" : diff ? `⟳ ${others.length} cop${others.length === 1 ? "y" : "ies"}, ${diff} differ${diff === 1 ? "s" : ""}` : `✓ ${others.length} cop${others.length === 1 ? "y" : "ies"}, same`;
+      if (diff) syncTd.style.fontWeight = "700";
+      tr.appendChild(syncTd);
       const td = mk("td"); const acts = mk("div", "qts-acts");
       const here = inTool && !src.lib && src.courseId === ScoringModule.currentCourseId && src.toolId === ctx.toolId;
       if (inTool && !here) {
@@ -321,33 +583,36 @@
         add.addEventListener("click", async () => {
           try {
             say("Adding…");
-            await courseAdd(ScoringModule.currentCourseId, ctx.toolId, courseTestFrom(snapshotOf(src)));
-            await changed(`“${t.name}” added to this course.`);
+            const test = await ensureFam(src);
+            await courseAdd(ScoringModule.currentCourseId, ctx.toolId, courseTestFrom(snapshotOf(src, test)));
+            await changed(`“${d.name}” added to this course.`);
           } catch (e) { say(`Couldn't do that: ${e.message}`); }
         });
         acts.appendChild(add);
       }
       acts.appendChild(menuButton("Actions", () => {
-        const items = [
+        const items = [];
+        if (others.length) items.push({ label: diff ? `Sync with copies… (${diff} differ)` : "Sync with copies…", onClick: async () => { const r = await syncDialog(src, model); if (r && r.ok) await changed(r.msg); } }, "-");
+        items.push(
           { label: "Copy to…", onClick: () => transfer(src, false) },
           { label: "Move to…", onClick: () => transfer(src, true) },
-        ];
+        );
         if (src.lib) {
           items.push("-", {
             label: "Rename…", onClick: async () => {
-              const v = prompt("New name:", t.name); if (v === null || !v.trim()) return;
-              try { const d = (await libLoad(src.libKey)) || {}; const it = (d.items || []).find((x) => x.id === t.id); if (it) { it.name = v.trim(); await libSave(src.libKey, d); } await changed("Renamed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
+              const v = prompt("New name:", d.name); if (v === null || !v.trim()) return;
+              try { const dd = (await libLoad(src.libKey)) || {}; const it = (dd.items || []).find((x) => x.id === d.id); if (it) { it.name = v.trim(); await libSave(src.libKey, dd); } await changed("Renamed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
             },
           }, {
             label: "Delete", onClick: async () => {
-              if (!confirm(`Remove “${t.name}” from this list? Copies already in courses are not affected.`)) return;
-              try { await libRemove(src.libKey, t.id); await changed("Removed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
+              if (!confirm(`Remove “${d.name}” from this list? Copies already in courses are not affected.`)) return;
+              try { await libRemove(src.libKey, d.id); await changed("Removed."); } catch (e) { say(`Couldn't do that: ${e.message}`); }
             },
           });
         }
         return items;
       }));
-      const ex = exportMenuItems(t, !!src.lib);
+      const ex = exportMenuItems(src, say);
       if (ex.length) acts.appendChild(menuButton("Export", () => ex));
       td.appendChild(acts); tr.appendChild(td);
       return tr;
@@ -379,7 +644,10 @@
       const search = mk("input"); search.type = "search"; search.placeholder = "Search by name…"; search.value = filter;
       search.addEventListener("input", () => { filter = search.value.trim().toLowerCase(); const pos = search.selectionStart; render(); const s = host.querySelector("input[type=search]"); if (s) { s.focus(); s.setSelectionRange(pos, pos); } });
       const re = mk("button", "btn btn-ghost btn-small", "Refresh"); re.type = "button"; re.addEventListener("click", () => refresh("", true));
-      head.append(search, re);
+      const rb = mk("button", "btn btn-ghost btn-small", "Rebuild index"); rb.type = "button";
+      rb.title = "Re-reads every course once. Use it if a list looks out of date (for example after changes made on another device).";
+      rb.addEventListener("click", () => { if (confirm("Re-read every course to rebuild the QTS index? This reads all your courses' scoring data once.")) refresh("", true, true); });
+      head.append(search, re, rb);
       host.appendChild(head);
       host.appendChild(mk("p", "hint", inTool
         ? "Every quiz, test and survey from all your active courses, plus an Independent list that isn't tied to any course. “Add to this course” copies one into this Test & Quiz Bank (this course's students are used; nobody's answers travel). Actions copies or moves it elsewhere; Export gives CSV or Excel. This is the same bank as the QTS Bank tab."
@@ -398,7 +666,7 @@
         else if (!items.length) body.appendChild(mk("p", "hint", lib.key === "mine"
           ? "Nothing here yet. Use “Copy to QTS Bank” on a test or quiz in a Test & Quiz Bank, or Actions → Copy to… → Independent on any item below."
           : "Nothing shared in this group yet."));
-        else { const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Section", "From course", ""]); items.forEach((t) => tbody.appendChild(itemRow({ lib: true, libKey: lib.key, test: t, sectionName: nameOf(t) }))); body.appendChild(tb); }
+        else { const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Section", "From course", "Copies", ""]); items.forEach((t) => tbody.appendChild(itemRow({ lib: true, libKey: lib.key, test: t, d: describe(t), sectionName: nameOf(t) }))); body.appendChild(tb); }
         host.appendChild(sec);
       });
 
@@ -411,8 +679,8 @@
         filtered.forEach((t) => {
           body.appendChild(mk("h4", "", `${t.toolName}`));
           if (!t.shown.length) { body.appendChild(mk("p", "hint", filter ? "No matches." : "Empty.")); return; }
-          const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Students answered", "QR", ""]);
-          t.shown.forEach((test) => tbody.appendChild(itemRow({ lib: false, courseId: c.id, courseName: c.name, toolId: t.toolId, test })));
+          const { tb, body: tbody } = table(["Test / Quiz / Survey", "Type", "Questions", "Max score", "Students answered", "QR", "Copies", ""]);
+          t.shown.forEach((test) => tbody.appendChild(itemRow({ lib: false, courseId: c.id, courseName: c.name, toolId: t.toolId, d: test })));
           body.appendChild(tb);
         });
         host.appendChild(sec);
@@ -437,6 +705,8 @@
   // ---------- inside a Test & Quiz Bank ----------
   window.QTSBank = {
     invalidate,
+    hookStorage, // exposed for testing
+    flushIndex: () => Index.flush(),
     buildSection(tool, container) {
       const { section, body } = makePresSection("QTS Bank — all tests, quizzes & surveys");
       section.classList.add("qz-sec-shared");
