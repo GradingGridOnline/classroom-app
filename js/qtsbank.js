@@ -614,7 +614,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     ctx = ctx || {};
     let model = null, busy = false, statusEl = null;
     const F = { q: "", course: "", type: "", fam: "", status: "", made: "", scores: "" };
-    let sort = { key: "course", dir: 1 };
+    let sort = [{ key: "course", dir: 1 }]; // up to two: main sort, then a sub-sort within it
     const inTool = !!ctx.toolId;
     host.classList.add("qts-root");
     const say = (t) => { if (statusEl) statusEl.textContent = t; };
@@ -667,7 +667,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         const d = r.d;
         switch (k) {
           case "name": return String(d.name).toLowerCase();
-          case "course": return `${r.courseName}\u0000${String(d.name).toLowerCase()}`.toLowerCase();
+          case "course": return r.courseName.toLowerCase();
           case "type": return d.kind;
           case "fam": return d.fam ? (model.fams.get(d.fam) || []).length : 0;
           case "q": return d.questions == null ? -1 : d.questions;
@@ -678,7 +678,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
           default: return statusOf(d);
         }
       };
-      rows.sort((a, b) => { const x = val(a, sort.key), y = val(b, sort.key); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
+      rows.sort((a, b) => { for (const s of sort) { const x = val(a, s.key), y = val(b, s.key); if (x !== y) return (x < y ? -1 : 1) * s.dir; } return String(a.d.name).localeCompare(String(b.d.name)); });
       return rows;
     }
 
@@ -768,8 +768,15 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const tb = mk("table", "source-grid qts-grid");
       const hr = mk("tr");
       COLS.forEach(([k, label]) => {
-        const th = mk("th", "", label + (sort.key === k ? (sort.dir > 0 ? " ▲" : " ▼") : " ⇅"));
-        th.title = "Click to sort (click again to reverse)"; th.addEventListener("click", () => { sort = { key: k, dir: sort.key === k ? -sort.dir : 1 }; render(); });
+        const pos = sort.findIndex((x) => x.key === k);
+        const th = mk("th", "", label + (pos < 0 ? " ⇅" : ` ${sort[pos].dir > 0 ? "▲" : "▼"}${sort.length > 1 ? pos + 1 : ""}`));
+        th.title = "Click: sort ascending. Click again: descending. A third click turns it off. A second sorted column sorts within the first.";
+        th.addEventListener("click", () => {
+          if (pos < 0) { sort = sort.length >= 2 ? [sort[0], { key: k, dir: 1 }] : [...sort, { key: k, dir: 1 }]; }
+          else if (sort[pos].dir > 0) sort[pos].dir = -1;
+          else sort.splice(pos, 1);
+          render();
+        });
         hr.appendChild(th);
       });
       hr.appendChild(mk("th", "nosort", ""));
