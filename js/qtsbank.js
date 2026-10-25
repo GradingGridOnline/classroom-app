@@ -768,8 +768,8 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const tb = mk("table", "source-grid qts-grid");
       const hr = mk("tr");
       COLS.forEach(([k, label]) => {
-        const th = mk("th", "", label + (sort.key === k ? (sort.dir > 0 ? " ▲" : " ▼") : ""));
-        th.addEventListener("click", () => { sort = { key: k, dir: sort.key === k ? -sort.dir : 1 }; render(); });
+        const th = mk("th", "", label + (sort.key === k ? (sort.dir > 0 ? " ▲" : " ▼") : " ⇅"));
+        th.title = "Click to sort (click again to reverse)"; th.addEventListener("click", () => { sort = { key: k, dir: sort.key === k ? -sort.dir : 1 }; render(); });
         hr.appendChild(th);
       });
       hr.appendChild(mk("th", "nosort", ""));
