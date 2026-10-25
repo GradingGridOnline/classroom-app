@@ -1304,19 +1304,18 @@
     tests.forEach((t, i) => {
       const tr = mains[i];
       if (!tr) return;
-      const shareBtn = button(window.QTSBank ? "Copy to QTS Bank" : "Copy to Shared", "btn btn-ghost btn-small qz-act-share", guard(async () => {
-        say("Copying…");
-        const course = window.CoursesModule && CoursesModule.find(RosterModule.currentCourseId);
-        if (window.QTSBank) SharedTests.scope = "mine";
-        await SharedTests.addFromCourse(t, course ? course.name : "");
-        flush(); // saves the family id given to the original
-        if (window.QTSBank) QTSBank.invalidate();
-        say(`"${t.name}" copied to ${window.QTSBank ? "the QTS Bank's Independent list" : SharedTests.scopeLabel()} (students not included).`);
-        rerender();
+      const courseId = RosterModule.currentCourseId;
+      const shareBtn = button("Copy to other courses…", "btn btn-ghost btn-small qz-act-share", guard(async () => {
+        const msg = await QTSBank.copyToCourses(courseId, tool.id, t);
+        if (msg) { say(msg); rerender(); }
       }));
+      const tiesBtn = (t.fam && window.QTSBank)
+        ? button(QTSBank.tiesOpen.has(t.id) ? "Hide Family Ties" : "Family Ties", "btn btn-ghost btn-small", () => { if (QTSBank.tiesOpen.has(t.id)) QTSBank.tiesOpen.delete(t.id); else QTSBank.tiesOpen.add(t.id); rerender(); })
+        : (t.famLeft && window.QTSBank) ? button("Rejoin family…", "btn btn-ghost btn-small", guard(async () => { const msg = await QTSBank.rejoin(courseId, tool.id, t); if (msg) { say(msg); rerender(); } })) : null;
       if (!t.quiz) {
         const only = h("div", "qz-actions");
         only.appendChild(shareBtn);
+        if (tiesBtn) only.appendChild(tiesBtn);
         tr.children[5].insertBefore(only, tr.children[5].firstChild);
         return;
       }
@@ -1391,6 +1390,7 @@
         ]));
       group.appendChild(menuButton("Export CSV", "#4a5568", exportItems(t, quiz)));
       group.appendChild(shareBtn);
+      if (tiesBtn) group.appendChild(tiesBtn);
       // Keep the bank's own Delete button (same behavior); drop Details / Re-match for quizzes.
       const actions = tr.children[5];
       Array.from(actions.querySelectorAll("button")).forEach((b) => {
@@ -1415,6 +1415,16 @@
       });
       tbody.querySelectorAll("td[colspan]").forEach((td) => {
         if (td.colSpan === 6) td.colSpan = 7;
+      });
+    }
+    // Family Ties grid, directly under an item whose ties are open.
+    if (window.QTSBank && QTSBank.tiesOpen) {
+      mains.forEach((tr, i) => {
+        const t = tests[i];
+        if (!tr || !t || !t.fam || !QTSBank.tiesOpen.has(t.id)) return;
+        const dr = h("tr"); const dt = h("td"); dt.colSpan = tr.children.length;
+        dt.appendChild(QTSBank.buildTies(RosterModule.currentCourseId, tool.id, t, (m) => { say(m || ""); rerender(); }));
+        dr.appendChild(dt); tr.after(dr);
       });
     }
   }
