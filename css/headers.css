@@ -76,7 +76,7 @@
 
 /* Sub-section headings everywhere (First column, Rows, Printed seating chart, Label bank, Categories, ...):
    plain bold text with a thin divider line above, the full width of the section. Section headings stay as dark bars. */
-.attendance-settings-block h4:not(#printcard-view > .attendance-settings-block > h4),
+.attendance-settings-block h4:not(:where(#printcard-view > .attendance-settings-block > h4)),
 .attendance-settings-body h4,
 [id$="settings-body"] h4,
 .consultation-category-block h4,
@@ -87,7 +87,7 @@ h4.pres-subhead {
   border-top: 1px solid var(--line);
   border-radius: 0;
   padding: 14px 0 0;
-  margin: 18px 0 8px;
+  margin: 32px 0 8px;
   font-family: inherit;
   font-size: 1.2rem;
   font-weight: 700;
@@ -101,3 +101,8 @@ h4.pres-subhead {
   padding-top: 0;
   margin-top: 0;
 }
+
+/* No divider between a module's main content and its settings, or above the seating sections (the bars already separate them). */
+.attendance-settings,
+.banks-section,
+.group-list-section { border-top: 0; }
