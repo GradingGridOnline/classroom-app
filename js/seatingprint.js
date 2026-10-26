@@ -50,10 +50,10 @@
 .sp-schem-top .sp-schem-cell:nth-child(3) .sp-schem-val { text-align:right; }
 .sp-schem-mid { margin:6px 0 2px; height:70px; border:1px solid var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:.8rem; background:repeating-linear-gradient(45deg, transparent 0 8px, color-mix(in srgb, var(--line) 40%, transparent) 8px 9px); }
 .sp-head-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 4px; }
-.sp-apply { position:relative; display:inline-flex; align-items:center; }
+.sp-apply { position:relative; display:flex; align-items:center; }
 .sp-apply-panel { position:absolute; top:100%; left:0; z-index:50; background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:8px 10px; min-width:240px; max-height:50vh; overflow:auto; }
 .sp-apply-row { display:block; margin:3px 0; }
-#seating-settings-body h4.sp-sub-h, #seating-settings-body .sp-sub-h { font-size:1.1rem; margin:0; }
+.sp-apply { margin:0 0 8px; }
 .sp-schem-front { text-align:center; font-style:italic; font-size:.8rem; margin:2px 0 6px; color:var(--ink-soft); }
 `;
   document.head.appendChild(css);
@@ -219,9 +219,6 @@
     const heading = document.createElement("h4");
     heading.textContent = "Printed seating chart";
     heading.className = "sp-sub-h";
-    const headRow = document.createElement("div");
-    headRow.className = "sp-head-row";
-    headRow.append(heading, buildApplyMenu());
     const hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent = "Click a numbered section to choose what prints there. Sections 1–3 go at the top; 4–9 go below “Front of Classroom”. The % box sets a section\u2019s width relative to the others. Click Save Seating Chart to keep your choices.";
@@ -290,7 +287,7 @@
     front.className = "sp-schem-front";
     front.textContent = "Front of Classroom";
     schem.append(rowOf("sp-schem-top", [1, 2, 3]), mid, front, rowOf("sp-schem-bottom", [4, 5, 6, 7, 8, 9]));
-    wrap.append(headRow, hint, schem);
+    wrap.append(heading, hint, buildApplyMenu(), schem);
     return wrap;
   };
 

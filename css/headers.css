@@ -74,17 +74,22 @@
   border-bottom: 0;
 }
 
-/* Settings sub-sections in every module and scoring tool (First column, Rows, Columns, Categories, Scoring Tools, Label bank, ...) */
-.attendance-settings-block > h4,
-.attendance-settings-body > h4,
-[id$="settings-body"] > h4 {
-  background: var(--hdr-bg);
-  color: #fff;
-  border-radius: 6px;
-  padding: 6px 12px;
-  margin: 0 0 10px;
-  font-family: var(--font-heading);
-  font-size: 0.95rem;
+/* Sub-section headings everywhere (First column, Rows, Printed seating chart, Label bank, Categories, ...):
+   plain bold text with a thin divider line above, the full width of the section. Section headings stay as dark bars. */
+.attendance-settings-block h4:not(#printcard-view > .attendance-settings-block > h4),
+.attendance-settings-body h4,
+[id$="settings-body"] h4,
+.consultation-category-block h4,
+h4.pres-subhead {
+  background: none;
+  color: var(--ink);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 14px 0 0;
+  margin: 18px 0 8px;
+  font-family: inherit;
+  font-size: 1.2rem;
   font-weight: 700;
   text-shadow: none;
 }
