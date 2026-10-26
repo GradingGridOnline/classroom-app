@@ -5560,7 +5560,7 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
     const td = document.createElement("td");
     td.colSpan = 6;
     td.className = "hint";
-    td.textContent = `No data sets yet — click "Launch New QR Code" above. Each QR code you launch creates its own data set here.`;
+    td.textContent = `No data sets yet — click "+ Add Data Set" above, then "Launch New QR Code" on its row.`;
     tr.appendChild(td);
     tbody.appendChild(tr);
   }
@@ -5633,6 +5633,17 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
 
     const actionsTd = document.createElement("td");
     actionsTd.className = "panel-toolbar-buttons";
+    if (!set.token) {
+      action(actionsTd, "Launch New QR Code", async () => {
+        if ((set.respondentCount || 0) > 0 && !confirm(`"${set.name}" already holds ${set.respondentCount} response(s). A new QR code starts with no answers, and Get Responses will replace this data set's answers with the new form's. Launch anyway?`)) { rerender(); return; }
+        const key = `${tool.id}|${project.id}|${kind}`;
+        const made = await PresentationFormsModule.launch(tool.id, project.id, set.id);
+        say(`"${set.name}" is open${kind === "teacher" ? "." : ` for ${made.count} student(s).`}` + (made.shared && made.shared.length ? ` Left out (School ID shared by several students): ${made.shared.join(", ")}.` : ""));
+        presFormsSave();
+        rerender();
+        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url + (window.QRStyles ? QRStyles.query(set.style) : ""))}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
+      }, "Opens a new form students scan; its answers are collected in this data set");
+    }
     if (set.token) {
       action(actionsTd, "Show QR Code", async () => {
         window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(PresentationFormsModule.urlFor(set.token) + (window.QRStyles ? QRStyles.query(set.style) : ""))}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
@@ -5730,36 +5741,28 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     const bar = document.createElement("div");
     bar.className = "panel-toolbar-buttons";
     bar.style.marginTop = "14px";
-    const launch = document.createElement("button");
-    launch.type = "button";
-    launch.className = "btn btn-primary";
-    launch.textContent = "Launch New QR Code";
-    launch.title = "Opens a form students scan; its answers are collected in a new data set below";
-    launch.addEventListener("click", async () => {
-      launch.disabled = true;
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn btn-ghost btn-small";
+    add.textContent = "+ Add Data Set";
+    add.title = "Adds an empty data set; use its row's Launch New QR Code button to collect answers into it";
+    add.addEventListener("click", () => {
       try {
-        presFormStatus.set(key, "Creating QR code…");
-        const made = await PresentationFormsModule.create(tool.id, cfg.id, kind);
-        presFormStatus.set(
-          key,
-          `"${made.set.name}" is open${kind === "teacher" ? "." : ` for ${made.count} student(s).`}` +
-            (made.shared && made.shared.length ? ` Left out (School ID shared by several students): ${made.shared.join(", ")}.` : "")
-        );
+        const set = PresentationFormsModule.addSet(tool.id, cfg.id, kind);
+        presFormStatus.set(key, `"${set.name}" added. Click Launch New QR Code on its row.`);
         presFormsSave();
-        rerender();
-        window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url)}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
       } catch (err) {
         presFormStatus.set(key, `Couldn't do that: ${err.message}`);
-        rerender();
       }
+      rerender();
     });
-    bar.appendChild(launch);
+    bar.appendChild(add);
     body.appendChild(bar);
 
     const explain = document.createElement("p");
     explain.className = "hint";
     explain.textContent =
-      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Close QR Code stops new answers and keeps the data set. The data set marked \"In use\" is loaded into the Scores grid and used for reports; choosing another one (Use this set) loads it right away.";
+      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Launch New QR Code opens a form on that data set (it then reads Show QR Code); Close QR Code stops new answers, keeps the data set, and lets you launch again. The data set marked \"In use\" is loaded into the Scores grid and used for reports; choosing another one (Use this set) loads it right away.";
     body.appendChild(explain);
 
     const status = document.createElement("p");

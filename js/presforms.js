@@ -112,6 +112,34 @@ const PresentationFormsModule = {
     return { shared: data || [], people };
   },
 
+  /** Adds an empty data set with no QR code yet (its row's "Launch New QR Code" button opens one). */
+  addSet(toolId, projectId, kind, name) {
+    if (!ScoringModule.getPresentationProject(toolId, projectId)) throw new Error("That project no longer exists.");
+    return ScoringModule.addPresentationUpload(toolId, projectId, { kind, name, token: null, respondentCount: 0 });
+  },
+
+  /** Opens a new form (a new QR code) for an existing data set. Returns { url, shared, count }. */
+  async launch(toolId, projectId, uploadId) {
+    const project = ScoringModule.getPresentationProject(toolId, projectId);
+    const set = project && this.setOf(project, uploadId);
+    if (!set) throw new Error("That data set no longer exists.");
+    if (set.token) return { url: this.urlFor(set.token), shared: [], count: 0 };
+    this.build(toolId, projectId, set.kind); // fail early with a readable message
+    const token = this._newToken();
+    const client = this._client();
+    const { error } = await client.from("pres_forms").insert({ token, kind: set.kind, title: project.name });
+    if (error) throw this._explain(error);
+    let result;
+    try {
+      result = await this._publish(toolId, projectId, set.kind, token);
+    } catch (err) {
+      await client.from("pres_forms").delete().eq("token", token);
+      throw err;
+    }
+    set.token = token;
+    return { url: this.urlFor(token), shared: result.shared, count: result.people.length };
+  },
+
   /** Opens a new form and stores a new (empty) data set for it. Returns { set, url, shared, count }. */
   async create(toolId, projectId, kind, name) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
