@@ -103,9 +103,10 @@ const PresentationFormsModule = {
   },
 
   /** Saves the questions + allowed students to the server. Returns { shared: [School IDs left out because several students have them], people }. */
-  async _publish(toolId, projectId, kind, token) {
+  async _publish(toolId, projectId, kind, token, closesAt) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
     const { config, people } = this.build(toolId, projectId, kind);
+    config.closesAt = closesAt || null; // students' page shows a countdown and stops accepting answers then
     const title = `${project.name}${kind === "peer" ? " — rate your group members" : kind === "teacher" ? " — teacher scores" : " — score the presentations"}`;
     const { data, error } = await this._client().rpc("pres_publish", { p_token: token, p_title: title, p_config: config, p_people: people });
     if (error) throw this._explain(error);
@@ -119,7 +120,7 @@ const PresentationFormsModule = {
   },
 
   /** Opens a new form (a new QR code) for an existing data set. Returns { url, shared, count }. */
-  async launch(toolId, projectId, uploadId) {
+  async launch(toolId, projectId, uploadId, minutes) {
     const project = ScoringModule.getPresentationProject(toolId, projectId);
     const set = project && this.setOf(project, uploadId);
     if (!set) throw new Error("That data set no longer exists.");
@@ -130,13 +131,15 @@ const PresentationFormsModule = {
     const { error } = await client.from("pres_forms").insert({ token, kind: set.kind, title: project.name });
     if (error) throw this._explain(error);
     let result;
+    const closesAt = Number(minutes) > 0 ? new Date(Date.now() + Number(minutes) * 60000).toISOString() : null;
     try {
-      result = await this._publish(toolId, projectId, set.kind, token);
+      result = await this._publish(toolId, projectId, set.kind, token, closesAt);
     } catch (err) {
       await client.from("pres_forms").delete().eq("token", token);
       throw err;
     }
     set.token = token;
+    set.closesAt = closesAt;
     return { url: this.urlFor(token), shared: result.shared, count: result.people.length };
   },
 
@@ -171,7 +174,7 @@ const PresentationFormsModule = {
     const kind = set.kind;
     let note = "";
     try {
-      await this._publish(toolId, projectId, kind, set.token);
+      await this._publish(toolId, projectId, kind, set.token, set.closesAt || null);
     } catch (err) {
       note = ` (The form could not be refreshed: ${err.message})`;
     }
@@ -217,6 +220,19 @@ const PresentationFormsModule = {
     const { error } = await this._client().from("pres_forms").delete().eq("token", set.token);
     if (error) throw this._explain(error);
     set.token = null;
+    set.closesAt = null;
+  },
+
+  /** Finds forms whose time limit has passed in this tool: copies their answers into the data set, then closes them. Returns the names handled. */
+  async closeExpired(toolId) {
+    const done = [];
+    for (const project of ScoringModule.presentationProjects(toolId) || []) {
+      for (const set of project.scoreUploads || []) {
+        if (!set.token || !set.closesAt || new Date(set.closesAt).getTime() > Date.now()) continue;
+        try { await this.sync(toolId, project.id, set.id); await this.close(toolId, project.id, set.id); done.push(set.name || "data set"); } catch (e) { /* tries again next time */ }
+      }
+    }
+    return done;
   },
 
   /** Deletes a data set; if its form is still open, closes it first. */

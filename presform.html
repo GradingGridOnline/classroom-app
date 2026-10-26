@@ -55,6 +55,7 @@
   <main class="card">
     <h1 id="title">Presentation scores</h1>
     <p id="sub" class="sub"></p>
+    <p id="timer" hidden style="font-weight:700;margin:4px 0"></p>
     <p id="msg" class="msg" aria-live="polite"></p>
 
     <form id="id-form" novalidate hidden>
@@ -233,6 +234,22 @@
         return missing;
       }
 
+      let closesAt = 0, timerId = null;
+      function timeUp() { return closesAt && Date.now() >= closesAt; }
+      function startTimer(iso) {
+        clearInterval(timerId); closesAt = iso ? new Date(iso).getTime() : 0;
+        const box = $("timer");
+        if (!closesAt || Number.isNaN(closesAt)) { closesAt = 0; if (box) box.hidden = true; return; }
+        const tick = () => {
+          const s = Math.max(0, Math.ceil((closesAt - Date.now()) / 1000));
+          box.hidden = false;
+          box.textContent = s > 0 ? "Time left: " + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") : "Time is up.";
+          box.style.color = s <= 60 ? "#c00" : "";
+          if (s <= 0) { clearInterval(timerId); $("answer-form").hidden = true; say("Time is up — this form is closed.", true); }
+        };
+        tick(); timerId = setInterval(tick, 1000);
+      }
+
       function refreshMissing() {
         const n = missingCount();
         $("missing").textContent = n > 0 ? n + " answer(s) still to choose." : "";
@@ -255,6 +272,8 @@
             $("instr").hidden = !$("instr").textContent;
             if (kind === "peer") $("sub").textContent = "Group " + result.group + " — rate your group members";
             say("");
+            startTimer(result.config && result.config.closesAt);
+            if (timeUp()) { $("id-form").hidden = true; $("answer-form").hidden = true; return; }
             renderQuestions();
             showStep("answer");
             if (kind === "audience" && !(form.groups || []).length) say("There are no other groups to score.", true);
@@ -292,10 +311,11 @@
         let payload;
         if (kind !== "peer") payload = { scores: answers, comments: comments, global: globalComment };
         else payload = { ratings: answers };
+        if (timeUp()) { say("Time is up — this form is closed.", true); $("answer-form").hidden = true; return; }
         $("send-btn").disabled = true; $("blank-btn").disabled = true; say("Saving…");
         try {
           const result = await rpc("pres_submit", { p_token: token, p_school_id: schoolId, p_payload: payload });
-          if (result === "ok") { say(""); showStep("done"); }
+          if (result === "ok") { say(""); clearInterval(timerId); $("timer").hidden = true; showStep("done"); }
           else {
             say(MESSAGES[result] || MESSAGES.network, true);
             if (result === "bad_id") { schoolId = ""; showStep("id"); }
