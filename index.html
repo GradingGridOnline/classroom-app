@@ -208,24 +208,28 @@
 
         <!-- ----- Seating chart panel ----- -->
         <div id="seating-panel" class="tab-panel" hidden>
-          <div class="panel-toolbar">
-            <div class="grid-size-controls">
+          <div class="panel-toolbar module-toolbar">
+            <div class="module-btn-stack">
+              <div class="main-btns">
+                <button id="popout-btn" class="btn btn-ghost">Pop Out ↗</button>
+                <button id="toggle-popout-groups-btn" class="btn btn-ghost">Hide Group Colors in Pop-Out</button>
+                <button id="print-seating-btn" class="btn btn-ghost">Print</button>
+              </div>
+              <div class="panel-toolbar-buttons secondary-btns">
+                <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
+                <button id="auto-fill-numerical-btn" class="btn btn-ghost" title="Seats remaining students in Class Number order, starting at the bottom-left desk and filling upward, then moving one column right">Auto-Fill (Numerical Order)</button>
+                <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating Chart</button>
+              </div>
+            </div>
+            <div class="grid-size-controls" hidden>
               <label>Rows</label>
               <select id="grid-rows"></select>
               <label>Columns</label>
               <select id="grid-cols"></select>
               <button id="apply-grid-size-btn" class="btn btn-ghost btn-small">Apply Size</button>
-              <button id="trim-empty-btn" class="btn btn-ghost btn-small" title="Removes any row or column with no desks in it — existing desks keep their arrangement, just closer together">Trim Empty Rows/Columns</button>
+              <button id="trim-empty-btn" class="btn btn-ghost btn-small">Trim Empty Rows/Columns</button>
             </div>
-            <div class="panel-toolbar-buttons">
-              <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
-              <button id="auto-fill-numerical-btn" class="btn btn-ghost" title="Seats remaining students in Class Number order, starting at the bottom-left desk and filling upward, then moving one column right">Auto-Fill (Numerical Order)</button>
-              <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating</button>
-              <button id="popout-btn" class="btn btn-ghost">Pop Out ↗</button>
-              <button id="toggle-popout-groups-btn" class="btn btn-ghost">Hide Group Colors in Pop-Out</button>
-              <button id="print-seating-btn" class="btn btn-ghost">Print</button>
-              <button id="save-seating-btn" class="btn btn-primary">Save Seating Chart</button>
-            </div>
+            <button id="save-seating-btn" class="btn btn-primary module-save">Save Seating Chart</button>
           </div>
 
           <p class="hint">Click a student below, then click a desk to seat them. Click a seated desk to remove that student.</p>
@@ -512,6 +516,7 @@
     <script src="js/attendanceseating.js"></script>
     <script src="js/seatingprint.js"></script>
     <script src="js/seatingtoolbar.js"></script>
+    <script src="js/layout.js"></script>
     <script src="js/groupshare.js"></script>
     <script src="js/qtsbank.js"></script>
     <script src="js/sharedprojects.js"></script>

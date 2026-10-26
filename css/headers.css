@@ -106,3 +106,26 @@ h4.pres-subhead {
 .attendance-settings,
 .banks-section,
 .group-list-section { border-top: 0; }
+
+/* ===== Module layout: buttons top-left, Save top-right, then collapsible sections ===== */
+.module-toolbar { align-items: flex-start; }
+.module-btn-stack { display: flex; flex-direction: column; gap: 10px; }
+.main-btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.main-btns .btn {
+  padding: 10px 20px; font-size: 1rem; font-weight: 700;
+  background: var(--hdr-bg); color: #fff; border: 1px solid var(--hdr-bg);
+}
+.main-btns .btn:hover { filter: brightness(1.15); }
+.secondary-btns { gap: 8px; align-items: center; }
+.secondary-btns .btn, .secondary-btns .split-btn .btn { padding: 4px 12px; font-size: 0.85rem; font-weight: 500; }
+.module-save { padding: 12px 26px; font-size: 1.05rem; font-weight: 700; margin-left: auto; }
+
+/* Collapsible sections: the heading bar toggles everything under it (instructions included). */
+.ggo-section > .ggo-sec-head { cursor: pointer; user-select: none; }
+.ggo-section > h3.ggo-sec-head::before,
+.ggo-section > .ggo-sec-head h3::before { content: "▾ "; }
+.ggo-section.ggo-collapsed > h3.ggo-sec-head::before,
+.ggo-section.ggo-collapsed > .ggo-sec-head h3::before { content: "▸ "; }
+.ggo-section.ggo-collapsed > :not(.ggo-sec-head) { display: none !important; }
+.ggo-section.ggo-collapsed > .ggo-sec-head { margin-bottom: 0; }
+.grid-size-controls[hidden] { display: none !important; }

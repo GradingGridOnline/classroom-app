@@ -452,11 +452,11 @@
   };
 
   // ---------- install ----------
-  const buttonsBar = document.querySelector("#seating-panel .panel-toolbar-buttons");
+  const buttonsBar = document.querySelector("#seating-panel .secondary-btns");
   const toolbar = document.querySelector("#seating-panel .panel-toolbar");
   ["auto-fill-btn", "auto-fill-numerical-btn"].forEach((id) => { const b = $(id); if (b) b.style.display = "none"; });
   const oldSize = document.querySelector("#seating-panel .grid-size-controls");
-  if (oldSize) oldSize.style.display = "none";
+  if (oldSize) oldSize.hidden = true;
   if (buttonsBar && toolbar) {
     buttonsBar.insertBefore(
       splitButton("Set Up Desks", "Draw where the desks go", () => { panel.hidden = !panel.hidden; if (!panel.hidden) drawSetup(); }, [
