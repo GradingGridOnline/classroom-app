@@ -1679,7 +1679,11 @@ function renderSeatingSettings() {
   if (window.buildSeatingPrintSchematic) body.appendChild(window.buildSeatingPrintSchematic());
   const heading = document.createElement("h4");
   heading.textContent = "Label bank";
-  body.appendChild(heading);
+  heading.className = "sp-sub-h";
+  const headRow = document.createElement("div");
+  headRow.className = "sp-head-row";
+  headRow.appendChild(heading);
+  body.appendChild(headRow);
 
   const hint = document.createElement("p");
   hint.className = "hint";

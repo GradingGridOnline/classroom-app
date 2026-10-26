@@ -49,6 +49,11 @@
 .sp-schem-val { position:absolute; left:4px; right:4px; bottom:3px; font-size:.7rem; line-height:1.15; overflow:hidden; pointer-events:none; text-align:left; }
 .sp-schem-top .sp-schem-cell:nth-child(3) .sp-schem-val { text-align:right; }
 .sp-schem-mid { margin:6px 0 2px; height:70px; border:1px solid var(--line); border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:.8rem; background:repeating-linear-gradient(45deg, transparent 0 8px, color-mix(in srgb, var(--line) 40%, transparent) 8px 9px); }
+.sp-head-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 4px; }
+.sp-apply { position:relative; display:inline-flex; align-items:center; }
+.sp-apply-panel { position:absolute; top:100%; left:0; z-index:50; background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:8px 10px; min-width:240px; max-height:50vh; overflow:auto; }
+.sp-apply-row { display:block; margin:3px 0; }
+#seating-settings-body h4.sp-sub-h, #seating-settings-body .sp-sub-h { font-size:1.1rem; margin:0; }
 .sp-schem-front { text-align:center; font-style:italic; font-size:.8rem; margin:2px 0 6px; color:var(--ink-soft); }
 `;
   document.head.appendChild(css);
@@ -156,11 +161,67 @@
     return row.children.length ? row : null;
   };
 
+  /** "Apply to other courses ▾": tick courses, then push this course's 9 sections (and their widths) to them. A one-time copy, not a sync. */
+  function buildApplyMenu() {
+    const holder = document.createElement("span");
+    holder.className = "sp-apply";
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn btn-ghost btn-small"; btn.textContent = "Apply to other courses ▾";
+    const panel = document.createElement("div");
+    panel.className = "sp-apply-panel"; panel.hidden = true;
+    const msg = document.createElement("span");
+    msg.className = "result"; msg.style.marginLeft = "8px";
+    btn.addEventListener("click", () => {
+      panel.hidden = !panel.hidden;
+      if (panel.hidden) return;
+      panel.textContent = "";
+      const others = (window.CoursesModule ? CoursesModule.activeCourses() : []).filter((c) => c.id !== SeatingModule.currentCourseId);
+      if (!others.length) { panel.textContent = "No other active courses."; return; }
+      const note = document.createElement("div"); note.className = "hint";
+      note.textContent = "Copies the 9 sections and widths once. Later changes in either course don\u2019t affect the other.";
+      panel.appendChild(note);
+      const boxes = others.map((c) => {
+        const l = document.createElement("label"); l.className = "sp-apply-row";
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = c.id;
+        l.append(cb, document.createTextNode(" " + c.name)); panel.appendChild(l); return cb;
+      });
+      const go = document.createElement("button");
+      go.type = "button"; go.className = "btn btn-primary btn-small"; go.textContent = "Apply";
+      go.addEventListener("click", async () => {
+        const ids = boxes.filter((b) => b.checked).map((b) => b.value);
+        if (!ids.length) { msg.textContent = "Tick at least one course."; return; }
+        if (!confirm(`Replace the printed seating chart layout in ${ids.length} course${ids.length === 1 ? "" : "s"} with this one?`)) return;
+        go.disabled = true; msg.textContent = "Applying…";
+        let ok = 0;
+        for (const id of ids) {
+          try {
+            const f = SeatingModule.fileName(id);
+            const data = (await storage.loadFile(f)) || {};
+            data.printSections = sections().slice(0, 9);
+            data.printSizes = sizes().slice(0, 9);
+            await storage.saveFile(f, data);
+            ok++;
+          } catch (e) { /* reported below */ }
+        }
+        go.disabled = false;
+        msg.textContent = ok === ids.length ? `Applied to ${ok} course${ok === 1 ? "" : "s"}.` : `Applied to ${ok} of ${ids.length}; some failed.`;
+        panel.hidden = true;
+      });
+      panel.appendChild(go);
+    });
+    holder.append(btn, msg, panel);
+    return holder;
+  }
+
   /** The little page diagram in Seating Settings: click a section to choose what it shows. */
   window.buildSeatingPrintSchematic = function () {
     const wrap = document.createElement("div");
     const heading = document.createElement("h4");
     heading.textContent = "Printed seating chart";
+    heading.className = "sp-sub-h";
+    const headRow = document.createElement("div");
+    headRow.className = "sp-head-row";
+    headRow.append(heading, buildApplyMenu());
     const hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent = "Click a numbered section to choose what prints there. Sections 1–3 go at the top; 4–9 go below “Front of Classroom”. The % box sets a section\u2019s width relative to the others. Click Save Seating Chart to keep your choices.";
@@ -229,7 +290,25 @@
     front.className = "sp-schem-front";
     front.textContent = "Front of Classroom";
     schem.append(rowOf("sp-schem-top", [1, 2, 3]), mid, front, rowOf("sp-schem-bottom", [4, 5, 6, 7, 8, 9]));
-    wrap.append(heading, hint, schem);
+    wrap.append(headRow, hint, schem);
     return wrap;
   };
+
+  // Group Assignments can be collapsed (remembered on this device).
+  const initGroupCollapse = () => {
+    const sec = document.querySelector(".group-list-section");
+    if (!sec || sec.dataset.collapsible) return;
+    sec.dataset.collapsible = "1";
+    const h = sec.querySelector("h3");
+    let closed = false;
+    try { closed = localStorage.getItem("ggo-groups-closed") === "1"; } catch (e) {}
+    const apply = () => {
+      h.textContent = `${closed ? "▸" : "▾"} Group Assignments`;
+      Array.from(sec.children).forEach((c) => { if (c !== h) c.hidden = closed; });
+    };
+    h.style.cursor = "pointer"; h.title = "Click to collapse or expand";
+    h.addEventListener("click", () => { closed = !closed; try { localStorage.setItem("ggo-groups-closed", closed ? "1" : "0"); } catch (e) {} apply(); });
+    apply();
+  };
+  initGroupCollapse();
 })();
