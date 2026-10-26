@@ -6,6 +6,10 @@
 // Changing questions/settings pushes them to the siblings automatically (names, answers, scores, QR links never
 // travel). A sibling that already has students' answers asks first; "no" takes it out of the family (`famLeft`),
 // and "Rejoin family…" brings it back (push mine to the others, or change mine to match theirs).
+// MASTER TEMPLATES: a section above the grid (stored in sharedtests.json) holds often-used Qs/Ts/Ss that live in no
+// course. A copy kept there is a "clone" (no link). A copy sent to a course is a CHILD: the template becomes its
+// PARENT and the same family. Parent changes flow to all children (asking first where students have answered);
+// a child's changes flow to its sibling children, and the user is asked before the parent is changed.
 // INDEX: qtsindex.json lists every course's items (name, type, counts, dates, content fingerprint). It is refreshed
 // whenever a course's scoring file is saved, so the grid reads one small file. Load AFTER app.js and quizbank.js.
 
@@ -16,6 +20,7 @@
   const flush = () => { try { if (window.GGOAutosave && GGOAutosave.enabled()) GGOAutosave.flush(); } catch (e) {} };
   const nowIso = () => new Date().toISOString();
   const live = (courseId) => ScoringModule.currentCourseId === courseId;
+  const TPL = "__tpl__", TPL_FILE = "sharedtests.json", TPL_NAME = "QTS Master Templates", MAX_TPL = 100;
   const day = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
   // ---------- the tab + panel ----------
@@ -45,6 +50,8 @@ table.qts-grid .btn { padding:1px 8px; margin:1px 0; font-size:.8rem; }
 table.qts-grid tr.qts-me td { background:#fff6c8; }
 table.qts-grid td.qts-detail { padding:6px; background:#f4f4f4; }
 table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
+.qts-root h4.qts-h { font-size:1.2rem; margin:28px 0 6px; border-top:1px solid var(--line); padding-top:14px; }
+.qts-root h4.qts-h:first-of-type { border-top:0; padding-top:0; margin-top:8px; }
 .qts-root .qts-ties-title { font-weight:700; margin:0 0 4px; color:#000; }
 .qts-root .qts-ties-hint { font-size:.8rem; margin:0 0 4px; color:#333; }
 .qts-menu { position:fixed; z-index:20010; background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line,#ccc); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:4px; min-width:210px; max-height:70vh; overflow:auto; }
@@ -111,7 +118,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       qr = !!test.quiz.token;
       scoresAt = subs.reduce((a, s) => (s.at && s.at > a ? s.at : a), "");
     }
-    return { id: test.id, name: test.name || "", kind, questions, max, answers, qr, scoresAt, made: madeOf(test), fam: test.fam || "", famLeft: test.famLeft || "", hash: quizOn ? hashOf(test) : "", contentAt: test.contentAt || test.createdAt || "" };
+    return { id: test.id, name: test.name || "", kind, questions, max, answers, qr, scoresAt, made: madeOf(test), master: !!test.master, clone: !!test.clone, fam: test.fam || "", famLeft: test.famLeft || "", hash: quizOn ? hashOf(test) : "", contentAt: test.contentAt || test.createdAt || "" };
   }
 
   // ---------- the index (qtsindex.json) ----------
@@ -191,6 +198,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const r = await rawSave.apply(this, arguments);
       const m = /^scoring-(.+)\.json$/.exec(String(name));
       if (m && data && Array.isArray(data.tools)) { try { Index.queueCourse(m[1], data.tools); } catch (e) {} }
+      if (name === TPL_FILE && data && Array.isArray(data.items)) { try { Index.queueCourse(TPL, [{ type: "testbank", id: "mine", name: TPL_NAME, config: { tests: data.items } }]); } catch (e) {} }
       return r;
     };
     if (rawDelete) {
@@ -237,10 +245,19 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       }));
     }
     if (changedIdx) { try { await storage.saveFile(INDEX_FILE, idx); } catch (e) {} }
-    // The old Independent / group lists (kept only so their items can be imported into courses).
+    // Master templates (stored in sharedtests.json, in no course).
+    let tdoc = null;
+    try { tdoc = await storage.loadFile(TPL_FILE); } catch (e) { tdoc = null; }
+    m.tdoc = tdoc || {};
+    m.templates = [];
+    ((tdoc && Array.isArray(tdoc.items)) ? tdoc.items : []).forEach((it) => {
+      const d = describe(it); d.answers = 0; d.qr = false;
+      const row = { courseId: TPL, courseName: TPL_NAME, toolId: "mine", toolName: TPL_NAME, id: d.id, d, tpl: true };
+      m.rows.push(row); m.templates.push(row);
+      if (d.fam) { if (!m.fams.has(d.fam)) m.fams.set(d.fam, []); m.fams.get(d.fam).push(row); }
+    });
+    // Old group lists (kept only so their items can be imported into courses).
     try {
-      const mine = await storage.loadFile("sharedtests.json");
-      if (mine && Array.isArray(mine.items) && mine.items.length) m.legacy.push({ key: "mine", label: "your old Independent list", items: mine.items });
       if (window.GroupShare) {
         const groups = await GroupShare.myGroups(true);
         for (const g of groups || []) {
@@ -295,7 +312,14 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   // ---------- reading / writing one item in any course ----------
   async function courseFile(courseId) { return await storage.loadFile(`scoring-${courseId}.json`); }
   /** The complete test object (questions, answers…) for a row. */
+  async function tplLoad() { const d = await storage.loadFile(TPL_FILE); return d && typeof d === "object" ? d : {}; }
+  async function tplSave(doc) {
+    await storage.saveFile(TPL_FILE, { items: doc.items || [], sections: doc.sections || [] });
+    if (window.SharedTestsModule) window.SharedTestsModule.loaded = false;
+    invalidate();
+  }
   async function fullOf(ref) {
+    if (ref.courseId === TPL) return ((await tplLoad()).items || []).find((x) => x.id === ref.id) || null;
     if (live(ref.courseId)) return ScoringModule.findTest(ref.toolId, ref.id);
     const data = await courseFile(ref.courseId);
     const tool = ((data && data.tools) || []).find((t) => t.id === ref.toolId);
@@ -303,6 +327,12 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   }
   /** Writes a change to one course test (open course: in memory + autosave; other course: that file). */
   async function editCourseTest(ref, fn) {
+    if (ref.courseId === TPL) {
+      const doc = await tplLoad();
+      const t = (doc.items || []).find((x) => x.id === ref.id);
+      if (!t) throw new Error("That item no longer exists.");
+      const r = fn(t, false); await tplSave(doc); return r;
+    }
     if (live(ref.courseId)) { const t = ScoringModule.findTest(ref.toolId, ref.id); if (!t) throw new Error("That item no longer exists."); const r = fn(t, true); flush(); invalidate(); return r; }
     const data = await courseFile(ref.courseId);
     const tool = ((data && data.tools) || []).find((x) => x.id === ref.toolId);
@@ -314,6 +344,11 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     return r;
   }
   async function courseAdd(courseId, toolId, test) {
+    if (courseId === TPL) {
+      const doc = await tplLoad(); doc.items = doc.items || [];
+      if (doc.items.length >= MAX_TPL) throw new Error(`The master templates list is at its limit of ${MAX_TPL}.`);
+      doc.items.push(test); await tplSave(doc); return "mine";
+    }
     if (live(courseId)) {
       let id = toolId;
       if (id === "__new") id = ScoringModule.addTool("testbank").id;
@@ -341,6 +376,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     return tool.id;
   }
   async function courseRemove(courseId, toolId, testId) {
+    if (courseId === TPL) { const doc = await tplLoad(); doc.items = (doc.items || []).filter((x) => x.id !== testId); await tplSave(doc); return; }
     if (live(courseId)) { ScoringModule.removeTest(toolId, testId); flush(); invalidate(); return; }
     const data = await storage.loadFile(`scoring-${courseId}.json`);
     if (!data) return;
@@ -408,18 +444,22 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     return msg;
   }
   async function leaveFamily(ref) {
-    await editCourseTest(ref, (t) => { if (t.fam) { t.famLeft = t.fam; delete t.fam; } });
+    await editCourseTest(ref, (t) => { if (t.fam) { t.famLeft = t.fam; delete t.fam; t.clone = true; delete t.master; } });
   }
-  /** Pushes one item's questions/settings to its siblings. Siblings with students' answers are asked first ("no" takes them out of the family). */
+  /** Pushes one item's questions/settings to its family. A parent (master template) pushes to every child; a child pushes to its
+   *  sibling children and then ASKS before changing the parent. Items with students' answers are asked first ("no" takes them out of the family). */
   async function propagate(ref) {
     const src = await fullOf(ref);
     if (!src || !src.fam || !src.quiz) return null;
     const content = contentOf(src), hash = hashOf(src);
     const model = await loadModel({});
-    const me = model.rows.find((r) => sameRef(r, ref));
-    const sibs = (model.fams.get(src.fam) || []).filter((r) => !sameRef(r, ref) && r.d.kind !== "test" && r.d.hash !== hash);
-    let updated = 0, kicked = 0; const skipped = [];
-    for (const s of sibs) {
+    const members = model.fams.get(src.fam) || [];
+    const me = members.find((r) => sameRef(r, ref));
+    const parent = members.find((r) => r.d.master && !sameRef(r, ref));
+    const fromParent = !!src.master;
+    const targets = members.filter((r) => !sameRef(r, ref) && r.d.kind !== "test" && r.d.hash !== hash && (fromParent || !r.d.master));
+    let updated = 0, kicked = 0, parentDone = false; const skipped = [];
+    for (const s of targets) {
       if (s.d.qr) { skipped.push(s); continue; }
       if (s.d.answers > 0) {
         const ok = confirm(`“${src.name}” (${me ? me.courseName : "another course"}) was changed.\n\n“${s.d.name}” in ${s.courseName} is in the same family and already has ${s.d.answers} student(s)' scoring data. Update it to match?${await impactText(s, content)}\n\nOK = update it.\nCancel = take it out of the family (it keeps its current questions; you can rejoin later).`);
@@ -427,56 +467,85 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       }
       try { await applyContent(s, content); updated++; } catch (e) { skipped.push(s); }
     }
+    if (!fromParent && parent && parent.d.hash !== hash) {
+      if (confirm(`“${src.name}” (${me ? me.courseName : "a course"}) was changed.\n\nAlso change its parent, the master template “${parent.d.name}”? That would update all of the template's other children too (asking first where students have answered).\n\nOK = change the parent.\nCancel = leave the parent as it is.`)) {
+        await applyContent(parent, content);
+        const r2 = await propagate({ courseId: TPL, toolId: "mine", id: parent.id });
+        parentDone = true;
+        if (r2) { updated += r2.updated; kicked += r2.kicked; }
+      }
+    }
     invalidate();
     const parts = [];
-    if (updated) parts.push(`updated ${updated} copy${updated === 1 ? "" : "ies"}`);
+    if (updated) parts.push(`updated ${updated} ${updated === 1 ? "copy" : "copies"}`);
+    if (parentDone) parts.push("parent template changed");
     if (kicked) parts.push(`${kicked} left the family`);
     if (skipped.length) parts.push(`${skipped.length} skipped (QR open)`);
     return { updated, kicked, skipped: skipped.length, msg: parts.length ? `“${src.name}”: ${parts.join(", ")}.` : "" };
   }
 
   // ---------- Copy to other courses ----------
+  /** Makes sure an item has a family id (a template also becomes the family's parent). Returns the family id. */
+  async function ensureFam(src, full) {
+    const isTpl = src.courseId === TPL;
+    if (full.fam && (!isTpl || full.master)) return full.fam;
+    const fam = full.fam || rid("fam");
+    await editCourseTest(src, (t) => { t.fam = fam; if (isTpl) t.master = true; });
+    return fam;
+  }
   async function copyDialog(src) {
     const model = await loadModel({});
     const full = await fullOf(src);
     if (!full) throw new Error("That item no longer exists.");
+    const isTpl = src.courseId === TPL;
     const picked = await dialog((box, done) => {
-      box.appendChild(mk("h3", "", `Copy “${full.name}” to other courses`));
-      box.appendChild(mk("p", "hint", "Each copy goes into that course's Test & Quiz Bank with the same questions and settings (no students' answers or scores). All the copies form a family: later changes to questions flow between them."));
+      box.appendChild(mk("h3", "", `Copy “${full.name}”`));
+      box.appendChild(mk("p", "hint", isTpl
+        ? "A copy sent to a course becomes its child: this template is the parent, and the copy follows the template's changes. A clone kept in the master templates has no link."
+        : "Copies sent to courses become a family: later changes to questions flow between them. A clone kept in the master templates has no link."));
       const boxes = [];
-      model.courses.forEach((c) => {
-        const l = mk("label", "qts-check"); const cb = mk("input"); cb.type = "checkbox"; cb.value = c.id;
-        l.append(cb, mk("span", "", c.id === src.courseId ? `${c.name} (this course — adds a second copy)` : c.name));
+      const add = (value, text, extra) => {
+        const l = mk("label", "qts-check"); const cb = mk("input"); cb.type = "checkbox"; cb.value = value;
+        l.append(cb, mk("span", "", text)); if (extra) l.appendChild(mk("span", "hint", ` ${extra}`));
         boxes.push(cb); box.appendChild(l);
-      });
+      };
+      model.courses.forEach((c) => add(c.id, c.id === src.courseId ? `${c.name} (this course — adds a second copy)` : c.name, isTpl ? "child" : ""));
+      box.appendChild(mk("hr"));
+      add(TPL, `${TPL_NAME} — as a clone`, "(no link)");
       const msg = mk("p", "hint");
       box.appendChild(msg);
       const acts = mk("div", "qts-actions");
       const cancel = mk("button", "btn btn-ghost", "Cancel"); cancel.type = "button"; cancel.addEventListener("click", () => done(null));
       const go = mk("button", "btn btn-primary", "Copy"); go.type = "button";
-      go.addEventListener("click", () => { const ids = boxes.filter((b) => b.checked).map((b) => b.value); if (!ids.length) { msg.textContent = "Tick at least one course."; return; } done(ids); });
+      go.addEventListener("click", () => { const ids = boxes.filter((b) => b.checked).map((b) => b.value); if (!ids.length) { msg.textContent = "Tick at least one place."; return; } done(ids); });
       acts.append(cancel, go); box.appendChild(acts);
     });
     if (!picked) return "";
-    const fam = full.fam || rid("fam");
-    if (!full.fam) await editCourseTest(src, (t) => { t.fam = fam; });
     const errs = []; let n = 0;
+    let fam = "";
     for (const cid of picked) {
-      const course = model.courses.find((c) => c.id === cid);
-      const toolId = cid === src.courseId ? src.toolId : course && course.tools.length ? course.tools[0].toolId : "__new";
-      try { await courseAdd(cid, toolId, copyOf(full, cid === src.courseId ? `${full.name} (copy)` : full.name, fam)); n++; }
-      catch (e) { errs.push(`${course ? course.name : cid}: ${e.message}`); }
+      try {
+        if (cid === TPL) {
+          const c = copyOf(full, isTpl ? `${full.name} (copy)` : full.name, "");
+          c.clone = true; await courseAdd(TPL, "mine", c);
+        } else {
+          if (!fam) fam = await ensureFam(src, full);
+          const course = model.courses.find((x) => x.id === cid);
+          const toolId = cid === src.courseId ? src.toolId : course && course.tools.length ? course.tools[0].toolId : "__new";
+          await courseAdd(cid, toolId, copyOf(full, cid === src.courseId ? `${full.name} (copy)` : full.name, fam));
+        }
+        n++;
+      } catch (e) { errs.push(`${cid === TPL ? TPL_NAME : (model.courses.find((c) => c.id === cid) || {}).name || cid}: ${e.message}`); }
     }
     invalidate();
-    return `Copied “${full.name}” to ${n} course${n === 1 ? "" : "s"}.${errs.length ? ` Couldn't copy to: ${errs.join("; ")}` : ""}`;
+    return `Copied “${full.name}” to ${n} place${n === 1 ? "" : "s"}.${errs.length ? ` Couldn't copy to: ${errs.join("; ")}` : ""}`;
   }
 
-  /** Copies an item from any course into one specific Test & Quiz Bank (the one you are looking at). */
+  /** Copies an item from any course (or the master templates) into one specific Test & Quiz Bank (the one you are looking at). */
   async function copyInto(src, courseId, toolId) {
     const full = await fullOf(src);
     if (!full) throw new Error("That item no longer exists.");
-    const fam = full.fam || rid("fam");
-    if (!full.fam) await editCourseTest(src, (t) => { t.fam = fam; });
+    const fam = await ensureFam(src, full);
     await courseAdd(courseId, toolId, copyOf(full, full.name, fam));
     invalidate();
     return `Copied “${full.name}” into this course.`;
@@ -532,13 +601,14 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       wrap.appendChild(mk("div", "qts-ties-title", `Family Ties — ${members.length} ${members.length === 1 ? "item" : "items"}`));
       wrap.appendChild(mk("div", "qts-ties-hint", "Same family = same questions and settings, kept in step automatically. Names, students' answers, scores and QR links stay with each course."));
       const tb = mk("table", "source-grid qts-grid");
-      const hr = mk("tr"); ["Course", "Test & Quiz Bank tab", "Name", "Qs", "Max", "Answers", "Compared with this", ""].forEach((x) => { const th = mk("th", "nosort", x); hr.appendChild(th); });
+      const hr = mk("tr"); ["Where", "Name", "Role", "Qs", "Max", "Answers", "Compared with this", ""].forEach((x) => { const th = mk("th", "nosort", x); hr.appendChild(th); });
       const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
       const body = mk("tbody"); tb.appendChild(body);
       members.forEach((r) => {
         const isMe = sameRef(r, me);
         const tr = mk("tr", isMe ? "qts-me" : "");
-        tr.append(mk("td", "", r.courseName), mk("td", "", r.toolName), mk("td", "qts-name", r.d.name || "(untitled)"),
+        const hasParent = members.some((x) => x.d.master);
+        tr.append(mk("td", "", r.tpl ? TPL_NAME : `${r.courseName} › ${r.toolName}`), mk("td", "qts-name", r.d.name || "(untitled)"), mk("td", "", r.d.master ? "Parent" : hasParent ? "Child" : "Sibling"),
           mk("td", "qts-n", r.d.questions == null ? "—" : String(r.d.questions)), mk("td", "qts-n", r.d.max == null || !r.d.max ? "—" : String(r.d.max)), mk("td", "qts-n", String(r.d.answers || 0)),
           mk("td", "", isMe ? "this one" : !me.d.hash ? "—" : r.d.hash === me.d.hash ? "✓ same" : "⟳ differs"));
         const td = mk("td");
@@ -648,6 +718,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     function visibleRows() {
       const q = F.q.toLowerCase();
       const rows = model.rows.filter((r) => {
+        if (r.tpl) return false;
         const d = r.d;
         if (q && !String(d.name).toLowerCase().includes(q) && !r.courseName.toLowerCase().includes(q)) return false;
         if (F.course && r.courseId !== F.course) return false;
@@ -655,7 +726,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         const size = d.fam ? (model.fams.get(d.fam) || []).length : 0;
         const differs = d.fam && d.hash && (model.fams.get(d.fam) || []).some((x) => x.d.hash !== d.hash);
         if (F.fam === "in" && !(d.fam && size > 1)) return false;
-        if (F.fam === "none" && d.fam && size > 1) return false;
+        if (F.fam === "none" && (d.fam || !(d.clone || d.famLeft))) return false;
         if (F.fam === "differs" && !differs) return false;
         if (F.fam === "left" && !d.famLeft) return false;
         if (F.status && statusOf(d) !== F.status) return false;
@@ -687,12 +758,13 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const td = mk("td", "qts-n");
       if (d.fam) {
         const mem = model.fams.get(d.fam) || [];
+        const parent = mem.find((x) => x.d.master);
         const diff = d.hash && mem.some((x) => x.d.hash !== d.hash);
-        const a = mk("span", "qts-link", `Family (${mem.length})${diff ? " ⚠" : ""}`);
-        a.title = diff ? "Some siblings have different questions. Click to open Family Ties." : "Click to open Family Ties.";
+        const a = mk("span", "qts-link", `${d.master ? `Parent (${mem.length - 1})` : parent ? `Child of “${parent.d.name}”` : `Sibling (${mem.length})`}${diff ? " ⚠" : ""}`);
+        a.title = diff ? "Some family members have different questions. Click to open Family Ties." : "Click to open Family Ties.";
         a.addEventListener("click", () => toggleTies(r));
         td.appendChild(a);
-      } else if (d.famLeft) { td.textContent = "Left family"; td.title = "Menu → Rejoin family…"; }
+      } else if (d.clone || d.famLeft) { td.textContent = "Clone"; td.title = d.famLeft ? "Left its family. Menu → Rejoin family…" : "A copy with no parent."; }
       else td.textContent = "—";
       return td;
     }
@@ -704,7 +776,8 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       if (inTool && r.courseId !== ScoringModule.currentCourseId) {
         items.push({ label: "Copy into this course", onClick: run(async () => copyInto(r, ScoringModule.currentCourseId, ctx.toolId)) });
       }
-      items.push({ label: "Copy to other courses…", onClick: run(() => copyDialog(r)) });
+      items.push({ label: r.tpl ? "Copy…" : "Copy to other courses…", onClick: run(() => copyDialog(r)) });
+      if (r.tpl) items.push({ label: "Edit questions…", onClick: run(() => openTplEditor(r)) });
       if (d.fam) items.push({ label: gridTies.has(r.id) ? "Hide Family Ties" : "Family Ties", onClick: () => toggleTies(r) });
       else if (d.famLeft) items.push({ label: "Rejoin family…", onClick: run(() => rejoin(r)) });
       items.push("-",
@@ -714,7 +787,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         }) },
         { label: "Delete…", onClick: run(async () => {
           if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR Code → Close QR Code)");
-          if (!confirm(`Delete “${d.name}” from ${r.courseName}?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers/scores, which will be lost.` : ""}${d.fam ? "\nIts siblings in other courses are not affected." : ""}`)) return "";
+          if (!confirm(`Delete “${d.name}” from ${r.courseName}?${r.tpl ? "\nIts children in courses are not affected." : ""}${d.answers ? `\n\nIt has ${d.answers} student(s)' answers/scores, which will be lost.` : ""}${d.fam ? "\nIts siblings in other courses are not affected." : ""}`)) return "";
           await courseRemove(r.courseId, r.toolId, r.id); return "Deleted.";
         }) });
       const ex = exportMenuItems(r, say);
@@ -734,13 +807,11 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       host.textContent = "";
       const head = mk("div", "qts-head");
       if (!inTool) head.appendChild(mk("h3", "", "QTS Bank"));
-      const search = mk("input"); search.type = "search"; search.placeholder = "Search name or course…"; search.value = F.q;
-      search.addEventListener("input", () => { F.q = search.value.trim(); const pos = search.selectionStart; render(); const s = host.querySelector("input[type=search]"); if (s) { s.focus(); s.setSelectionRange(pos, pos); } });
       const re = mk("button", "btn btn-ghost btn-small", "Refresh"); re.type = "button"; re.addEventListener("click", () => refresh("", true));
       const rb = mk("button", "btn btn-ghost btn-small", "Rebuild index"); rb.type = "button";
       rb.title = "Re-reads every course once. Use it if the list looks out of date (for example after changes made on another device).";
       rb.addEventListener("click", () => { if (confirm("Re-read every course to rebuild the QTS index? This reads all your courses' scoring data once.")) refresh("", true, true); });
-      head.append(search, re, rb);
+      head.append(re, rb);
       host.appendChild(head);
       statusEl = mk("p", "result", msg || ""); host.appendChild(statusEl);
       if (!model) return;
@@ -752,12 +823,38 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         p.appendChild(b); host.appendChild(p);
       });
 
+      // ----- QTS Master Templates -----
+      host.appendChild(mk("h4", "qts-h", TPL_NAME));
+      host.appendChild(mk("p", "hint", "Often-used Qs, Ts and Ss that live in no course. Copy one to a course and it becomes that copy's parent: changes to the template flow to its children. A copy kept here is a clone, with no link."));
+      {
+        const tb = mk("table", "source-grid qts-grid");
+        const hr = mk("tr"); ["Name", "Type", "Qs", "Max", "Link", "Made", ""].forEach((x) => hr.appendChild(mk("th", "nosort", x)));
+        const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
+        const body = mk("tbody"); tb.appendChild(body);
+        const trs = [...model.templates].sort((a, b) => String(a.d.name).localeCompare(String(b.d.name)));
+        if (!trs.length) { const tr = mk("tr"); const td = mk("td", "hint", "No master templates yet. Open a quiz's menu → “Copy to other courses…” → tick “QTS Master Templates — as a clone”."); td.colSpan = 7; tr.appendChild(td); body.appendChild(tr); }
+        trs.forEach((r) => {
+          const d = r.d; const tr = mk("tr");
+          const link = famCell(r); if (!d.fam && !d.clone) link.textContent = "—";
+          tr.append(mk("td", "qts-name", d.name || "(untitled)"), mk("td", "", KIND_LABEL[d.kind] || "Quiz"),
+            mk("td", "qts-n", d.questions == null ? "—" : String(d.questions)), mk("td", "qts-n", d.max == null || !d.max ? "—" : String(d.max)), link, mk("td", "qts-n", day(d.made) || "—"));
+          const td = mk("td"); td.appendChild(menuButton("Menu", () => menuFor(r))); tr.appendChild(td); body.appendChild(tr);
+          if (gridTies.has(r.id) && d.fam) {
+            const dr = mk("tr"); const dt = mk("td", "qts-detail"); dt.colSpan = 7;
+            dt.appendChild(buildTies({ courseId: r.courseId, toolId: r.toolId, id: r.id }, (m) => { changed(m); }));
+            dr.appendChild(dt); body.appendChild(dr);
+          }
+        });
+        const sc = mk("div", "qts-wrap"); sc.appendChild(tb); host.appendChild(sc);
+      }
+      host.appendChild(mk("h4", "qts-h", "Qs, Ts and Ss in your courses"));
+
       const courseOpts = [["", "All courses"], ...model.courses.map((c) => [c.id, c.name])];
       const filters = mk("div", "qts-filters");
       filters.append(
         selectFilter("Course", "course", courseOpts),
         selectFilter("Type", "type", [["", "All"], ["quiz", "Quiz"], ["test", "Test"], ["survey", "Survey"], ["answers", "Answer Collection"]]),
-        selectFilter("Family", "fam", [["", "All"], ["in", "In a family"], ["none", "Not in a family"], ["differs", "Out of sync"], ["left", "Left a family"]]),
+        selectFilter("Family", "fam", [["", "All"], ["in", "In a family"], ["none", "Clones (no parent)"], ["differs", "Out of sync"], ["left", "Left a family"]]),
         selectFilter("Status", "status", [["", "All"], ["QR open", "QR open"], ["Has answers", "Has answers"], ["Has scores", "Has scores"], ["No answers yet", "No answers yet"]]),
         selectFilter("Date made", "made", [["", "Any time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"], ["year", "This year"]]),
         selectFilter("Scores collected", "scores", [["", "Any time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"], ["never", "Never"]]),
@@ -782,7 +879,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       hr.appendChild(mk("th", "nosort", ""));
       const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
       const body = mk("tbody"); tb.appendChild(body);
-      if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", model.rows.length ? "Nothing matches these filters." : "No tests, quizzes or surveys in your active courses yet."); td.colSpan = COLS.length + 1; tr.appendChild(td); body.appendChild(tr); }
+      if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", model.rows.some((r) => !r.tpl) ? "Nothing matches these filters." : "No tests, quizzes or surveys in your active courses yet."); td.colSpan = COLS.length + 1; tr.appendChild(td); body.appendChild(tr); }
       rows.forEach((r) => {
         const d = r.d;
         const tr = mk("tr");
@@ -798,7 +895,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         }
       });
       const sc = mk("div", "qts-wrap"); sc.appendChild(tb); host.appendChild(sc);
-      host.appendChild(mk("p", "hint", `${rows.length} of ${model.rows.length} shown. Menu → “Copy to other courses…” makes a family of copies; “Family Ties” shows where they are.`));
+      host.appendChild(mk("p", "hint", `${rows.length} of ${model.rows.filter((r) => !r.tpl).length} shown. Menu → “Copy to other courses…” makes a family of copies; “Family Ties” shows where they are.`));
     }
 
     return { refresh, render };
@@ -834,6 +931,70 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     }
     invalidate();
     return `Imported ${n} item${n === 1 ? "" : "s"} into ${course.name}.${errs.length ? ` ${errs[0]}` : ""}`;
+  }
+
+  // ---------- editing a master template's questions ----------
+  // The template is loaded into a hidden course (like course templates are), edited in the normal Test & Quiz Bank editor, then written back.
+  let tedit = null;
+  const tbanner = mk("div"); tbanner.hidden = true;
+  tbanner.style.cssText = "margin:0 0 16px;padding:12px 16px;border:2px solid #c2571a;border-radius:8px;background:color-mix(in srgb, #c2571a 14%, var(--card));";
+  const tbText = mk("div"); tbText.style.fontWeight = "700";
+  const tbHint = mk("div", "hint", "You're editing a master template (no students here). Saving updates it, and its changes flow to its children.");
+  const tbBar = mk("div", "panel-toolbar-buttons"); tbBar.style.marginTop = "10px";
+  const tbStatus = mk("p", "result"); tbStatus.style.margin = "8px 0 0";
+  const tbBtn = (label, cls, fn) => { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); tbBar.appendChild(b); return b; };
+  tbanner.append(tbText, tbHint, tbBar, tbStatus);
+  if (typeof el !== "undefined" && el.courseDetailTitle) el.courseDetailTitle.parentElement.insertAdjacentElement("afterend", tbanner);
+  async function saveTpl() {
+    if (!tedit) return false;
+    tbStatus.textContent = "Saving…";
+    try {
+      await ScoringModule.save();
+      const data = await storage.loadFile(`scoring-${tedit.cid}.json`);
+      const t = data && data.tools && data.tools[0] && data.tools[0].config.tests.find((x) => x.id === tedit.id);
+      if (!t || !t.quiz) throw new Error("the edited copy couldn't be found");
+      await editCourseTest({ courseId: TPL, toolId: "mine", id: tedit.id }, (it) => {
+        it.quiz = { ...clone(t.quiz), token: null, submissions: [] };
+        it.maxPoints = t.maxPoints; it.name = t.name; it.contentAt = nowIso();
+      });
+      tbStatus.textContent = "Saved ✓";
+      return true;
+    } catch (e) { tbStatus.textContent = `Couldn't save: ${e.message}`; return false; }
+  }
+  async function closeTpl(save) {
+    if (!tedit) return;
+    if (save && !(await saveTpl())) return;
+    const { cid } = tedit; tedit = null;
+    CoursesModule.courses = CoursesModule.courses.filter((c) => !c.editingTemplateId);
+    tbanner.hidden = true; el.tabRosterBtn.style.display = "";
+    await showCourses();
+    ["roster", "seating", "attendance", "scoring", "reportcard"].forEach((p) => { try { Promise.resolve(storage.deleteFile(`${p}-${cid}.json`)).catch(() => {}); } catch (e) {} });
+    invalidate();
+  }
+  tbBtn("Save to Template", "btn btn-primary btn-small", () => saveTpl());
+  tbBtn("Save & Close", "btn btn-ghost btn-small", () => closeTpl(true));
+  tbBtn("Close without saving", "btn btn-ghost btn-small", () => { if (confirm("Close without saving? Changes since your last save will be lost.")) closeTpl(false); });
+  if (typeof el !== "undefined" && el.backToCoursesBtn) el.backToCoursesBtn.addEventListener("click", (e) => { if (!tedit) return; e.stopImmediatePropagation(); closeTpl(true); }, true);
+  async function openTplEditor(row) {
+    if (tedit) throw new Error("close the template you're editing first");
+    const item = await fullOf({ courseId: TPL, id: row.id });
+    if (!item || !item.quiz) throw new Error("only quizzes and surveys have questions to edit");
+    if (!window.QuizBankUI) throw new Error("the quiz editor isn't available");
+    if (window.GGOAutosave && GGOAutosave.enabled()) await GGOAutosave.flush();
+    const cid = `tmpledit-qts-${Date.now().toString(36)}`, toolId = "tpl-tool";
+    const test = clone(item); test.quiz = { ...clone(item.quiz), token: null, submissions: [] };
+    await storage.saveFile(`roster-${cid}.json`, { students: [] });
+    await storage.saveFile(`scoring-${cid}.json`, { categories: [], records: {}, weights: {}, presentationMigrated: true, tools: [{ id: toolId, type: "testbank", name: "Test & Quiz Bank", config: { tests: [test] } }] });
+    const course = { id: cid, name: `Master template: ${item.name}`, periodId: null, archived: false, templateId: null, editingTemplateId: "qts" };
+    CoursesModule.courses.push(course);
+    tedit = { cid, id: item.id };
+    await openCourseDetail(course);
+    tbText.textContent = `Editing master template “${item.name}”`; tbStatus.textContent = ""; tbanner.hidden = false;
+    el.tabRosterBtn.style.display = "none";
+    window.QuizBankUI.open(toolId, item.id);
+    showTab("scoring");
+    if (typeof renderScoring === "function") renderScoring();
+    return "";
   }
 
   // ---------- the tab ----------

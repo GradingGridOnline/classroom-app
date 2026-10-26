@@ -19,6 +19,7 @@
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
   const viewOf = new Map(); // toolId -> "build" | "review"
+  window.QuizBankUI = { open(toolId, testId, view) { editing.set(toolId, testId); viewOf.set(toolId, view || "build"); } };
   const statusMsg = new Map(); // toolId|testId -> text
 
   // ---------- look & feel (injected so no other file needs changing) ----------
