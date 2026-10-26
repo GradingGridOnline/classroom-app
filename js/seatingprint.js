@@ -54,6 +54,7 @@
 .sp-apply-panel { position:absolute; top:100%; left:0; z-index:50; background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.25); padding:8px 10px; min-width:240px; max-height:50vh; overflow:auto; }
 .sp-apply-row { display:block; margin:3px 0; }
 .sp-apply { margin:0 0 8px; }
+.group-list-section.gl-collapsed > *:not(h3) { display:none !important; }
 .sp-schem-front { text-align:center; font-style:italic; font-size:.8rem; margin:2px 0 6px; color:var(--ink-soft); }
 `;
   document.head.appendChild(css);
@@ -301,7 +302,7 @@
     try { closed = localStorage.getItem("ggo-groups-closed") === "1"; } catch (e) {}
     const apply = () => {
       h.textContent = `${closed ? "▸" : "▾"} Group Assignments`;
-      Array.from(sec.children).forEach((c) => { if (c !== h) c.hidden = closed; });
+      sec.classList.toggle("gl-collapsed", closed);
     };
     h.style.cursor = "pointer"; h.title = "Click to collapse or expand";
     h.addEventListener("click", () => { closed = !closed; try { localStorage.setItem("ggo-groups-closed", closed ? "1" : "0"); } catch (e) {} apply(); });
