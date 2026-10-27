@@ -1,5 +1,5 @@
-// ===== Attendance → Seating Grid: remember the desk arrangement used for each class =====
-// Load AFTER app.js. The first time you record attendance for a class in the Seating Grid,
+// ===== Attendance: remember the desk arrangement used for each class =====
+// Load AFTER app.js. The first time you record attendance for a class (in the Seating Grid or the Table / column view),
 // the desk arrangement on screen is saved with that class. A toggle lets you view the class
 // with the arrangement that was used then ("As recorded") or the arrangement in the Seating
 // Chart tab right now ("Current"). "Save current arrangement" replaces what was saved.
@@ -23,8 +23,7 @@
 
   // ----- save the arrangement the first time attendance is recorded in the grid -----
   function captureIfNeeded(sessionId) {
-    if (attendanceView !== "seating" || sessionId !== attendanceSeatingSessionId) return;
-    const s = sessionById(sessionId);
+    const s = sessionById(sessionId); // any view: the Table / column view saves the arrangement too
     if (!s || s.seating) return;
     s.seating = snapshotNow();
     updateInfo();
