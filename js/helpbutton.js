@@ -168,9 +168,9 @@
 </ul>
 <h4>Using it</h4>
 <ul>
-<li>Type scores into the boxes. The <b>Scoring ◯ Choose boxes</b> switch above the grid lets you switch off boxes that don't apply to someone (switch back to Scoring to type).</li>
-<li><b>Total Score ◯ Columns</b> switch — decides whether Main Scores uses each row's total or lets an item pick one single column (choose it in that item's Sources).</li>
-<li><b>Give full credit…</b> — tick the <b>Columns</b> and the <b>Rows</b> (or sub-rows) to fill, then click the button: everyone gets the column's maximum score in those boxes. If the tracker has sub-rows, only sub-rows are offered. Columns with no maximum use the box “Score for columns without a maximum”.</li>
+<li>Type scores into the boxes. The <b>Scoring ◯ Choose boxes</b> switch (in Edit Settings) lets you switch off boxes that don't apply to someone (switch back to Scoring to type).</li>
+<li><b>Total Score ◯ Columns</b> switch (in Edit Settings) — decides whether Main Scores uses each row's total or lets an item pick one single column (choose it in that item's Sources).</li>
+<li><b>Assign Multiple Scores</b> — tick the <b>Columns</b> and the <b>Rows</b> (or sub-rows) to fill, then click the button: everyone gets the column's maximum score in those boxes. If the tracker has sub-rows, only sub-rows are offered. Columns with no maximum use the box “Score for columns without a maximum”.</li>
 </ul>`);
 
   add("presentation", "Scoring", "Presentation Calc", `
@@ -347,7 +347,7 @@
         if (mainBtn && mainBtn.classList.contains("tab-btn-active")) return "mainscores";
         const panel = document.getElementById("scoring-panel");
         if (panel.querySelector(".qz-sec-list, .qz-sec-shared")) return "testbank";
-        if (panel.querySelector(".tracker-mode-row")) return "tracker";
+        if (panel.querySelector(".tracker-fullcredit, .tracker-mode-row")) return "tracker";
         if (panel.querySelector(".level4-row, .rubric-bank-block")) return "presentation";
         return "scoring";
       }

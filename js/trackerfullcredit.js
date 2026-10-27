@@ -27,7 +27,7 @@
     det.style.cssText = "margin:0 0 14px;border:1px solid var(--line);border-radius:6px;padding:8px 12px;background:var(--card);";
     det.addEventListener("toggle", () => { st.open = det.open; });
     const sum = document.createElement("summary");
-    sum.textContent = "Give full credit…";
+    sum.textContent = "Assign Multiple Scores";
     sum.style.cssText = "cursor:pointer;font-weight:700;";
     det.appendChild(sum);
 
@@ -126,7 +126,7 @@
       const updateBtn = () => {
         const n = st.cols.size * st.lines.size;
         go.disabled = n === 0;
-        go.textContent = n === 0 ? "Choose columns and rows" : `Give full credit to every ${rowWord} in ${st.cols.size} column${st.cols.size === 1 ? "" : "s"} × ${st.lines.size} ${cfg.subRows.length ? "sub-row" : "line"}${st.lines.size === 1 ? "" : "s"}`;
+        go.textContent = n === 0 ? "Choose columns and rows" : `Assign scores to every ${rowWord} in ${st.cols.size} column${st.cols.size === 1 ? "" : "s"} × ${st.lines.size} ${cfg.subRows.length ? "sub-row" : "line"}${st.lines.size === 1 ? "" : "s"}`;
       };
       updateBtn();
       go.addEventListener("click", async () => {
@@ -161,9 +161,25 @@
       body.appendChild(line);
     }
 
-    const modeRows = container.querySelectorAll(".tracker-mode-row");
-    const anchor = modeRows[modeRows.length - 1];
-    if (anchor) anchor.insertAdjacentElement("afterend", det);
-    else container.appendChild(det);
+    // Sits right under the instructions, above the grid.
+    const intro = container.querySelector(":scope > p.hint");
+    if (intro) intro.insertAdjacentElement("afterend", det);
+    else container.insertBefore(det, container.firstChild);
+
+    // The Scoring (type / Choose boxes) and Total Score (Total Score / Columns) switches live in the tool's Settings.
+    const settings = container.querySelector(":scope > .attendance-settings");
+    const editing = typeof scoringToolSettingsEditing !== "undefined" && scoringToolSettingsEditing.get(tool.id);
+    container.querySelectorAll(":scope > .tracker-mode-row").forEach((row) => {
+      const first = row.querySelector(".tracker-switch-text");
+      const title = first && first.textContent === "Total Score" ? "Total Score" : "Scoring";
+      if (editing && settings) {
+        const block = document.createElement("div");
+        block.className = "attendance-settings-block";
+        const h = document.createElement("h4");
+        h.textContent = title;
+        block.append(h, row);
+        settings.appendChild(block);
+      } else row.remove();
+    });
   };
 })();
