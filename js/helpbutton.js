@@ -189,7 +189,8 @@
 <li><b>Upload scores</b> — upload a CSV or Excel file of scores, say which row is the header and which columns hold names / School IDs / scores. Students are matched to the roster.</li>
 <li><b>+ New Quiz</b> — questions with text, scored by points (multiple choice and fill-in-the-blank, in sections).</li>
 <li><b>+ New Answer Collection</b> — the same, but each question is just a number and options, to match a paper test sheet.</li>
-<li><b>+ New Survey</b> — like a quiz but with no points and no correct answers.</li>
+<li><b>+ New Research Survey</b> — like a quiz but with no points and no correct answers; meant for collecting data to export.</li>
+<li><b>+ New Formative Survey</b> — a survey you run again and again. Each QR launch is saved as a run, and Show Results compares the runs side by side (percent per option and average choice).</li>
 </ul>
 <h4>Quiz editor (Edit Questions)</h4>
 <ol>

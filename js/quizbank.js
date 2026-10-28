@@ -16,6 +16,7 @@
   const newId = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const MAX_QUESTIONS = 200;
   const MAX_OPTIONS = 20;
+  window.isSurveyKind = (k) => k === "survey" || k === "formative"; // Research Survey ("survey") and Formative Survey
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
   const viewOf = new Map(); // toolId -> "build" | "review"
@@ -105,7 +106,7 @@
     normalizeQuiz(test) {
       const q = test && test.quiz;
       if (!q) return null;
-      if (q.kind !== "answers" && q.kind !== "survey") q.kind = "standard";
+      if (q.kind !== "answers" && !isSurveyKind(q.kind) && q.kind !== "formative") q.kind = "standard";
       if (!q.settings || typeof q.settings !== "object") q.settings = {};
       const st = q.settings;
       if (!LABEL_STYLES.some(([id]) => id === st.labelStyle)) st.labelStyle = "upper";
@@ -123,7 +124,7 @@
         s.questions.forEach((x) => {
           if (!Array.isArray(x.choices)) x.choices = [];
           if (!Array.isArray(x.accepted)) x.accepted = [];
-          x.points = q.kind === "survey" ? 0 : Number(x.points) || 0;
+          x.points = isSurveyKind(q.kind) ? 0 : Number(x.points) || 0;
           if (typeof x.correct !== "number") x.correct = 0;
         });
       });
@@ -160,7 +161,7 @@
         id: newId("test"), name: (name || "").trim() || "Untitled quiz", maxPoints: 0, sourceFile: "Quiz editor",
         rows: [], scores: {}, unmatched: [],
         quiz: {
-          kind: kind === "answers" ? "answers" : kind === "survey" ? "survey" : "standard",
+          kind: kind === "answers" ? "answers" : kind === "survey" ? "survey" : kind === "formative" ? "formative" : "standard",
           settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1, attemptRule: "best" },
           sections: [{ id: newId("sec"), title: "Section 1", questions: [] }],
           token: null, submissions: [],
@@ -222,7 +223,7 @@
       const quiz = this.normalizeQuiz(test);
       if (!quiz) return;
       test.maxPoints = this.quizTotal(quiz);
-      if (quiz.kind === "survey") { test.rows = []; test.maxPoints = 0; this._matchTestRows(test); return; } // surveys are not scored
+      if (isSurveyKind(quiz.kind)) { test.rows = []; test.maxPoints = 0; this._matchTestRows(test); return; } // surveys are not scored
       const bySid = new Map();
       quiz.submissions.forEach((s) => {
         if (!bySid.has(s.sid)) bySid.set(s.sid, []);
@@ -273,7 +274,7 @@
       if (people.length === 0) throw new Error("No students on the roster have a School ID yet.");
       const answersOnly = quiz.kind === "answers";
       const config = {
-        kind: quiz.kind,
+        kind: quiz.kind === "formative" ? "survey" : quiz.kind, // the student form treats both survey types alike
         labelStyle: quiz.settings.labelStyle,
         timeLimit: quiz.settings.timeLimit,
         maxAttempts: quiz.settings.attemptsAllowed,
@@ -281,7 +282,7 @@
         sections: quiz.sections.map((s) => ({
           title: s.title,
           questions: s.questions.map((x) => ({
-            id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: quiz.kind === "survey" ? 0 : x.points,
+            id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: isSurveyKind(quiz.kind) ? 0 : x.points,
             choices: x.type === "mc" ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
           })),
         })),
@@ -291,6 +292,7 @@
     async create(toolId, testId) {
       const quiz = ScoringModule.quizOf(toolId, testId);
       const { title, config, people } = this.build(toolId, testId);
+      if (quiz.kind === "formative") archiveRun(quiz); // a new QR code starts a new run; the earlier answers are kept as a saved run
       const token = this.token();
       const { error } = await this.client().from("quiz_forms").insert({ token, title, config, people });
       if (error) throw this.explain(error);
@@ -357,7 +359,7 @@
       if (this.scope === "mine") await storage.saveFile("sharedtests.json", doc);
       else await window.GroupShare.saveDoc(this.scope, "tests", doc);
     },
-    kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : item.quiz.kind === "survey" ? "Survey" : "Quiz") : "Test"; },
+    kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : isSurveyKind(item.quiz.kind) ? "Research Survey" : item.quiz.kind === "formative" ? "Formative Survey" : "Quiz") : "Test"; },
     /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
     snapshot(test, courseName) {
       const quiz = test.quiz ? ScoringModule.normalizeQuiz(test) : null;
@@ -437,7 +439,7 @@
     i.addEventListener("change", () => onChange(i.value));
     return i;
   }
-  const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : quiz.kind === "survey" ? "Survey" : "Quiz");
+  const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : isSurveyKind(quiz.kind) ? "Research Survey" : quiz.kind === "formative" ? "Formative Survey" : "Quiz");
 
   // ---------- shared editor header ----------
   function editorHeader(tool, container, test, quiz, current) {
@@ -449,7 +451,7 @@
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
     bar.appendChild(left);
-    bar.appendChild(h("span", "count-badge", quiz.kind === "survey" ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
+    bar.appendChild(h("span", "count-badge", isSurveyKind(quiz.kind) ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
     return bar;
   }
 
@@ -458,7 +460,7 @@
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
     const answersOnly = quiz.kind === "answers";
-    const isSurvey = quiz.kind === "survey";
+    const isSurvey = isSurveyKind(quiz.kind);
     const style = quiz.settings.labelStyle;
     container.innerHTML = "";
     const rerender = () => renderScoringToolView(tool, container);
@@ -822,7 +824,7 @@
   /** One row per attempt: who, when, score (graded types), and each answer. */
   function exportResponses(test, quiz) {
     const qs = allQuestions(quiz);
-    const graded = quiz.kind !== "survey";
+    const graded = !isSurveyKind(quiz.kind);
     const head = ["Student", "School ID", "Attempt", "Submitted"];
     if (graded) head.push("Score", "Max score");
     head.push("Edited by teacher", ...qs.map((x, i) => qHeader(quiz, x.q, i)));
@@ -868,17 +870,17 @@
       const answered = answers.filter((a) => a !== "");
       const items = [];
       if (q.type === "mc") {
-        q.choices.forEach((c, ci) => items.push({ label: optionText(quiz, q, ci), count: answered.filter((a) => Number(a) === ci).length, correct: quiz.kind !== "survey" && ci === q.correct }));
+        q.choices.forEach((c, ci) => items.push({ label: optionText(quiz, q, ci), count: answered.filter((a) => Number(a) === ci).length, correct: !isSurveyKind(quiz.kind) && ci === q.correct }));
       } else {
         const m = new Map();
         answered.forEach((a) => { const k = String(a).trim(); m.set(k, (m.get(k) || 0) + 1); });
-        [...m.entries()].sort((a, b) => b[1] - a[1]).forEach(([label, count]) => items.push({ label, count, correct: quiz.kind !== "survey" && ScoringModule.quizAnswerCorrect(q, label) }));
+        [...m.entries()].sort((a, b) => b[1] - a[1]).forEach(([label, count]) => items.push({ label, count, correct: !isSurveyKind(quiz.kind) && ScoringModule.quizAnswerCorrect(q, label) }));
       }
       return { n: i + 1, q, sec, total: answers.length, answered: answered.length, items };
     });
   }
   function exportSummary(test, quiz) {
-    const graded = quiz.kind !== "survey";
+    const graded = !isSurveyKind(quiz.kind);
     const rows = [["Question", "Section", "Question text", "Type", "Answer / option", "Count", "Percent of answers", ...(graded ? ["Correct answer"] : [])]];
     summaryTallies(quiz).forEach((t) => {
       const base = [`Q${t.n}`, t.sec.title || "", quiz.kind === "answers" ? "" : t.q.text, t.q.type === "mc" ? "Multiple choice" : "Fill in the blank"];
@@ -890,13 +892,13 @@
   }
   /** The questions and answer key (what is copied between lists; works for items with no answers). */
   function exportQuestions(test, quiz) {
-    const rows = [["Section", "Q#", "Type", ...(quiz.kind === "answers" ? [] : ["Question text"]), ...(quiz.kind === "survey" ? [] : ["Points"]), "Options", ...(quiz.kind === "survey" ? [] : ["Correct answer", "Other accepted answers"])]];
+    const rows = [["Section", "Q#", "Type", ...(quiz.kind === "answers" ? [] : ["Question text"]), ...(isSurveyKind(quiz.kind) ? [] : ["Points"]), "Options", ...(isSurveyKind(quiz.kind) ? [] : ["Correct answer", "Other accepted answers"])]];
     let n = 0;
     quiz.sections.forEach((sec) => (sec.questions || []).forEach((q) => {
       n++;
       const opts = q.type === "mc" ? q.choices.map((c, i) => `${optionLabel(quiz.settings.labelStyle, i)}${c && quiz.kind !== "answers" ? ": " + c : ""}`).join(" | ") : "";
       const correct = q.type === "mc" ? optionLabel(quiz.settings.labelStyle, q.correct) : (q.accepted[0] || "");
-      rows.push([sec.title || "", `Q${n}`, q.type === "mc" ? "Multiple choice" : "Fill in the blank", ...(quiz.kind === "answers" ? [] : [q.text || ""]), ...(quiz.kind === "survey" ? [] : [q.points]), opts, ...(quiz.kind === "survey" ? [] : [correct, q.type === "blank" ? q.accepted.slice(1).filter(Boolean).join(" | ") : ""])]);
+      rows.push([sec.title || "", `Q${n}`, q.type === "mc" ? "Multiple choice" : "Fill in the blank", ...(quiz.kind === "answers" ? [] : [q.text || ""]), ...(isSurveyKind(quiz.kind) ? [] : [q.points]), opts, ...(isSurveyKind(quiz.kind) ? [] : [correct, q.type === "blank" ? q.accepted.slice(1).filter(Boolean).join(" | ") : ""])]);
     }));
     downloadCsv(safeName(test.name, "questions"), rows);
   }
@@ -920,7 +922,7 @@
       const kinds = [["Questions & answer key", exportQuestions]];
       if (!isLib) {
         kinds.unshift(["Responses (one row per attempt)", exportResponses]);
-        if (quiz.kind !== "survey") kinds.push(["Scores per question", exportScores]);
+        if (!isSurveyKind(quiz.kind)) kinds.push(["Scores per question", exportScores]);
         kinds.push(["Question summary", exportSummary]);
       }
       const out = [];
@@ -937,18 +939,103 @@
 
   function exportItems(test, quiz) {
     const items = [{ label: "Responses (one row per attempt)", onClick: () => exportResponses(test, quiz) }];
-    if (quiz.kind !== "survey") items.push({ label: "Scores per question", onClick: () => exportScores(test, quiz) });
+    if (!isSurveyKind(quiz.kind)) items.push({ label: "Scores per question", onClick: () => exportScores(test, quiz) });
     items.push({ label: "Question summary (counts per option)", onClick: () => exportSummary(test, quiz) });
     return items;
+  }
+
+  // ---------- Formative Surveys: every launch is a "run"; saved runs are compared side by side ----------
+  /** Moves the current answers into a saved run (named "Run N"), leaving the survey ready for a fresh run. Returns true if anything was saved. */
+  function archiveRun(quiz) {
+    if (!quiz.submissions || !quiz.submissions.length) return false;
+    if (!Array.isArray(quiz.runs)) quiz.runs = [];
+    const latest = quiz.submissions.reduce((a, s) => (s.at && s.at > a ? s.at : a), "");
+    quiz.runs.push({ id: newId("run"), name: `Run ${quiz.runs.length + 1}`, at: latest || new Date().toISOString(), submissions: JSON.parse(JSON.stringify(quiz.submissions)) });
+    quiz.submissions = [];
+    return true;
+  }
+  const latestPerStudent = (subs) => {
+    const m = new Map();
+    (subs || []).forEach((s) => { const o = m.get(s.sid); if (!o || (Number(s.attempt) || 1) >= (Number(o.attempt) || 1)) m.set(s.sid, s); });
+    return [...m.values()];
+  };
+  /** The saved runs plus the current one (if it has answers), each as { name, at, subs, current }. */
+  function formativeRuns(quiz) {
+    const runs = (quiz.runs || []).map((r) => ({ id: r.id, name: r.name, at: r.at, subs: latestPerStudent(r.submissions), current: false }));
+    if (quiz.submissions.length) {
+      const latest = quiz.submissions.reduce((a, s) => (s.at && s.at > a ? s.at : a), "");
+      runs.push({ id: "current", name: quiz.token ? "Current run (QR open)" : "Current run", at: latest, subs: latestPerStudent(quiz.submissions), current: true });
+    }
+    return runs;
+  }
+  function renderFormativeRuns(body, tool, container, test, quiz) {
+    const rerender = () => renderScoringToolView(tool, container);
+    body.appendChild(h("h4", "", "Runs"));
+    body.appendChild(h("p", "hint", "Each time you launch a new QR code, the earlier answers are saved as a run. Compare runs below to see what changed. The current run is saved automatically when you launch the next QR code, or now with the button."));
+    const bar = h("div", "qz-actions");
+    bar.appendChild(button("Save current answers as a run", "btn btn-primary btn-small", () => {
+      if (quiz.token) { alert("Close the QR code first (Test & Quiz Bank → QR Code → Close QR Code), so no more answers arrive."); return; }
+      if (!quiz.submissions.length) { alert("There are no current answers to save."); return; }
+      archiveRun(quiz); rerender();
+    }));
+    body.appendChild(bar);
+    const runs = formativeRuns(quiz);
+    if (!runs.length) { body.appendChild(h("p", "hint", "No runs yet.")); return runs; }
+    const tbl = h("table", "source-grid qts-grid");
+    const hr = h("tr"); ["Run", "Date", "Responses", ""].forEach((t) => hr.appendChild(h("th", "nosort", t)));
+    const th = h("thead"); th.appendChild(hr); tbl.appendChild(th);
+    const tb = h("tbody"); tbl.appendChild(tb);
+    runs.forEach((r) => {
+      const tr = h("tr");
+      const nameTd = h("td");
+      if (r.current) nameTd.textContent = r.name;
+      else nameTd.appendChild(textInput(r.name, "", (v) => { const run = quiz.runs.find((x) => x.id === r.id); if (run) run.name = v.trim() || run.name; rerender(); }));
+      tr.append(nameTd, h("td", "", r.at ? String(r.at).slice(0, 10) : "—"), h("td", "", String(r.subs.length)));
+      const act = h("td");
+      if (!r.current) act.appendChild(button("Delete", "btn btn-ghost btn-small", () => { if (!confirm(`Delete "${r.name}" and its ${r.subs.length} response(s)?`)) return; quiz.runs = quiz.runs.filter((x) => x.id !== r.id); rerender(); }));
+      tr.appendChild(act); tb.appendChild(tr);
+    });
+    const wrap = h("div", "qts-wrap"); wrap.appendChild(tbl); body.appendChild(wrap);
+
+    body.appendChild(h("h4", "", "Comparison across runs"));
+    body.appendChild(h("p", "hint", "Percentages are of the students who answered each question in that run. “Average choice” is the mean option number (1 = first option), handy for scales like 1–5."));
+    allQuestions(quiz).forEach(({ q }, i) => {
+      const box = h("div", "category-manage-item"); box.style.marginBottom = "12px";
+      box.appendChild(h("strong", "", `Q${i + 1}${q.text ? ": " + q.text : ""}`));
+      const t = h("table", "source-grid qts-grid");
+      const head = h("tr"); head.appendChild(h("th", "nosort", q.type === "mc" ? "Option" : "")); runs.forEach((r) => head.appendChild(h("th", "nosort", r.name)));
+      const thd = h("thead"); thd.appendChild(head); t.appendChild(thd);
+      const tbd = h("tbody"); t.appendChild(tbd);
+      const per = runs.map((r) => {
+        const vals = r.subs.map((s) => ScoringModule.quizEffectiveAnswers(s)[q.id]).filter((a) => a !== undefined && a !== null && a !== "");
+        return { vals, n: vals.length };
+      });
+      if (q.type === "mc") {
+        q.choices.forEach((c, ci) => {
+          const tr = h("tr"); tr.appendChild(h("td", "", optionText(quiz, q, ci) || `Option ${ci + 1}`));
+          per.forEach((p) => { const k = p.vals.filter((a) => Number(a) === ci).length; tr.appendChild(h("td", "qts-n", p.n ? `${Math.round((k / p.n) * 100)}% (${k})` : "—")); });
+          tbd.appendChild(tr);
+        });
+        const avg = h("tr"); avg.appendChild(h("td", "", "Average choice"));
+        per.forEach((p) => avg.appendChild(h("td", "qts-n", p.n ? (p.vals.reduce((a, v) => a + Number(v) + 1, 0) / p.n).toFixed(2) : "—")));
+        tbd.appendChild(avg);
+      }
+      const cnt = h("tr"); cnt.appendChild(h("td", "", "Answered"));
+      per.forEach((p) => cnt.appendChild(h("td", "qts-n", String(p.n))));
+      tbd.appendChild(cnt);
+      const wr = h("div", "qts-wrap"); wr.appendChild(t); box.appendChild(wr); body.appendChild(box);
+    });
+    return runs;
   }
 
   // ---------- the survey results view: answers per student + a summary of every question ----------
   function renderSurveyResults(tool, container, test, quiz) {
     container.innerHTML = "";
     container.appendChild(editorHeader(tool, container, test, quiz, "results"));
-    const { section, body } = makePresSection("Survey results");
+    const { section, body } = makePresSection(quiz.kind === "formative" ? "Formative Survey results" : "Research Survey results");
     section.classList.add("qz-sec-review");
     container.appendChild(section);
+    if (quiz.kind === "formative") renderFormativeRuns(body, tool, container, test, quiz);
     if (quiz.submissions.length === 0) {
       body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
       return;
@@ -958,7 +1045,7 @@
     body.appendChild(bar);
 
     // summary
-    body.appendChild(h("h4", "", `Summary (${quiz.submissions.length} response${quiz.submissions.length === 1 ? "" : "s"})`));
+    body.appendChild(h("h4", "", `${quiz.kind === "formative" ? "Current run — summary" : "Summary"} (${quiz.submissions.length} response${quiz.submissions.length === 1 ? "" : "s"})`));
     summaryTallies(quiz).forEach((t) => {
       const box = h("div", "category-manage-item");
       box.style.marginBottom = "10px";
@@ -1015,7 +1102,7 @@
   function renderResults(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
-    if (quiz.kind === "survey") return renderSurveyResults(tool, container, test, quiz);
+    if (isSurveyKind(quiz.kind)) return renderSurveyResults(tool, container, test, quiz);
     const style = quiz.settings.labelStyle;
     container.innerHTML = "";
     container.appendChild(editorHeader(tool, container, test, quiz, "results"));
@@ -1285,7 +1372,8 @@
     };
     const btns = body.querySelector(".panel-toolbar-buttons");
     if (btns) {
-      btns.insertBefore(button("+ New Survey", "btn btn-ghost", create("survey", "Survey")), btns.firstChild);
+      btns.insertBefore(button("+ New Formative Survey", "btn btn-ghost", create("formative", "Formative Survey")), btns.firstChild);
+      btns.insertBefore(button("+ New Research Survey", "btn btn-ghost", create("survey", "Research Survey")), btns.firstChild);
       btns.insertBefore(button("+ New Answer Collection", "btn btn-ghost", create("answers", "Answer Collection")), btns.firstChild);
       btns.insertBefore(button("+ New Quiz", "btn btn-ghost", create("standard", "Quiz")), btns.firstChild);
     }
@@ -1326,7 +1414,7 @@
       tr.children[4].textContent = quiz.token ? "QR open" : "";
       const maxCell = tr.children[1];
       maxCell.textContent = "";
-      const isSurvey = quiz.kind === "survey";
+      const isSurvey = isSurveyKind(quiz.kind);
       const maxText = h("span", "", isSurvey ? "—" : String(ScoringModule.quizTotal(quiz)));
       maxText.title = "Total of the question points. Change the points on the questions to change this.";
       maxText.style.fontWeight = "600";

@@ -92,13 +92,13 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (!test || !test.quiz) return null;
     const t = { quiz: { kind: test.quiz.kind, settings: clone(test.quiz.settings || {}), sections: clone(test.quiz.sections || []) } };
     const q = ScoringModule.normalizeQuiz(t);
-    return { kind: q.kind, settings: q.settings, sections: q.sections, max: q.kind === "survey" ? 0 : ScoringModule.quizTotal(q) };
+    return { kind: q.kind, settings: q.settings, sections: q.sections, max: isSurveyKind(q.kind) ? 0 : ScoringModule.quizTotal(q) };
   }
   function hashOf(test) {
     const c = contentOf(test);
     return c ? fingerprint(stable({ k: c.kind, s: c.settings, c: c.sections })) : "";
   }
-  const KIND_LABEL = { quiz: "Quiz", answers: "Answer Collection", survey: "Survey", test: "Test" };
+  const KIND_LABEL = { quiz: "Quiz", answers: "Answer Collection", survey: "Research Survey", formative: "Formative Survey", test: "Test" };
   const madeOf = (test) => {
     if (test.createdAt) return test.createdAt;
     const m = /^(?:test|shared)-(\d{11,})-/.exec(String(test.id || ""));
@@ -110,9 +110,9 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     let kind = "test", questions = null, max = Number(test.maxPoints) || 0, answers = Object.keys(test.scores || {}).length, qr = false, scoresAt = "";
     if (quizOn) {
       const c = contentOf(test);
-      kind = c.kind === "answers" ? "answers" : c.kind === "survey" ? "survey" : "quiz";
+      kind = c.kind === "answers" ? "answers" : c.kind === "survey" ? "survey" : c.kind === "formative" ? "formative" : "quiz";
       questions = c.sections.reduce((a, sec) => a + (sec.questions || []).length, 0);
-      max = kind === "survey" ? null : c.max;
+      max = isSurveyKind(kind) ? null : c.max;
       const subs = test.quiz.submissions || [];
       answers = new Set(subs.map((x) => x.sid)).size;
       qr = !!test.quiz.token;
@@ -646,7 +646,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (d.kind === "test") labels = [["CSV: Scores", "csv"], ["Excel: Scores", "xlsx"]];
     else if (!window.QuizExport) labels = [];
     else {
-      const stub = { name: "x", quiz: { kind: d.kind === "answers" ? "answers" : d.kind === "survey" ? "survey" : "standard", settings: {}, sections: [], submissions: [] } };
+      const stub = { name: "x", quiz: { kind: d.kind === "answers" ? "answers" : d.kind === "survey" ? "survey" : d.kind === "formative" ? "formative" : "standard", settings: {}, sections: [], submissions: [] } };
       labels = window.QuizExport.items(stub, false).map((it) => [it.label, null]);
     }
     return labels.map(([label, fmt]) => ({
@@ -853,7 +853,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const filters = mk("div", "qts-filters");
       filters.append(
         selectFilter("Course", "course", courseOpts),
-        selectFilter("Type", "type", [["", "All"], ["quiz", "Quiz"], ["test", "Test"], ["survey", "Survey"], ["answers", "Answer Collection"]]),
+        selectFilter("Type", "type", [["", "All"], ["quiz", "Quiz"], ["test", "Test"], ["survey", "Research Survey"], ["formative", "Formative Survey"], ["answers", "Answer Collection"]]),
         selectFilter("Family", "fam", [["", "All"], ["in", "In a family"], ["none", "Clones (no parent)"], ["differs", "Out of sync"], ["left", "Left a family"]]),
         selectFilter("Status", "status", [["", "All"], ["QR open", "QR open"], ["Has answers", "Has answers"], ["Has scores", "Has scores"], ["No answers yet", "No answers yet"]]),
         selectFilter("Date made", "made", [["", "Any time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"], ["year", "This year"]]),
