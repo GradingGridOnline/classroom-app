@@ -17,11 +17,20 @@
   --card-shadow: 0 0 0 1px #cdbf9f, 0 2px 0 #d8c9a6;
   --glow: none;
   --focus-glow: 0 0 0 2px rgba(94, 128, 140, 0.4);
-  --th-bg: #f7bda5;        /* column headers: peach */
-  --td-bg: color-mix(in srgb, #f7bda5 30%, #fffaf0);
+  --th-bg: #efab8e;        /* column headers: peach */
+  --td-bg: color-mix(in srgb, #efab8e 30%, #fffaf0);
 }
 html[data-theme="vintage"] { --hdr-bg: #56737e; }
-[data-theme="vintage"] body { background: var(--paper); color: var(--ink); }
+[data-theme="vintage"] body {
+  color: var(--ink);
+  /* sunburst rays fanning out from the top center, softened toward the edges */
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(ellipse 90% 70% at 50% 0%, rgba(255, 247, 226, 0.75), rgba(255, 247, 226, 0) 70%),
+    repeating-conic-gradient(from -90deg at 50% -6%, rgba(239, 171, 142, 0.30) 0deg 7.5deg, rgba(239, 171, 142, 0) 7.5deg 15deg);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
 [data-theme="vintage"] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme="vintage"] select,
 [data-theme="vintage"] textarea {
