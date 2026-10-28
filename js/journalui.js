@@ -49,7 +49,7 @@
   let editingId = null;   // entry being edited
   let creating = false;   // new-entry form open
   let showAll = false;
-  let tagFilter = ""; // clicking a tag shows only the entries with it
+  let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
   let sel = { from: "", to: "", tag: "", student: "", word: "" };
 
   const students = () => RosterModule.students.slice().sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
@@ -110,9 +110,15 @@
 
     const tagBox = mk("div");
     const drawTags = () => {
-      tagBox.innerHTML = ""; tagBox.appendChild(document.createTextNode("Tags: "));
+      tagBox.innerHTML = ""; tagBox.appendChild(mk("div", "", "Tags:"));
       const all = J.cleanTags([...J.allTags(), ...st.tags]);
-      all.forEach((t) => { const on = [...st.tags].some((x) => x.toLowerCase() === t.toLowerCase()); tagBox.appendChild(btn(t, "jr-chip" + (on ? " on" : ""), () => { if (on) { st.tags = new Set([...st.tags].filter((x) => x.toLowerCase() !== t.toLowerCase())); } else st.tags.add(t); drawTags(); })); });
+      all.forEach((t) => {
+        const on = [...st.tags].some((x) => x.toLowerCase() === t.toLowerCase());
+        const l = mk("label"); l.style.marginRight = "12px"; l.style.whiteSpace = "nowrap";
+        const c = mk("input"); c.type = "checkbox"; c.checked = on;
+        c.addEventListener("change", () => { if (c.checked) st.tags.add(t); else st.tags = new Set([...st.tags].filter((x) => x.toLowerCase() !== t.toLowerCase())); });
+        l.append(c, document.createTextNode(` ${t}`)); tagBox.appendChild(l);
+      });
       const ni = mk("input"); ni.placeholder = "new tag…"; ni.size = 12;
       const addTag = () => { const v = ni.value.trim(); if (v) { J.cleanTags([v]).forEach((x) => st.tags.add(x)); drawTags(); } };
       ni.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addTag(); } });
@@ -138,7 +144,7 @@
     const c = mk("div", "jr-entry");
     c.appendChild(mk("div", "jr-subject", e.subject || "(no subject)"));
     c.appendChild(mk("div", "jr-meta", e.date));
-    if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(btn(x, "jr-chip tagbtn", () => { tagFilter = x; render(); }))); c.appendChild(t); }
+    if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); c.appendChild(t); }
     if (e.students.length) {
       const d = mk("details"); d.appendChild(mk("summary", "", `Students (${e.students.length})`));
       d.appendChild(mk("div", "jr-meta", e.students.map(sName).join(", "))); c.appendChild(d);
@@ -181,7 +187,22 @@
     const two = mk("div", "jr-two");
     const c1 = mk("div"); c1.appendChild(mk("h4", "", "Timeline (entries per month)")); c1.appendChild(bars(mrows)); two.appendChild(c1);
     const tags = {}; E.forEach((e) => e.tags.forEach((t) => { const k = t.toLowerCase(); tags[k] = tags[k] || { name: t, n: 0 }; tags[k].n++; }));
-    const c2 = mk("div"); c2.appendChild(mk("h4", "", "By tag")); c2.appendChild(bars(Object.values(tags).sort((a, b) => b.n - a.n).map((t) => [t.name, t.n]), null, (name) => { tagFilter = name; render(); window.scrollTo({ top: 0 }); })); two.appendChild(c2);
+    const c2 = mk("div"); c2.appendChild(mk("h4", "", "By tag (tick tags to list their entries)"));
+    const tl = Object.values(tags).sort((a, b) => b.n - a.n);
+    const maxN = Math.max(1, ...tl.map((t) => t.n));
+    tl.forEach((t) => {
+      const d = mk("label", "jr-bar"); const c = mk("input"); c.type = "checkbox";
+      c.checked = [...tagFilter].some((x) => x.toLowerCase() === t.name.toLowerCase());
+      c.addEventListener("change", () => {
+        tagFilter = new Set([...tagFilter].filter((x) => x.toLowerCase() !== t.name.toLowerCase()));
+        if (c.checked) tagFilter.add(t.name);
+        const y = window.scrollY; render(); window.scrollTo({ top: y });
+      });
+      const i = mk("i"); i.style.width = `${Math.round((t.n / maxN) * 160)}px`;
+      d.append(c, mk("span", "", t.name), i, mk("span", "", String(t.n))); c2.appendChild(d);
+    });
+    if (!tl.length) c2.appendChild(mk("p", "hint", "Nothing yet."));
+    two.appendChild(c2);
     body.appendChild(two);
     const per = students().map((st) => [sName(st.id), E.filter((e) => e.students.includes(st.id)).length]).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0], undefined, { numeric: true }));
     body.appendChild(mk("h4", "", "By student (fewest entries first)"));
@@ -262,11 +283,12 @@
     bar.appendChild(right); panel.appendChild(bar);
 
     if (creating) panel.appendChild(buildForm(null));
-    if (tagFilter) {
-      const fb = mk("div", "jr-filterbar jr-row"); fb.appendChild(mk("span", "", `Showing entries tagged “${tagFilter}”`));
-      fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = ""; render(); })); panel.appendChild(fb);
+    if (tagFilter.size) {
+      const fb = mk("div", "jr-filterbar jr-row"); fb.appendChild(mk("span", "", `Showing entries tagged: ${[...tagFilter].join(", ")}`));
+      fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = new Set(); render(); })); panel.appendChild(fb);
     }
-    const sorted = J.entries.filter((e) => !tagFilter || e.tags.some((t) => t.toLowerCase() === tagFilter.toLowerCase())).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const want = [...tagFilter].map((t) => t.toLowerCase());
+    const sorted = J.entries.filter((e) => !want.length || e.tags.some((t) => want.includes(t.toLowerCase()))).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
     if (!sorted.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
     (showAll ? sorted : sorted.slice(0, 20)).forEach((e) => panel.appendChild(entryCard(e)));
     if (sorted.length > 20) panel.appendChild(btn(showAll ? "Show latest 20 only" : `Show all ${sorted.length} entries`, "btn btn-ghost btn-small", () => { showAll = !showAll; render(); }));
