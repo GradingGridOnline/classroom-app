@@ -17,51 +17,51 @@
 
   const css = mk("style");
   css.textContent = `
-#journal-panel .jr-form { border:1px solid var(--line,#ccc); border-radius:8px; padding:10px; margin:0 0 12px; display:grid; gap:8px; }
-#journal-panel .jr-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-#journal-panel textarea { width:100%; min-height:90px; font:inherit; padding:6px; box-sizing:border-box; }
-#journal-panel .jr-chip { display:inline-block; border:1px solid var(--line,#ccc); border-radius:999px; padding:1px 9px; margin:2px 3px 2px 0; font-size:.8rem; cursor:pointer; background:transparent; color:inherit; }
-#journal-panel .jr-chip { border-color:currentColor; }
-#journal-panel .jr-chip.on { background:var(--ink,#222); color:var(--card,#fff); border-color:var(--ink,#222); }
-#journal-panel .jr-chip.on.static { background:transparent; color:inherit; border-color:currentColor; }
-#journal-panel .jr-chip.static { cursor:default; }
-#journal-panel .jr-entry { border:1px solid var(--line,#ccc); border-radius:8px; padding:8px 10px; margin:0 0 8px; }
-#journal-panel .jr-entry .jr-meta { font-size:.82rem; opacity:.85; }
-#journal-panel .jr-entry .jr-text { white-space:pre-wrap; margin:4px 0; display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-#journal-panel .jr-entry .jr-text.full { display:block; }
-#journal-panel .jr-entry .jr-subject { font-weight:700; font-size:1rem; }
-#journal-panel .jr-entry details summary { cursor:pointer; font-size:.85rem; }
-#journal-panel .jr-chip.tagbtn { cursor:pointer; }
-#journal-panel .jr-bar.click { cursor:pointer; }
-#journal-panel .jr-filterbar { margin:0 0 8px; }
-#journal-panel .jr-snap { font-size:.8rem; opacity:.8; border-top:1px dashed var(--line,#ccc); margin-top:4px; padding-top:3px; }
-#journal-panel .jr-pick { position:relative; }
-#journal-panel .jr-pick-list { max-height:220px; overflow:auto; border:1px solid var(--line,#ccc); border-radius:6px; padding:4px 8px; margin-top:4px; }
-#journal-panel .jr-pick-list label { display:block; font-size:.88rem; }
-#journal-panel .jr-bar { display:flex; align-items:center; gap:6px; font-size:.85rem; margin:2px 0; }
-#journal-panel .jr-bar i { display:inline-block; height:12px; background:var(--green,#3d5a40); border-radius:3px; min-width:2px; }
-#journal-panel .jr-two { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
-#journal-panel table.jr-table { border-collapse:collapse; font-size:.85rem; width:100%; }
-#journal-panel table.jr-table th, #journal-panel table.jr-table td { border:1px solid var(--line,#ccc); padding:2px 6px; text-align:left; vertical-align:top; }
-#journal-panel .jr-filters { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:0 0 8px; }
-#journal-panel .jr-filters label { display:flex; flex-direction:column; font-size:.78rem; gap:1px; }
+:is(#journal-panel, #journal-modal) .jr-form { border:1px solid var(--line,#ccc); border-radius:8px; padding:10px; margin:0 0 12px; display:grid; gap:8px; }
+:is(#journal-panel, #journal-modal) .jr-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+:is(#journal-panel, #journal-modal) textarea { width:100%; min-height:90px; font:inherit; padding:6px; box-sizing:border-box; }
+:is(#journal-panel, #journal-modal) .jr-chip { display:inline-block; border:1px solid var(--line,#ccc); border-radius:999px; padding:1px 9px; margin:2px 3px 2px 0; font-size:.8rem; cursor:pointer; background:transparent; color:inherit; }
+:is(#journal-panel, #journal-modal) .jr-chip { border-color:currentColor; }
+:is(#journal-panel, #journal-modal) .jr-chip.on { background:var(--ink,#222); color:var(--card,#fff); border-color:var(--ink,#222); }
+:is(#journal-panel, #journal-modal) .jr-chip.on.static { background:transparent; color:inherit; border-color:currentColor; }
+:is(#journal-panel, #journal-modal) .jr-chip.static { cursor:default; }
+:is(#journal-panel, #journal-modal) .jr-entry { border:1px solid var(--line,#ccc); border-radius:8px; padding:8px 10px; margin:0 0 8px; }
+:is(#journal-panel, #journal-modal) .jr-entry .jr-meta { font-size:.82rem; opacity:.85; }
+:is(#journal-panel, #journal-modal) .jr-entry .jr-text { white-space:pre-wrap; margin:4px 0; display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+:is(#journal-panel, #journal-modal) .jr-entry .jr-text.full { display:block; }
+:is(#journal-panel, #journal-modal) .jr-entry .jr-subject { font-weight:700; font-size:1rem; }
+:is(#journal-panel, #journal-modal) .jr-entry details summary { cursor:pointer; font-size:.85rem; }
+:is(#journal-panel, #journal-modal) .jr-chip.tagbtn { cursor:pointer; }
+:is(#journal-panel, #journal-modal) .jr-bar.click { cursor:pointer; }
+:is(#journal-panel, #journal-modal) .jr-filterbar { margin:0 0 8px; }
+:is(#journal-panel, #journal-modal) .jr-snap { font-size:.8rem; opacity:.8; border-top:1px dashed var(--line,#ccc); margin-top:4px; padding-top:3px; }
+:is(#journal-panel, #journal-modal) .jr-pick { position:relative; }
+:is(#journal-panel, #journal-modal) .jr-pick-list { max-height:220px; overflow:auto; border:1px solid var(--line,#ccc); border-radius:6px; padding:4px 8px; margin-top:4px; }
+:is(#journal-panel, #journal-modal) .jr-pick-list label { display:block; font-size:.88rem; }
+:is(#journal-panel, #journal-modal) .jr-bar { display:flex; align-items:center; gap:6px; font-size:.85rem; margin:2px 0; }
+:is(#journal-panel, #journal-modal) .jr-bar i { display:inline-block; height:12px; background:var(--green,#3d5a40); border-radius:3px; min-width:2px; }
+:is(#journal-panel, #journal-modal) .jr-two { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+:is(#journal-panel, #journal-modal) table.jr-table { border-collapse:collapse; font-size:.85rem; width:100%; }
+:is(#journal-panel, #journal-modal) table.jr-table th, :is(#journal-panel, #journal-modal) table.jr-table td { border:1px solid var(--line,#ccc); padding:2px 6px; text-align:left; vertical-align:top; }
+:is(#journal-panel, #journal-modal) .jr-filters { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:0 0 8px; }
+:is(#journal-panel, #journal-modal) .jr-filters label { display:flex; flex-direction:column; font-size:.78rem; gap:1px; }
 
 /* ----- the book ----- */
-#journal-panel .jr-bookwrap { margin:0 0 16px; }
-#journal-panel .jr-bookrow { display:flex; align-items:stretch; gap:8px; }
-#journal-panel .jr-turn { flex:0 0 38px; font-size:2rem; line-height:1; cursor:pointer; border:1px solid var(--line,#ccc); border-radius:var(--radius,8px); background:var(--card,#fff); color:var(--green-dark,#333); }
-#journal-panel .jr-turn:disabled { opacity:.3; cursor:default; }
-#journal-panel .jr-book { --jr-ms:260ms; flex:1; min-width:0; display:grid; grid-template-columns:1fr 14px 1fr; perspective:1600px; position:relative;
+:is(#journal-panel, #journal-modal) .jr-bookwrap { margin:0 0 16px; }
+:is(#journal-panel, #journal-modal) .jr-bookrow { display:flex; align-items:stretch; gap:8px; }
+:is(#journal-panel, #journal-modal) .jr-turn { flex:0 0 38px; font-size:2rem; line-height:1; cursor:pointer; border:1px solid var(--line,#ccc); border-radius:var(--radius,8px); background:var(--card,#fff); color:var(--green-dark,#333); }
+:is(#journal-panel, #journal-modal) .jr-turn:disabled { opacity:.3; cursor:default; }
+:is(#journal-panel, #journal-modal) .jr-book { --jr-ms:260ms; flex:1; min-width:0; display:grid; grid-template-columns:1fr 14px 1fr; perspective:1600px; position:relative;
   border:6px solid var(--jr-cover,#5a6f5d); border-radius:10px; background:var(--jr-cover,#5a6f5d); box-shadow:0 4px 14px rgba(0,0,0,.25); }
-#journal-panel .jr-page { background:var(--jr-page,#fffdf6); color:var(--ink,#222); padding:12px 14px 26px; min-height:320px; position:relative; min-width:0; }
-#journal-panel .jr-page-left { border-radius:5px 0 0 5px; transform-origin:right center; box-shadow:inset -22px 0 22px -22px rgba(0,0,0,.35); }
-#journal-panel .jr-page-right { border-radius:0 5px 5px 0; transform-origin:left center; box-shadow:inset 22px 0 22px -22px rgba(0,0,0,.35); }
-#journal-panel .jr-spine { background:linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,.05) 50%,rgba(0,0,0,.28)), var(--jr-page,#fffdf6); }
-#journal-panel .jr-pageno { position:absolute; bottom:6px; left:0; right:0; text-align:center; font-size:.8rem; opacity:.6; }
-#journal-panel .jr-bookinfo { text-align:center; font-size:.82rem; opacity:.75; margin-top:4px; }
-#journal-panel .jr-book .jr-entry { border:0; border-bottom:1px dashed var(--line,#ccc); border-radius:0; padding:6px 2px; margin:0 0 6px; background:transparent; }
-#journal-panel .jr-book .jr-form { background:transparent; }
-@media (max-width:760px) { #journal-panel .jr-book { grid-template-columns:1fr; } #journal-panel .jr-spine { display:none; } #journal-panel .jr-turn { flex-basis:30px; } }
+:is(#journal-panel, #journal-modal) .jr-page { background:var(--jr-page,#fffdf6); color:var(--ink,#222); padding:12px 14px 26px; min-height:320px; position:relative; min-width:0; }
+:is(#journal-panel, #journal-modal) .jr-page-left { border-radius:5px 0 0 5px; transform-origin:right center; box-shadow:inset -22px 0 22px -22px rgba(0,0,0,.35); }
+:is(#journal-panel, #journal-modal) .jr-page-right { border-radius:0 5px 5px 0; transform-origin:left center; box-shadow:inset 22px 0 22px -22px rgba(0,0,0,.35); }
+:is(#journal-panel, #journal-modal) .jr-spine { background:linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,.05) 50%,rgba(0,0,0,.28)), var(--jr-page,#fffdf6); }
+:is(#journal-panel, #journal-modal) .jr-pageno { position:absolute; bottom:6px; left:0; right:0; text-align:center; font-size:.8rem; opacity:.6; }
+:is(#journal-panel, #journal-modal) .jr-bookinfo { text-align:center; font-size:.82rem; opacity:.75; margin-top:4px; }
+:is(#journal-panel, #journal-modal) .jr-book .jr-entry { border:0; border-bottom:1px dashed var(--line,#ccc); border-radius:0; padding:6px 2px; margin:0 0 6px; background:transparent; }
+:is(#journal-panel, #journal-modal) .jr-book .jr-form { background:transparent; }
+@media (max-width:760px) { :is(#journal-panel, #journal-modal) .jr-book { grid-template-columns:1fr; } :is(#journal-panel, #journal-modal) .jr-spine { display:none; } :is(#journal-panel, #journal-modal) .jr-turn { flex-basis:30px; } }
 
 /* page-turn animations (each theme picks its own style) */
 @keyframes jr-flip-out-next { to { transform:rotateY(-88deg); filter:brightness(.8); } }
@@ -75,21 +75,28 @@
 @keyframes jr-wipe-out { to { clip-path:inset(0 0 0 100%); filter:drop-shadow(0 0 6px #00d9ff); } }
 @keyframes jr-wipe-in  { from { clip-path:inset(0 100% 0 0); filter:drop-shadow(0 0 6px #00d9ff); } }
 /* left page turns for "prev", right page for "next" */
-#journal-panel .jr-book.jr-out-next .jr-page-right { animation:var(--jr-out-next,jr-flip-out-next) var(--jr-ms) ease-in forwards; }
-#journal-panel .jr-book.jr-in-next  .jr-page-left  { animation:var(--jr-in-next,jr-flip-in-next) var(--jr-ms) ease-out; }
-#journal-panel .jr-book.jr-out-prev .jr-page-left  { animation:var(--jr-out-prev,jr-flip-out-prev) var(--jr-ms) ease-in forwards; }
-#journal-panel .jr-book.jr-in-prev  .jr-page-right { animation:var(--jr-in-prev,jr-flip-in-prev) var(--jr-ms) ease-out; }
+:is(#journal-panel, #journal-modal) .jr-book.jr-out-next .jr-page-right { animation:var(--jr-out-next,jr-flip-out-next) var(--jr-ms) ease-in forwards; }
+:is(#journal-panel, #journal-modal) .jr-book.jr-in-next  .jr-page-left  { animation:var(--jr-in-next,jr-flip-in-next) var(--jr-ms) ease-out; }
+:is(#journal-panel, #journal-modal) .jr-book.jr-out-prev .jr-page-left  { animation:var(--jr-out-prev,jr-flip-out-prev) var(--jr-ms) ease-in forwards; }
+:is(#journal-panel, #journal-modal) .jr-book.jr-in-prev  .jr-page-right { animation:var(--jr-in-prev,jr-flip-in-prev) var(--jr-ms) ease-out; }
 
 /* theme looks */
-[data-theme="vintage"] #journal-panel .jr-book { --jr-cover:#7a5238; --jr-page:#f3e5c4; --jr-ms:340ms; border-radius:6px; box-shadow:0 5px 0 #5c3d29, 0 10px 18px rgba(0,0,0,.35); }
-[data-theme="vintage"] #journal-panel .jr-page { background:linear-gradient(180deg,#f6ebcf,#eddcb6); outline:1px solid rgba(122,82,56,.45); outline-offset:-7px; font-family:var(--font-body); }
-[data-theme="vintage"] #journal-panel .jr-turn { background:#7a5238; color:#f3e5c4; border-color:#5c3d29; }
-[data-theme="dark"] #journal-panel .jr-book { --jr-cover:#5b5651; --jr-page:#2b2927; }
-[data-theme="cyberpunk"] #journal-panel .jr-book { --jr-cover:#0073e6; --jr-page:#ffffff; --jr-ms:300ms; --jr-out-next:jr-glitch-out; --jr-in-next:jr-glitch-in; --jr-out-prev:jr-glitch-out; --jr-in-prev:jr-glitch-in; border-width:2px; border-radius:2px; box-shadow:0 0 14px rgba(0,190,255,.55); }
-[data-theme="cyberpunk"] #journal-panel .jr-page { border-radius:0; }
-[data-theme="tron-legacy"] #journal-panel .jr-book { --jr-cover:#00d9ff; --jr-page:#0c1a22; --jr-ms:320ms; --jr-out-next:jr-wipe-out; --jr-in-next:jr-wipe-in; --jr-out-prev:jr-wipe-out; --jr-in-prev:jr-wipe-in; border-width:1px; border-radius:0; box-shadow:0 0 18px rgba(0,217,255,.5); }
-[data-theme="tron-legacy"] #journal-panel .jr-page { border-radius:0; box-shadow:none; }
-[data-theme="basic"] #journal-panel .jr-book { --jr-cover:#6b7d8f; --jr-page:#ffffff; --jr-ms:220ms; --jr-out-next:jr-fade-out; --jr-in-next:jr-fade-in; --jr-out-prev:jr-fade-out; --jr-in-prev:jr-fade-in; border-width:2px; border-radius:2px; box-shadow:none; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-book { --jr-cover:#7a5238; --jr-page:#f3e5c4; --jr-ms:340ms; border-radius:6px; box-shadow:0 5px 0 #5c3d29, 0 10px 18px rgba(0,0,0,.35); }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-page { background:linear-gradient(180deg,#f6ebcf,#eddcb6); outline:1px solid rgba(122,82,56,.45); outline-offset:-7px; font-family:var(--font-body); }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-turn { background:#7a5238; color:#f3e5c4; border-color:#5c3d29; }
+[data-theme="dark"] :is(#journal-panel, #journal-modal) .jr-book { --jr-cover:#5b5651; --jr-page:#2b2927; }
+[data-theme="cyberpunk"] :is(#journal-panel, #journal-modal) .jr-book { --jr-cover:#0073e6; --jr-page:#ffffff; --jr-ms:300ms; --jr-out-next:jr-glitch-out; --jr-in-next:jr-glitch-in; --jr-out-prev:jr-glitch-out; --jr-in-prev:jr-glitch-in; border-width:2px; border-radius:2px; box-shadow:0 0 14px rgba(0,190,255,.55); }
+[data-theme="cyberpunk"] :is(#journal-panel, #journal-modal) .jr-page { border-radius:0; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-book { --jr-cover:#00d9ff; --jr-page:#0c1a22; --jr-ms:320ms; --jr-out-next:jr-wipe-out; --jr-in-next:jr-wipe-in; --jr-out-prev:jr-wipe-out; --jr-in-prev:jr-wipe-in; border-width:1px; border-radius:0; box-shadow:0 0 18px rgba(0,217,255,.5); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page { border-radius:0; box-shadow:none; }
+[data-theme="basic"] :is(#journal-panel, #journal-modal) .jr-book { --jr-cover:#6b7d8f; --jr-page:#ffffff; --jr-ms:220ms; --jr-out-next:jr-fade-out; --jr-in-next:jr-fade-in; --jr-out-prev:jr-fade-out; --jr-in-prev:jr-fade-in; border-width:2px; border-radius:2px; box-shadow:none; }
+
+#journal-modal { position:fixed; inset:0; z-index:20050; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; padding:16px; }
+#journal-modal .jr-modal-box { background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line,#ccc); border-radius:var(--radius,10px); box-shadow:0 12px 40px rgba(0,0,0,.45); width:min(780px,94vw); max-height:88vh; overflow:auto; padding:18px 20px; }
+#journal-modal .jr-modal-head { display:flex; align-items:flex-start; gap:12px; justify-content:space-between; }
+#journal-modal .jr-modal-title { font-family:var(--font-heading); font-size:1.4rem; margin:0 0 4px; color:var(--green-dark,#222); }
+#journal-modal .jr-modal-text { white-space:pre-wrap; margin:10px 0; line-height:1.5; font-size:1rem; }
+#journal-modal .jr-modal-row { margin:6px 0; }
 `;
   document.head.appendChild(css);
 
@@ -134,7 +141,7 @@
   }
 
   // ---------- the entry form ----------
-  function buildForm(entry) {
+  function buildForm(entry, onDone, onCancel) {
     const f = mk("div", "jr-form");
     const st = { date: entry ? entry.date : today(), subject: entry ? entry.subject || "" : "", students: new Set(entry ? entry.students : []), tags: new Set(entry ? entry.tags : []) };
     const row = mk("div", "jr-row");
@@ -183,8 +190,9 @@
       const data = { date: st.date, subject: st.subject, text: text.value, students: [...st.students], tags: [...st.tags] };
       if (entry) J.updateEntry(entry.id, data); else { J.addEntry(data); spread = null; }
       editingId = null; creating = false; render();
+      if (onDone) onDone();
     }));
-    acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; render(); }));
+    acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; if (onCancel) onCancel(); else render(); }));
     f.appendChild(acts);
     return f;
   }
@@ -200,8 +208,7 @@
       d.appendChild(mk("div", "jr-meta", e.students.map(sName).join(", "))); c.appendChild(d);
     } else c.appendChild(mk("div", "jr-meta", "Whole class"));
     const tx = mk("div", "jr-text", e.text); c.appendChild(tx);
-    const long = (e.text.match(/\n/g) || []).length >= 3 || e.text.length > 240;
-    if (long) { const more = btn("Show full entry", "btn btn-ghost btn-small", () => { const on = tx.classList.toggle("full"); more.textContent = on ? "Show first 3 lines" : "Show full entry"; }); c.appendChild(more); }
+    c.appendChild(btn("Show full entry", "btn btn-ghost btn-small", () => openEntry(e.id)));
     if (J.settings.snapshots) {
       const sn = snapParts(e);
       if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); c.appendChild(d); }
@@ -211,6 +218,34 @@
     a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm("Delete this entry?")) { J.removeEntry(e.id); render(); } }));
     c.appendChild(a);
     return c;
+  }
+
+  // ---------- the full-entry window ----------
+  function openEntry(id) {
+    const existing = document.getElementById("journal-modal"); if (existing) existing.remove();
+    const root = mk("div"); root.id = "journal-modal";
+    const box = mk("div", "jr-modal-box"); root.appendChild(box);
+    const close = () => { root.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (ev) => { if (ev.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    root.addEventListener("mousedown", (ev) => { if (ev.target === root) close(); });
+    function show() {
+      const e = J.entries.find((x) => x.id === id); if (!e) { close(); return; }
+      box.innerHTML = "";
+      const head = mk("div", "jr-modal-head");
+      const hl = mk("div"); hl.appendChild(mk("h3", "jr-modal-title", e.subject || "(no subject)")); hl.appendChild(mk("div", "jr-meta", e.date));
+      head.appendChild(hl); head.appendChild(btn("✕ Close", "btn btn-ghost btn-small", close)); box.appendChild(head);
+      if (e.tags.length) { const t = mk("div", "jr-modal-row"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); box.appendChild(t); }
+      box.appendChild(mk("div", "jr-meta jr-modal-row", e.students.length ? `Students (${e.students.length}): ${e.students.map(sName).join(", ")}` : "Whole class"));
+      box.appendChild(mk("div", "jr-modal-text", e.text));
+      if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); box.appendChild(d); } }
+      const a = mk("div", "jr-row jr-modal-row");
+      a.appendChild(btn("Edit", "btn btn-primary btn-small", () => { box.innerHTML = ""; box.appendChild(buildForm(e, show, show)); }));
+      a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm("Delete this entry?")) { J.removeEntry(e.id); close(); render(); } }));
+      box.appendChild(a);
+    }
+    show();
+    document.body.appendChild(root);
   }
 
   // ---------- the book: two pages showing, page-turn buttons on either side ----------
