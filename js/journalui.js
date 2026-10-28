@@ -21,7 +21,9 @@
 #journal-panel .jr-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 #journal-panel textarea { width:100%; min-height:90px; font:inherit; padding:6px; box-sizing:border-box; }
 #journal-panel .jr-chip { display:inline-block; border:1px solid var(--line,#ccc); border-radius:999px; padding:1px 9px; margin:2px 3px 2px 0; font-size:.8rem; cursor:pointer; background:transparent; color:inherit; }
-#journal-panel .jr-chip.on { background:var(--green,#3d5a40); color:#fff; border-color:transparent; }
+#journal-panel .jr-chip { border-color:currentColor; }
+#journal-panel .jr-chip.on { background:var(--ink,#222); color:var(--card,#fff); border-color:var(--ink,#222); }
+#journal-panel .jr-chip.on.static { background:transparent; color:inherit; border-color:currentColor; }
 #journal-panel .jr-chip.static { cursor:default; }
 #journal-panel .jr-entry { border:1px solid var(--line,#ccc); border-radius:8px; padding:8px 10px; margin:0 0 8px; }
 #journal-panel .jr-entry .jr-meta { font-size:.82rem; opacity:.85; }
@@ -93,7 +95,7 @@
 
   let editingId = null;   // entry being edited
   let creating = false;   // new-entry form open
-  let spread = 0;       // which two-page spread of the book is showing
+  let spread = null;    // which two-page spread is showing (null = open at the latest entry)
   let turning = false;  // a page-turn animation is running
   const PER_PAGE = 3;
   let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
@@ -161,10 +163,11 @@
       const all = J.cleanTags([...J.allTags(), ...st.tags]);
       all.forEach((t) => {
         const on = [...st.tags].some((x) => x.toLowerCase() === t.toLowerCase());
-        const l = mk("label"); l.style.marginRight = "12px"; l.style.whiteSpace = "nowrap";
-        const c = mk("input"); c.type = "checkbox"; c.checked = on;
-        c.addEventListener("change", () => { if (c.checked) st.tags.add(t); else st.tags = new Set([...st.tags].filter((x) => x.toLowerCase() !== t.toLowerCase())); });
-        l.append(c, document.createTextNode(` ${t}`)); tagBox.appendChild(l);
+        const c = btn(t, "jr-chip" + (on ? " on" : ""), () => {
+          if (on) st.tags = new Set([...st.tags].filter((x) => x.toLowerCase() !== t.toLowerCase())); else st.tags.add(t);
+          drawTags();
+        });
+        c.setAttribute("aria-pressed", String(on)); tagBox.appendChild(c);
       });
       const ni = mk("input"); ni.placeholder = "new tag…"; ni.size = 12;
       const addTag = () => { const v = ni.value.trim(); if (v) { J.cleanTags([v]).forEach((x) => st.tags.add(x)); drawTags(); } };
@@ -178,7 +181,7 @@
       if (!st.date) { alert("Choose a date."); return; }
       if (!text.value.trim() && !st.subject.trim() && !st.tags.size) { alert("Write something first."); return; }
       const data = { date: st.date, subject: st.subject, text: text.value, students: [...st.students], tags: [...st.tags] };
-      if (entry) J.updateEntry(entry.id, data); else J.addEntry(data);
+      if (entry) J.updateEntry(entry.id, data); else { J.addEntry(data); spread = null; }
       editingId = null; creating = false; render();
     }));
     acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; render(); }));
@@ -215,7 +218,7 @@
   function buildBook(sorted) {
     const wrap = mk("div", "jr-bookwrap");
     const total = spreads(sorted.length);
-    spread = Math.max(0, Math.min(spread, total - 1));
+    spread = spread === null ? total - 1 : Math.max(0, Math.min(spread, total - 1));
     const prev = btn("‹", "jr-turn jr-turn-prev", () => turn(-1)); prev.title = "Previous pages"; prev.setAttribute("aria-label", "Previous pages");
     const next = btn("›", "jr-turn jr-turn-next", () => turn(1)); next.title = "Next pages"; next.setAttribute("aria-label", "Next pages");
     const book = mk("div", "jr-book");
@@ -275,19 +278,20 @@
     const two = mk("div", "jr-two");
     const c1 = mk("div"); c1.appendChild(mk("h4", "", "Timeline (entries per month)")); c1.appendChild(bars(mrows)); two.appendChild(c1);
     const tags = {}; E.forEach((e) => e.tags.forEach((t) => { const k = t.toLowerCase(); tags[k] = tags[k] || { name: t, n: 0 }; tags[k].n++; }));
-    const c2 = mk("div"); c2.appendChild(mk("h4", "", "By tag (tick tags to list their entries)"));
+    const c2 = mk("div"); c2.appendChild(mk("h4", "", "By tag (click tags to list their entries)"));
     const tl = Object.values(tags).sort((a, b) => b.n - a.n);
     const maxN = Math.max(1, ...tl.map((t) => t.n));
     tl.forEach((t) => {
-      const d = mk("label", "jr-bar"); const c = mk("input"); c.type = "checkbox";
-      c.checked = [...tagFilter].some((x) => x.toLowerCase() === t.name.toLowerCase());
-      c.addEventListener("change", () => {
+      const on = [...tagFilter].some((x) => x.toLowerCase() === t.name.toLowerCase());
+      const d = mk("div", "jr-bar");
+      const chip = btn(t.name, "jr-chip" + (on ? " on" : ""), () => {
         tagFilter = new Set([...tagFilter].filter((x) => x.toLowerCase() !== t.name.toLowerCase()));
-        if (c.checked) tagFilter.add(t.name);
-        const y = window.scrollY; render(); window.scrollTo({ top: y });
+        if (!on) tagFilter.add(t.name);
+        spread = null; const y = window.scrollY; render(); window.scrollTo({ top: y });
       });
+      chip.setAttribute("aria-pressed", String(on));
       const i = mk("i"); i.style.width = `${Math.round((t.n / maxN) * 160)}px`;
-      d.append(c, mk("span", "", t.name), i, mk("span", "", String(t.n))); c2.appendChild(d);
+      d.append(chip, i, mk("span", "", String(t.n))); c2.appendChild(d);
     });
     if (!tl.length) c2.appendChild(mk("p", "hint", "Nothing yet."));
     two.appendChild(c2);
@@ -373,10 +377,10 @@
     if (creating) panel.appendChild(buildForm(null));
     if (tagFilter.size) {
       const fb = mk("div", "jr-filterbar jr-row"); fb.appendChild(mk("span", "", `Showing entries tagged: ${[...tagFilter].join(", ")}`));
-      fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = new Set(); render(); })); panel.appendChild(fb);
+      fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = new Set(); spread = null; render(); })); panel.appendChild(fb);
     }
     const want = [...tagFilter].map((t) => t.toLowerCase());
-    const sorted = J.entries.filter((e) => !want.length || e.tags.some((t) => want.includes(t.toLowerCase()))).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const sorted = J.entries.filter((e) => !want.length || e.tags.some((t) => want.includes(t.toLowerCase()))).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     if (!sorted.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
     if (sorted.length) panel.appendChild(buildBook(sorted));
 
@@ -391,7 +395,7 @@
     const cid = AttendanceModule.currentCourseId || ScoringModule.currentCourseId;
     if (!cid) { status.textContent = ""; return; }
     if (loadedFor === cid && J.currentCourseId === cid) return;
-    try { status.textContent = "Loading…"; await J.load(cid); loadedFor = cid; status.textContent = ""; editingId = null; creating = false; spread = 0; }
+    try { status.textContent = "Loading…"; await J.load(cid); loadedFor = cid; status.textContent = ""; editingId = null; creating = false; spread = null; }
     catch (e) { J.entries = []; status.textContent = `Couldn't load journal: ${e.message}`; }
   }
 
@@ -401,7 +405,7 @@
     const on = tab === "journal";
     panel.hidden = !on;
     tabBtn.classList.toggle("tab-btn-active", on);
-    if (on) ensureLoaded().then(render);
+    if (on) { spread = null; ensureLoaded().then(render); } // opens at the latest entry
   };
   tabBtn.addEventListener("click", () => window.showTab("journal"));
   window.JournalUI = { render, ensureLoaded };
