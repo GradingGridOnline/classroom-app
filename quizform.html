@@ -127,7 +127,27 @@
             qt.textContent = answersOnly || !q.text ? `${num}. ` : `${num}. ${q.text} `;
             if (form.config.kind !== "survey") { const pts = document.createElement("span"); pts.className = "pts"; pts.textContent = `(${q.points} pt${q.points === 1 ? "" : "s"})`; qt.appendChild(pts); }
             wrap.appendChild(qt);
-            if (q.type === "mc") {
+            if (q.type === "multi") {
+              const compact = answersOnly || (q.choices || []).every((c) => !c);
+              const holder = document.createElement("div");
+              if (compact) holder.className = "chips";
+              const chosen = new Set(String(answers[q.id] === undefined ? "" : answers[q.id]).split(",").filter((x) => x !== "").map(Number));
+              const hint = document.createElement("div"); hint.className = "sub"; hint.style.margin = "0 0 6px"; hint.textContent = "Select all that apply."; wrap.appendChild(hint);
+              (q.choices || []).forEach((c, i) => {
+                const b = document.createElement("button"); b.type = "button";
+                b.className = (compact ? "chip" : "opt") + (chosen.has(i) ? " on" : "");
+                if (compact) b.textContent = label(style, i);
+                else { const l = document.createElement("b"); l.textContent = label(style, i); b.append(l, document.createTextNode(c)); }
+                b.addEventListener("click", () => {
+                  if (chosen.has(i)) chosen.delete(i); else chosen.add(i);
+                  b.classList.toggle("on", chosen.has(i));
+                  answers[q.id] = [...chosen].sort((x, y) => x - y).join(",");
+                  refresh();
+                });
+                holder.appendChild(b);
+              });
+              wrap.appendChild(holder);
+            } else if (q.type === "mc") {
               const compact = answersOnly || (q.choices || []).every((c) => !c);
               const holder = document.createElement("div");
               if (compact) holder.className = "chips";

@@ -16,7 +16,14 @@
   const newId = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const MAX_QUESTIONS = 200;
   const MAX_OPTIONS = 20;
-  window.isSurveyKind = (k) => k === "survey" || k === "formative"; // Research Survey ("survey") and Formative Survey
+  window.isSurveyKind = (k) => k === "survey" || k === "formative";
+  /** Multiple-select answers are stored as a string of chosen option numbers, e.g. "0,2" ("" = none chosen). */
+  const multiSet = (ans) => {
+    const arr = Array.isArray(ans) ? ans : String(ans === undefined || ans === null ? "" : ans).split(",");
+    return [...new Set(arr.filter((x) => x !== "" && x !== null && x !== undefined).map(Number).filter((n) => Number.isInteger(n) && n >= 0))].sort((a, b) => a - b);
+  };
+  const isChoiceQ = (q) => q.type === "mc" || q.type === "multi";
+  const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
   const viewOf = new Map(); // toolId -> "build" | "review"
@@ -126,6 +133,11 @@
           if (!Array.isArray(x.accepted)) x.accepted = [];
           x.points = isSurveyKind(q.kind) ? 0 : Number(x.points) || 0;
           if (typeof x.correct !== "number") x.correct = 0;
+          if (x.type === "multi") {
+            x.correctSet = multiSet(x.correctSet).filter((i) => i < x.choices.length);
+            if (!x.correctSet.length) x.correctSet = [0];
+            x.partial = x.partial === true;
+          }
         });
       });
       q.submissions.forEach((s) => {
@@ -177,7 +189,8 @@
       if (this.quizQuestionCount(quiz) >= MAX_QUESTIONS) throw new Error(`Limit of ${MAX_QUESTIONS} questions.`);
       section.questions.push({
         id: newId("q"), type, text: "", points: 1,
-        choices: type === "mc" ? Array(quiz.settings.defaultOptions).fill("") : [], correct: 0, accepted: type === "blank" ? [""] : [],
+        choices: type === "mc" || type === "multi" ? Array(quiz.settings.defaultOptions).fill("") : [], correct: 0, accepted: type === "blank" ? [""] : [],
+        ...(type === "multi" ? { correctSet: [0], partial: false } : {}),
       });
     },
     duplicateQuizQuestion(quiz, section, index) {
@@ -192,6 +205,7 @@
       while (q.choices.length < count) q.choices.push("");
       q.choices.length = count;
       if (q.correct >= count) q.correct = 0;
+      if (Array.isArray(q.correctSet)) { q.correctSet = q.correctSet.filter((i) => i < count); if (!q.correctSet.length) q.correctSet = [0]; }
     },
     /** A student's answers after the teacher's edits. */
     quizEffectiveAnswers(s) {
@@ -201,6 +215,7 @@
     quizAnswerCorrect(q, ans) {
       if (ans === undefined || ans === null || ans === "") return false;
       if (q.type === "mc") return Number(ans) === q.correct;
+      if (q.type === "multi") return this.quizAnswerFraction(q, ans) === 1;
       const a = this._matchKey(ans);
       return q.accepted.some((acc) => {
         const k = this._matchKey(acc);
@@ -209,7 +224,17 @@
         return !Number.isNaN(Number(k)) && !Number.isNaN(Number(a)) && Number(k) === Number(a);
       });
     },
+    /** 0..1 share of the question earned. Multiple select: all-or-nothing, or (with partial credit on) right picks minus wrong picks over the number of right answers. */
+    quizAnswerFraction(q, ans) {
+      if (q.type !== "multi") return this.quizAnswerCorrect(q, ans) ? 1 : 0;
+      const picked = multiSet(ans), key = multiSet(q.correctSet);
+      if (!picked.length) return 0;
+      const hits = picked.filter((i) => key.includes(i)).length, wrong = picked.length - hits;
+      if (hits === key.length && wrong === 0) return 1;
+      return q.partial ? Math.max(0, (hits - wrong) / key.length) : 0;
+    },
     gradeQuizQuestion(q, ans) {
+      if (q.type === "multi") return r2(q.points * this.quizAnswerFraction(q, ans));
       return this.quizAnswerCorrect(q, ans) ? q.points : 0;
     },
     gradeQuizSubmission(quiz, answers) {
@@ -283,7 +308,7 @@
           title: s.title,
           questions: s.questions.map((x) => ({
             id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: isSurveyKind(quiz.kind) ? 0 : x.points,
-            choices: x.type === "mc" ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
+            choices: isChoiceQ(x) ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
           })),
         })),
       };
@@ -455,6 +480,20 @@
     return bar;
   }
 
+  /** A row of option checkboxes (A, B, C…) for picking a set of options. */
+  function multiBoxes(q, style, current, onChange) {
+    const wrap = h("span"); wrap.style.cssText = "display:inline-flex;flex-wrap:wrap;gap:4px 12px;align-items:center;";
+    const set = new Set(current);
+    q.choices.forEach((c, ci) => {
+      const l = h("label"); l.style.whiteSpace = "nowrap";
+      const cb = h("input"); cb.type = "checkbox"; cb.checked = set.has(ci);
+      cb.addEventListener("change", () => { if (cb.checked) set.add(ci); else set.delete(ci); onChange([...set].sort((a, b) => a - b)); });
+      l.append(cb, document.createTextNode(" " + optionLabel(style, ci)));
+      wrap.appendChild(l);
+    });
+    return wrap;
+  }
+
   // ---------- the question editor ----------
   function renderEditor(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
@@ -518,6 +557,7 @@
       top.appendChild(textInput(sec.title, "Section title", (v) => { sec.title = v; rerender(); }));
       const tb = h("div", "panel-toolbar-buttons");
       tb.appendChild(button("+ Multiple choice", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); return; } rerender(); }));
+      tb.appendChild(button("+ Multiple select", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "multi"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Fill in the blank", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "blank"); } catch (e) { alert(e.message); return; } rerender(); }));
       if (quiz.sections.length > 1) {
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
@@ -532,11 +572,11 @@
 
       sec.questions.forEach((q, qi) => {
         n++;
-        const box = h("div", "category-manage-item qz-q " + (q.type === "mc" ? "qz-q-mc" : "qz-q-blank"));
+        const box = h("div", "category-manage-item qz-q " + (isChoiceQ(q) ? "qz-q-mc" : "qz-q-blank"));
         box.style.marginBottom = "14px";
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("span", "qz-qnum", `Q${n}`));
-        row.appendChild(h("span", "qz-pill", q.type === "mc" ? "Multiple choice" : "Fill in the blank"));
+        row.appendChild(h("span", "qz-pill", typeName(q)));
         if (answersOnly) {
           const spacer = h("span");
           spacer.style.flex = "1";
@@ -555,7 +595,7 @@
         row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
         box.appendChild(row);
 
-        if (q.type === "mc") {
+        if (isChoiceQ(q)) {
           const cnt = h("div", "mapping-row");
           cnt.appendChild(h("label", "", "Number of options"));
           cnt.appendChild(textInput(String(q.choices.length), "", (v) => { ScoringModule.setQuizChoiceCount(q, v); regrade(); rerender(); }, "point-value-input"));
@@ -572,6 +612,17 @@
           }
           const keyRow = h("div", "mapping-row qz-keyrow");
           if (isSurvey) keyRow.style.display = "none"; // surveys have no answer key
+          if (q.type === "multi") {
+            keyRow.appendChild(h("label", "", "✔ Correct answers"));
+            keyRow.appendChild(multiBoxes(q, style, multiSet(q.correctSet), (set) => { q.correctSet = set.length ? set : [0]; regrade(); rerender(); }));
+            box.appendChild(keyRow);
+            if (!isSurvey) {
+              const pr = h("label", "mapping-row"); const pc = h("input"); pc.type = "checkbox"; pc.checked = q.partial === true;
+              pc.addEventListener("change", () => { q.partial = pc.checked; regrade(); rerender(); });
+              pr.append(pc, document.createTextNode(" Partial credit (right picks minus wrong picks, out of the number of right answers; otherwise all-or-nothing)"));
+              box.appendChild(pr);
+            }
+          } else {
           keyRow.appendChild(h("label", "", "✔ Correct answer"));
           const sel = h("select");
           q.choices.forEach((c, ci) => {
@@ -583,6 +634,7 @@
           sel.addEventListener("change", () => { q.correct = Number(sel.value); regrade(); });
           keyRow.appendChild(sel);
           box.appendChild(keyRow);
+          }
         } else if (isSurvey) {
           box.appendChild(h("p", "hint", "Students type their own answer. Surveys have no answer key and no points."));
         } else {
@@ -660,7 +712,9 @@
     keyTr.appendChild(h("td"));
     qs.forEach((q) => {
       const td = h("td");
-      if (q.type === "mc") {
+      if (q.type === "multi") {
+        td.appendChild(multiBoxes(q, style, multiSet(q.correctSet), (set) => { q.correctSet = set.length ? set : [0]; regrade(); refresh(); }));
+      } else if (q.type === "mc") {
         const sel = h("select");
         q.choices.forEach((c, ci) => {
           const o = h("option", "", optionLabel(style, ci));
@@ -719,7 +773,9 @@
           regrade();
           refresh();
         };
-        if (q.type === "mc") {
+        if (q.type === "multi") {
+          ctl = multiBoxes(q, style, multiSet(current), (set) => setOverride(set.join(",")));
+        } else if (q.type === "mc") {
           ctl = h("select");
           const blank = h("option", "", "—");
           blank.value = "";
@@ -766,11 +822,12 @@
       rows.forEach((r) => {
         const eff = ScoringModule.quizEffectiveAnswers(r.s);
         r.cells.forEach((c, i) => {
-          const ok = ScoringModule.quizAnswerCorrect(c.q, eff[c.q.id]);
+          const frac = ScoringModule.quizAnswerFraction(c.q, eff[c.q.id]);
+          const ok = frac === 1, part = frac > 0 && frac < 1;
           if (ok) correctCount[i]++;
           c.td.className = ok ? "qz-ok" : "qz-bad";
-          c.mark.textContent = ok ? "●" : "✕";
-          c.mark.style.color = ok ? "#1e9e4a" : "#d3302f";
+          c.mark.textContent = ok ? "●" : part ? "◐" : "✕";
+          c.mark.style.color = ok ? "#1e9e4a" : part ? "#d28a00" : "#d3302f";
           const edited = Object.prototype.hasOwnProperty.call(r.s.overrides, c.q.id);
           c.cell.style.outline = edited ? "2px solid #e0a800" : "none";
           c.cell.title = edited ? "Edited by you" : "";
@@ -791,6 +848,7 @@
   };
   const optionText = (quiz, q, ans) => {
     if (ans === undefined || ans === null || ans === "") return "";
+    if (q.type === "multi") return multiSet(ans).map((i) => optionText(quiz, q, i)).join(", ");
     if (q.type !== "mc") return String(ans);
     const i = Number(ans);
     const label = optionLabel(quiz.settings.labelStyle, i);
@@ -869,7 +927,9 @@
       const answers = quiz.submissions.map((s) => ScoringModule.quizEffectiveAnswers(s)[q.id]).map((a) => (a === undefined || a === null ? "" : a));
       const answered = answers.filter((a) => a !== "");
       const items = [];
-      if (q.type === "mc") {
+      if (q.type === "multi") {
+        q.choices.forEach((c, ci) => items.push({ label: optionText(quiz, q, ci), count: answered.filter((a) => multiSet(a).includes(ci)).length, correct: !isSurveyKind(quiz.kind) && multiSet(q.correctSet).includes(ci) }));
+      } else if (q.type === "mc") {
         q.choices.forEach((c, ci) => items.push({ label: optionText(quiz, q, ci), count: answered.filter((a) => Number(a) === ci).length, correct: !isSurveyKind(quiz.kind) && ci === q.correct }));
       } else {
         const m = new Map();
@@ -883,7 +943,7 @@
     const graded = !isSurveyKind(quiz.kind);
     const rows = [["Question", "Section", "Question text", "Type", "Answer / option", "Count", "Percent of answers", ...(graded ? ["Correct answer"] : [])]];
     summaryTallies(quiz).forEach((t) => {
-      const base = [`Q${t.n}`, t.sec.title || "", quiz.kind === "answers" ? "" : t.q.text, t.q.type === "mc" ? "Multiple choice" : "Fill in the blank"];
+      const base = [`Q${t.n}`, t.sec.title || "", quiz.kind === "answers" ? "" : t.q.text, typeName(t.q)];
       if (t.items.length === 0) rows.push([...base, "(no answers)", 0, "", ...(graded ? [""] : [])]);
       t.items.forEach((it) => rows.push([...base, it.label, it.count, t.answered ? `${Math.round((1000 * it.count) / t.answered) / 10}%` : "", ...(graded ? [it.correct ? "Yes" : ""] : [])]));
       rows.push([...base, "(no answer)", t.total - t.answered, "", ...(graded ? [""] : [])]);
@@ -896,9 +956,9 @@
     let n = 0;
     quiz.sections.forEach((sec) => (sec.questions || []).forEach((q) => {
       n++;
-      const opts = q.type === "mc" ? q.choices.map((c, i) => `${optionLabel(quiz.settings.labelStyle, i)}${c && quiz.kind !== "answers" ? ": " + c : ""}`).join(" | ") : "";
-      const correct = q.type === "mc" ? optionLabel(quiz.settings.labelStyle, q.correct) : (q.accepted[0] || "");
-      rows.push([sec.title || "", `Q${n}`, q.type === "mc" ? "Multiple choice" : "Fill in the blank", ...(quiz.kind === "answers" ? [] : [q.text || ""]), ...(isSurveyKind(quiz.kind) ? [] : [q.points]), opts, ...(isSurveyKind(quiz.kind) ? [] : [correct, q.type === "blank" ? q.accepted.slice(1).filter(Boolean).join(" | ") : ""])]);
+      const opts = isChoiceQ(q) ? q.choices.map((c, i) => `${optionLabel(quiz.settings.labelStyle, i)}${c && quiz.kind !== "answers" ? ": " + c : ""}`).join(" | ") : "";
+      const correct = q.type === "multi" ? multiSet(q.correctSet).map((i) => optionLabel(quiz.settings.labelStyle, i)).join(", ") : q.type === "mc" ? optionLabel(quiz.settings.labelStyle, q.correct) : (q.accepted[0] || "");
+      rows.push([sec.title || "", `Q${n}`, typeName(q), ...(quiz.kind === "answers" ? [] : [q.text || ""]), ...(isSurveyKind(quiz.kind) ? [] : [q.points]), opts, ...(isSurveyKind(quiz.kind) ? [] : [correct, q.type === "blank" ? q.accepted.slice(1).filter(Boolean).join(" | ") : ""])]);
     }));
     downloadCsv(safeName(test.name, "questions"), rows);
   }
@@ -1003,22 +1063,24 @@
       const box = h("div", "category-manage-item"); box.style.marginBottom = "12px";
       box.appendChild(h("strong", "", `Q${i + 1}${q.text ? ": " + q.text : ""}`));
       const t = h("table", "source-grid qts-grid");
-      const head = h("tr"); head.appendChild(h("th", "nosort", q.type === "mc" ? "Option" : "")); runs.forEach((r) => head.appendChild(h("th", "nosort", r.name)));
+      const head = h("tr"); head.appendChild(h("th", "nosort", isChoiceQ(q) ? "Option" : "")); runs.forEach((r) => head.appendChild(h("th", "nosort", r.name)));
       const thd = h("thead"); thd.appendChild(head); t.appendChild(thd);
       const tbd = h("tbody"); t.appendChild(tbd);
       const per = runs.map((r) => {
         const vals = r.subs.map((s) => ScoringModule.quizEffectiveAnswers(s)[q.id]).filter((a) => a !== undefined && a !== null && a !== "");
         return { vals, n: vals.length };
       });
-      if (q.type === "mc") {
+      if (isChoiceQ(q)) {
         q.choices.forEach((c, ci) => {
           const tr = h("tr"); tr.appendChild(h("td", "", optionText(quiz, q, ci) || `Option ${ci + 1}`));
-          per.forEach((p) => { const k = p.vals.filter((a) => Number(a) === ci).length; tr.appendChild(h("td", "qts-n", p.n ? `${Math.round((k / p.n) * 100)}% (${k})` : "—")); });
+          per.forEach((p) => { const k = p.vals.filter((a) => (q.type === "multi" ? multiSet(a).includes(ci) : Number(a) === ci)).length; tr.appendChild(h("td", "qts-n", p.n ? `${Math.round((k / p.n) * 100)}% (${k})` : "—")); });
           tbd.appendChild(tr);
         });
-        const avg = h("tr"); avg.appendChild(h("td", "", "Average choice"));
-        per.forEach((p) => avg.appendChild(h("td", "qts-n", p.n ? (p.vals.reduce((a, v) => a + Number(v) + 1, 0) / p.n).toFixed(2) : "—")));
-        tbd.appendChild(avg);
+        if (q.type === "mc") {
+          const avg = h("tr"); avg.appendChild(h("td", "", "Average choice"));
+          per.forEach((p) => avg.appendChild(h("td", "qts-n", p.n ? (p.vals.reduce((a, v) => a + Number(v) + 1, 0) / p.n).toFixed(2) : "—")));
+          tbd.appendChild(avg);
+        }
       }
       const cnt = h("tr"); cnt.appendChild(h("td", "", "Answered"));
       per.forEach((p) => cnt.appendChild(h("td", "qts-n", String(p.n))));
@@ -1167,7 +1229,7 @@
 
     const answerText = (q, ans) => {
       if (ans === undefined || ans === null || ans === "") return "(no answer)";
-      return q.type === "mc" ? optionLabel(style, Number(ans)) : String(ans);
+      return q.type === "multi" ? multiSet(ans).map((i) => optionLabel(style, i)).join(", ") : q.type === "mc" ? optionLabel(style, Number(ans)) : String(ans);
     };
 
     const tbody = h("tbody");
