@@ -28,7 +28,7 @@
   const reportPanel = document.getElementById("reportcard-panel");
   if (!reportBtn || !reportPanel) return;
   const tabBtn = mk("button", "tab-btn", "QTS Bank"); tabBtn.id = "tab-qts-btn";
-  reportBtn.after(tabBtn);
+  (document.getElementById("tab-journal-btn") || reportBtn).after(tabBtn);
   const panel = mk("div", "tab-panel"); panel.id = "qts-panel"; panel.hidden = true;
   reportPanel.after(panel);
 

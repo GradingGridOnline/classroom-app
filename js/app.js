@@ -7848,6 +7848,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
         tools: ScoringModule.tools, presentationMigrated: ScoringModule.presentationMigrated,
       }),
     },
+    { name: "journal", mod: JournalModule, scoped: true, snap: () => ({ entries: JournalModule.entries, settings: JournalModule.settings }) },
     {
       name: "reportcard", mod: ReportCardModule, scoped: true,
       snap: () => ({

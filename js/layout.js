@@ -14,7 +14,7 @@
   try { closed = new Set(JSON.parse(localStorage.getItem(KEY)) || []); } catch (e) { closed = new Set(); }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify([...closed])); } catch (e) {} };
 
-  SECTIONS.forEach(([id, selector]) => {
+  function add([id, selector]) {
     const sec = document.querySelector(selector);
     if (!sec || sec.dataset.ggoSection) return;
     const head = sec.querySelector(":scope > .attendance-settings-header") || sec.querySelector(":scope > h3");
@@ -30,5 +30,7 @@
       save(); apply();
     });
     apply();
-  });
+  }
+  SECTIONS.forEach(add);
+  window.GGOSections = { add: (id, selector) => add([id, selector]) }; // for modules built after this file loads
 })();
