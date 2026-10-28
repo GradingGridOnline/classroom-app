@@ -1,0 +1,35 @@
+/* ===== Vintage theme =====
+   Cream "tin sign" paper, charcoal ink, and a faded retro palette: slate blue (primary),
+   sage green, peach, and dusty rose (accent), with a chunky slab heading font. Loaded after dark.css. */
+[data-theme="vintage"] {
+  --paper: #efe4cb;        /* page + inner bands (aged cream) */
+  --card: #fbf5e6;         /* panels, tiles, menus */
+  --ink: #3a3d40;          /* charcoal text */
+  --ink-soft: #6e695e;
+  --green: #5e808c;        /* primary / interactive: slate blue */
+  --green-dark: #3f5c68;   /* headings, secondary-button text, hover fill */
+  --marker: #d98a86;       /* accent: dusty rose */
+  --line: #cdbf9f;
+  --font-heading: "Bevan", Georgia, "Times New Roman", serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 8px;
+  --radius-small: 6px;
+  --card-shadow: 0 0 0 1px #cdbf9f, 0 2px 0 #d8c9a6;
+  --glow: none;
+  --focus-glow: 0 0 0 2px rgba(94, 128, 140, 0.4);
+  --th-bg: #f7bda5;        /* column headers: peach */
+  --td-bg: color-mix(in srgb, #f7bda5 30%, #fffaf0);
+}
+html[data-theme="vintage"] { --hdr-bg: #56737e; }
+[data-theme="vintage"] body { background: var(--paper); color: var(--ink); }
+[data-theme="vintage"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="vintage"] select,
+[data-theme="vintage"] textarea {
+  background: #fffaf0;
+  color: var(--ink);
+  border: 1px solid #b9a98a;
+}
+[data-theme="vintage"] table th { color: var(--ink); }
+[data-theme="vintage"] .btn-primary { background: #5e808c; color: #fff; }
+[data-theme="vintage"] .btn-primary:hover { background: #3f5c68; color: #fff; }
+[data-theme="vintage"] .result { color: #4d7a52; }

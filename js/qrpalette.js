@@ -17,6 +17,7 @@
     cyberpunk: { bg: "#f1f4f7", ink: "#1c232b", head: "#08508f", soft: "#5a6672", line: "#c3cdd8" },
     "tron-legacy": { bg: "#0e1217", ink: "#d9faff", head: "#4de8ff", soft: "#5f8a95", line: "#0f3e4a" },
     dark: PALETTES.dark,
+    vintage: { bg: "#efe4cb", ink: "#3a3d40", head: "#3f5c68", soft: "#6e695e", line: "#cdbf9f" },
   };
 
   function get() {

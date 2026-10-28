@@ -10,6 +10,7 @@ const THEMES = [
   { id: "basic", label: "Basic" },
   { id: "tron-legacy", label: "Tron: Legacy" },
   { id: "dark", label: "Dark" },
+  { id: "vintage", label: "Vintage" },
 ];
 
 const TEXT_SIZES = [

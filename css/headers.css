@@ -17,7 +17,9 @@
 #settings-section .settings-block > h3,
 /* Report Card */
 #printcard-view > .attendance-settings-block > h4,
-#reportcard-email-section > h4 {
+#reportcard-email-section > h4,
+/* Journal */
+#journal-panel .settings-section > h3 {
   background: var(--hdr-bg);
   color: #fff;
   border-radius: 6px;
