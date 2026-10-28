@@ -224,7 +224,7 @@
 
   add("journal", "Course tabs", "Journal", `
 <ol>
-<li><b>+ New Entry</b> — pick a date, optionally tick students (none = the whole class), write the entry, and choose or add tags. Entries show newest first, with that day's attendance and each student's attendance so far and current score beside them (turn this off in Journal Settings).</li>
+<li><b>+ New Entry</b> — add a subject and date, optionally tick students (none = the whole class), write the entry, and choose or add tags. Each entry shows its subject, date, tags, a collapsible student list and the first 3 lines (<b>Show full entry</b> for the rest). Click a tag to see only entries with it. Entries show newest first, with that day's attendance and each student's attendance so far and current score beside them (turn this off in Journal Settings).</li>
 <li><b>Entry Counts &amp; Timeline</b> — entries per month, per tag and per student (fewest first, so you can see who has been missed).</li>
 <li><b>Search &amp; Report</b> — filter by date range, tag, student or keyword, then <b>Export CSV</b>.</li>
 <li>Click <b>Save Journal</b>, or leave Autosave on.</li>

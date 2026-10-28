@@ -25,7 +25,13 @@
 #journal-panel .jr-chip.static { cursor:default; }
 #journal-panel .jr-entry { border:1px solid var(--line,#ccc); border-radius:8px; padding:8px 10px; margin:0 0 8px; }
 #journal-panel .jr-entry .jr-meta { font-size:.82rem; opacity:.85; }
-#journal-panel .jr-entry .jr-text { white-space:pre-wrap; margin:4px 0; }
+#journal-panel .jr-entry .jr-text { white-space:pre-wrap; margin:4px 0; display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+#journal-panel .jr-entry .jr-text.full { display:block; }
+#journal-panel .jr-entry .jr-subject { font-weight:700; font-size:1rem; }
+#journal-panel .jr-entry details summary { cursor:pointer; font-size:.85rem; }
+#journal-panel .jr-chip.tagbtn { cursor:pointer; }
+#journal-panel .jr-bar.click { cursor:pointer; }
+#journal-panel .jr-filterbar { margin:0 0 8px; }
 #journal-panel .jr-snap { font-size:.8rem; opacity:.8; border-top:1px dashed var(--line,#ccc); margin-top:4px; padding-top:3px; }
 #journal-panel .jr-pick { position:relative; }
 #journal-panel .jr-pick-list { max-height:220px; overflow:auto; border:1px solid var(--line,#ccc); border-radius:6px; padding:4px 8px; margin-top:4px; }
@@ -43,6 +49,7 @@
   let editingId = null;   // entry being edited
   let creating = false;   // new-entry form open
   let showAll = false;
+  let tagFilter = ""; // clicking a tag shows only the entries with it
   let sel = { from: "", to: "", tag: "", student: "", word: "" };
 
   const students = () => RosterModule.students.slice().sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
@@ -80,7 +87,7 @@
   // ---------- the entry form ----------
   function buildForm(entry) {
     const f = mk("div", "jr-form");
-    const st = { date: entry ? entry.date : today(), students: new Set(entry ? entry.students : []), tags: new Set(entry ? entry.tags : []) };
+    const st = { date: entry ? entry.date : today(), subject: entry ? entry.subject || "" : "", students: new Set(entry ? entry.students : []), tags: new Set(entry ? entry.tags : []) };
     const row = mk("div", "jr-row");
     const date = mk("input"); date.type = "date"; date.value = st.date; date.addEventListener("input", () => { st.date = date.value; });
     const dl = mk("label", "", "Date "); dl.appendChild(date); row.appendChild(dl);
@@ -97,6 +104,8 @@
     det.appendChild(list); upd(); row.appendChild(det);
     f.appendChild(row);
 
+    const subj = mk("input"); subj.placeholder = "Subject"; subj.value = st.subject; subj.style.width = "100%"; subj.addEventListener("input", () => { st.subject = subj.value; });
+    f.appendChild(subj);
     const text = mk("textarea"); text.placeholder = "Journal entry…"; text.value = entry ? entry.text : ""; f.appendChild(text);
 
     const tagBox = mk("div");
@@ -114,8 +123,8 @@
     const acts = mk("div", "jr-row");
     acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => {
       if (!st.date) { alert("Choose a date."); return; }
-      if (!text.value.trim() && !st.tags.size) { alert("Write something first."); return; }
-      const data = { date: st.date, text: text.value, students: [...st.students], tags: [...st.tags] };
+      if (!text.value.trim() && !st.subject.trim() && !st.tags.size) { alert("Write something first."); return; }
+      const data = { date: st.date, subject: st.subject, text: text.value, students: [...st.students], tags: [...st.tags] };
       if (entry) J.updateEntry(entry.id, data); else J.addEntry(data);
       editingId = null; creating = false; render();
     }));
@@ -127,9 +136,16 @@
   function entryCard(e) {
     if (editingId === e.id) return buildForm(e);
     const c = mk("div", "jr-entry");
-    c.appendChild(mk("div", "jr-meta", `${e.date}${e.students.length ? " · " + e.students.map(sName).join(", ") : " · whole class"}`));
-    if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); c.appendChild(t); }
-    c.appendChild(mk("div", "jr-text", e.text));
+    c.appendChild(mk("div", "jr-subject", e.subject || "(no subject)"));
+    c.appendChild(mk("div", "jr-meta", e.date));
+    if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(btn(x, "jr-chip tagbtn", () => { tagFilter = x; render(); }))); c.appendChild(t); }
+    if (e.students.length) {
+      const d = mk("details"); d.appendChild(mk("summary", "", `Students (${e.students.length})`));
+      d.appendChild(mk("div", "jr-meta", e.students.map(sName).join(", "))); c.appendChild(d);
+    } else c.appendChild(mk("div", "jr-meta", "Whole class"));
+    const tx = mk("div", "jr-text", e.text); c.appendChild(tx);
+    const long = (e.text.match(/\n/g) || []).length >= 3 || e.text.length > 240;
+    if (long) { const more = btn("Show full entry", "btn btn-ghost btn-small", () => { const on = tx.classList.toggle("full"); more.textContent = on ? "Show first 3 lines" : "Show full entry"; }); c.appendChild(more); }
     if (J.settings.snapshots) {
       const sn = snapParts(e);
       if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); c.appendChild(d); }
@@ -147,9 +163,9 @@
     s.appendChild(mk("h3", "", title));
     return s;
   }
-  const bars = (rows, fmt) => {
+  const bars = (rows, fmt, onClick) => {
     const max = Math.max(1, ...rows.map((r) => r[1])); const box = mk("div");
-    rows.forEach(([label, n]) => { const d = mk("div", "jr-bar"); const i = mk("i"); i.style.width = `${Math.round((n / max) * 160)}px`; d.append(mk("span", "", fmt ? fmt(label) : label), i, mk("span", "", String(n))); box.appendChild(d); });
+    rows.forEach(([label, n]) => { const d = mk("div", "jr-bar" + (onClick ? " click" : "")); if (onClick) d.addEventListener("click", () => onClick(label)); const i = mk("i"); i.style.width = `${Math.round((n / max) * 160)}px`; d.append(mk("span", "", fmt ? fmt(label) : label), i, mk("span", "", String(n))); box.appendChild(d); });
     if (!rows.length) box.appendChild(mk("p", "hint", "Nothing yet."));
     return box;
   };
@@ -165,7 +181,7 @@
     const two = mk("div", "jr-two");
     const c1 = mk("div"); c1.appendChild(mk("h4", "", "Timeline (entries per month)")); c1.appendChild(bars(mrows)); two.appendChild(c1);
     const tags = {}; E.forEach((e) => e.tags.forEach((t) => { const k = t.toLowerCase(); tags[k] = tags[k] || { name: t, n: 0 }; tags[k].n++; }));
-    const c2 = mk("div"); c2.appendChild(mk("h4", "", "By tag")); c2.appendChild(bars(Object.values(tags).sort((a, b) => b.n - a.n).map((t) => [t.name, t.n]))); two.appendChild(c2);
+    const c2 = mk("div"); c2.appendChild(mk("h4", "", "By tag")); c2.appendChild(bars(Object.values(tags).sort((a, b) => b.n - a.n).map((t) => [t.name, t.n]), null, (name) => { tagFilter = name; render(); window.scrollTo({ top: 0 }); })); two.appendChild(c2);
     body.appendChild(two);
     const per = students().map((st) => [sName(st.id), E.filter((e) => e.students.includes(st.id)).length]).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0], undefined, { numeric: true }));
     body.appendChild(mk("h4", "", "By student (fewest entries first)"));
@@ -177,8 +193,8 @@
     return "﻿" + rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
   }
   function exportRows(list) {
-    const rows = [["Date", "Students", "Tags", "Entry", "Attendance / score snapshot"]];
-    list.forEach((e) => rows.push([e.date, e.students.length ? e.students.map(sName).join("; ") : "whole class", e.tags.join("; "), e.text, snapParts(e).map((p) => `${p.who}: ${p.text}`).join(" | ")]));
+    const rows = [["Date", "Subject", "Students", "Tags", "Entry", "Attendance / score snapshot"]];
+    list.forEach((e) => rows.push([e.date, e.subject || "", e.students.length ? e.students.map(sName).join("; ") : "whole class", e.tags.join("; "), e.text, snapParts(e).map((p) => `${p.who}: ${p.text}`).join(" | ")]));
     return rows;
   }
 
@@ -203,9 +219,9 @@
       }));
       out.appendChild(bar);
       if (!list.length) return;
-      const t = mk("table", "jr-table"); const hr = mk("tr"); ["Date", "Students", "Tags", "Entry", "Snapshot"].forEach((h) => hr.appendChild(mk("th", "", h)));
+      const t = mk("table", "jr-table"); const hr = mk("tr"); ["Date", "Subject", "Students", "Tags", "Entry", "Snapshot"].forEach((h) => hr.appendChild(mk("th", "", h)));
       const th = mk("thead"); th.appendChild(hr); t.appendChild(th); const tb = mk("tbody"); t.appendChild(tb);
-      list.forEach((e) => { const tr = mk("tr"); [e.date, e.students.length ? e.students.map(sName).join(", ") : "whole class", e.tags.join(", "), e.text, snapParts(e).map((p) => `${p.who}: ${p.text}`).join("\n")].forEach((v) => { const td = mk("td", "", v); td.style.whiteSpace = "pre-wrap"; tr.appendChild(td); }); tb.appendChild(tr); });
+      list.forEach((e) => { const tr = mk("tr"); [e.date, e.subject || "", e.students.length ? e.students.map(sName).join(", ") : "whole class", e.tags.join(", "), e.text, snapParts(e).map((p) => `${p.who}: ${p.text}`).join("\n")].forEach((v) => { const td = mk("td", "", v); td.style.whiteSpace = "pre-wrap"; tr.appendChild(td); }); tb.appendChild(tr); });
       out.appendChild(t);
     };
     [from, to, tag, stu].forEach((i) => i.addEventListener("change", run));
@@ -246,8 +262,12 @@
     bar.appendChild(right); panel.appendChild(bar);
 
     if (creating) panel.appendChild(buildForm(null));
-    const sorted = J.entries.slice().sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
-    if (!sorted.length && !creating) panel.appendChild(mk("p", "hint", "No entries yet. Click “+ New Entry”."));
+    if (tagFilter) {
+      const fb = mk("div", "jr-filterbar jr-row"); fb.appendChild(mk("span", "", `Showing entries tagged “${tagFilter}”`));
+      fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = ""; render(); })); panel.appendChild(fb);
+    }
+    const sorted = J.entries.filter((e) => !tagFilter || e.tags.some((t) => t.toLowerCase() === tagFilter.toLowerCase())).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
+    if (!sorted.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
     (showAll ? sorted : sorted.slice(0, 20)).forEach((e) => panel.appendChild(entryCard(e)));
     if (sorted.length > 20) panel.appendChild(btn(showAll ? "Show latest 20 only" : `Show all ${sorted.length} entries`, "btn btn-ghost btn-small", () => { showAll = !showAll; render(); }));
 

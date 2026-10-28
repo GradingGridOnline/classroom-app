@@ -1,6 +1,6 @@
 // ===== Journal module (data) =====
 // One file per course: journal-<courseId>.json
-//  - entries: [{ id, date "YYYY-MM-DD", text, students:[studentId], tags:[string], createdAt, updatedAt }]
+//  - entries: [{ id, date "YYYY-MM-DD", subject, text, students:[studentId], tags:[string], createdAt, updatedAt }]
 //  - settings: { tags:[string] (the quick-pick tag list), snapshots:boolean (show attendance/score beside entries) }
 // The screen lives in journalui.js. Loaded BEFORE app.js so Autosave can include it.
 const JournalModule = {
@@ -25,17 +25,17 @@ const JournalModule = {
 
   newId() { return `jr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; },
 
-  addEntry({ date, text, students, tags }) {
+  addEntry({ date, subject, text, students, tags }) {
     const now = new Date().toISOString();
-    const e = { id: this.newId(), date, text: (text || "").trim(), students: [...(students || [])], tags: this.cleanTags(tags), createdAt: now, updatedAt: now };
+    const e = { id: this.newId(), date, subject: (subject || "").trim(), text: (text || "").trim(), students: [...(students || [])], tags: this.cleanTags(tags), createdAt: now, updatedAt: now };
     this.entries.push(e);
     return e;
   },
 
-  updateEntry(id, { date, text, students, tags }) {
+  updateEntry(id, { date, subject, text, students, tags }) {
     const e = this.entries.find((x) => x.id === id);
     if (!e) return null;
-    e.date = date; e.text = (text || "").trim(); e.students = [...(students || [])]; e.tags = this.cleanTags(tags);
+    e.date = date; e.subject = (subject || "").trim(); e.text = (text || "").trim(); e.students = [...(students || [])]; e.tags = this.cleanTags(tags);
     e.updatedAt = new Date().toISOString();
     return e;
   },
@@ -65,7 +65,7 @@ const JournalModule = {
       (!from || e.date >= from) && (!to || e.date <= to) &&
       (!tag || (e.tags || []).some((t) => t.toLowerCase() === tag.toLowerCase())) &&
       (!student || (e.students || []).includes(student)) &&
-      (!w || (e.text || "").toLowerCase().includes(w) || (e.tags || []).some((t) => t.toLowerCase().includes(w)))
+      (!w || (e.text || "").toLowerCase().includes(w) || (e.subject || "").toLowerCase().includes(w) || (e.tags || []).some((t) => t.toLowerCase().includes(w)))
     ).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
   },
 };
