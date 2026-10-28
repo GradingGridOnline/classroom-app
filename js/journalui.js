@@ -43,12 +43,59 @@
 #journal-panel table.jr-table th, #journal-panel table.jr-table td { border:1px solid var(--line,#ccc); padding:2px 6px; text-align:left; vertical-align:top; }
 #journal-panel .jr-filters { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin:0 0 8px; }
 #journal-panel .jr-filters label { display:flex; flex-direction:column; font-size:.78rem; gap:1px; }
+
+/* ----- the book ----- */
+#journal-panel .jr-bookwrap { margin:0 0 16px; }
+#journal-panel .jr-bookrow { display:flex; align-items:stretch; gap:8px; }
+#journal-panel .jr-turn { flex:0 0 38px; font-size:2rem; line-height:1; cursor:pointer; border:1px solid var(--line,#ccc); border-radius:var(--radius,8px); background:var(--card,#fff); color:var(--green-dark,#333); }
+#journal-panel .jr-turn:disabled { opacity:.3; cursor:default; }
+#journal-panel .jr-book { --jr-ms:260ms; flex:1; min-width:0; display:grid; grid-template-columns:1fr 14px 1fr; perspective:1600px; position:relative;
+  border:6px solid var(--jr-cover,#5a6f5d); border-radius:10px; background:var(--jr-cover,#5a6f5d); box-shadow:0 4px 14px rgba(0,0,0,.25); }
+#journal-panel .jr-page { background:var(--jr-page,#fffdf6); color:var(--ink,#222); padding:12px 14px 26px; min-height:320px; position:relative; min-width:0; }
+#journal-panel .jr-page-left { border-radius:5px 0 0 5px; transform-origin:right center; box-shadow:inset -22px 0 22px -22px rgba(0,0,0,.35); }
+#journal-panel .jr-page-right { border-radius:0 5px 5px 0; transform-origin:left center; box-shadow:inset 22px 0 22px -22px rgba(0,0,0,.35); }
+#journal-panel .jr-spine { background:linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,.05) 50%,rgba(0,0,0,.28)), var(--jr-page,#fffdf6); }
+#journal-panel .jr-pageno { position:absolute; bottom:6px; left:0; right:0; text-align:center; font-size:.8rem; opacity:.6; }
+#journal-panel .jr-bookinfo { text-align:center; font-size:.82rem; opacity:.75; margin-top:4px; }
+#journal-panel .jr-book .jr-entry { border:0; border-bottom:1px dashed var(--line,#ccc); border-radius:0; padding:6px 2px; margin:0 0 6px; background:transparent; }
+#journal-panel .jr-book .jr-form { background:transparent; }
+@media (max-width:760px) { #journal-panel .jr-book { grid-template-columns:1fr; } #journal-panel .jr-spine { display:none; } #journal-panel .jr-turn { flex-basis:30px; } }
+
+/* page-turn animations (each theme picks its own style) */
+@keyframes jr-flip-out-next { to { transform:rotateY(-88deg); filter:brightness(.8); } }
+@keyframes jr-flip-in-next  { from { transform:rotateY(88deg); filter:brightness(.8); } }
+@keyframes jr-flip-out-prev { to { transform:rotateY(88deg); filter:brightness(.8); } }
+@keyframes jr-flip-in-prev  { from { transform:rotateY(-88deg); filter:brightness(.8); } }
+@keyframes jr-fade-out { to { opacity:0; transform:translateX(-10px); } }
+@keyframes jr-fade-in  { from { opacity:0; transform:translateX(10px); } }
+@keyframes jr-glitch-out { 0% { opacity:1; } 30% { transform:translateX(-6px) skewX(-6deg); filter:hue-rotate(60deg); } 60% { transform:translateX(5px) skewX(5deg); opacity:.5; } 100% { opacity:0; transform:translateX(-10px); clip-path:inset(0 0 60% 0); } }
+@keyframes jr-glitch-in  { 0% { opacity:0; clip-path:inset(60% 0 0 0); transform:translateX(10px); } 40% { opacity:.6; transform:translateX(-5px) skewX(5deg); filter:hue-rotate(-60deg); } 100% { opacity:1; clip-path:inset(0); } }
+@keyframes jr-wipe-out { to { clip-path:inset(0 0 0 100%); filter:drop-shadow(0 0 6px #00d9ff); } }
+@keyframes jr-wipe-in  { from { clip-path:inset(0 100% 0 0); filter:drop-shadow(0 0 6px #00d9ff); } }
+/* left page turns for "prev", right page for "next" */
+#journal-panel .jr-book.jr-out-next .jr-page-right { animation:var(--jr-out-next,jr-flip-out-next) var(--jr-ms) ease-in forwards; }
+#journal-panel .jr-book.jr-in-next  .jr-page-left  { animation:var(--jr-in-next,jr-flip-in-next) var(--jr-ms) ease-out; }
+#journal-panel .jr-book.jr-out-prev .jr-page-left  { animation:var(--jr-out-prev,jr-flip-out-prev) var(--jr-ms) ease-in forwards; }
+#journal-panel .jr-book.jr-in-prev  .jr-page-right { animation:var(--jr-in-prev,jr-flip-in-prev) var(--jr-ms) ease-out; }
+
+/* theme looks */
+[data-theme="vintage"] #journal-panel .jr-book { --jr-cover:#7a5238; --jr-page:#f3e5c4; --jr-ms:340ms; border-radius:6px; box-shadow:0 5px 0 #5c3d29, 0 10px 18px rgba(0,0,0,.35); }
+[data-theme="vintage"] #journal-panel .jr-page { background:linear-gradient(180deg,#f6ebcf,#eddcb6); outline:1px solid rgba(122,82,56,.45); outline-offset:-7px; font-family:var(--font-body); }
+[data-theme="vintage"] #journal-panel .jr-turn { background:#7a5238; color:#f3e5c4; border-color:#5c3d29; }
+[data-theme="dark"] #journal-panel .jr-book { --jr-cover:#5b5651; --jr-page:#2b2927; }
+[data-theme="cyberpunk"] #journal-panel .jr-book { --jr-cover:#0073e6; --jr-page:#ffffff; --jr-ms:300ms; --jr-out-next:jr-glitch-out; --jr-in-next:jr-glitch-in; --jr-out-prev:jr-glitch-out; --jr-in-prev:jr-glitch-in; border-width:2px; border-radius:2px; box-shadow:0 0 14px rgba(0,190,255,.55); }
+[data-theme="cyberpunk"] #journal-panel .jr-page { border-radius:0; }
+[data-theme="tron-legacy"] #journal-panel .jr-book { --jr-cover:#00d9ff; --jr-page:#0c1a22; --jr-ms:320ms; --jr-out-next:jr-wipe-out; --jr-in-next:jr-wipe-in; --jr-out-prev:jr-wipe-out; --jr-in-prev:jr-wipe-in; border-width:1px; border-radius:0; box-shadow:0 0 18px rgba(0,217,255,.5); }
+[data-theme="tron-legacy"] #journal-panel .jr-page { border-radius:0; box-shadow:none; }
+[data-theme="basic"] #journal-panel .jr-book { --jr-cover:#6b7d8f; --jr-page:#ffffff; --jr-ms:220ms; --jr-out-next:jr-fade-out; --jr-in-next:jr-fade-in; --jr-out-prev:jr-fade-out; --jr-in-prev:jr-fade-in; border-width:2px; border-radius:2px; box-shadow:none; }
 `;
   document.head.appendChild(css);
 
   let editingId = null;   // entry being edited
   let creating = false;   // new-entry form open
-  let showAll = false;
+  let spread = 0;       // which two-page spread of the book is showing
+  let turning = false;  // a page-turn animation is running
+  const PER_PAGE = 3;
   let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
   let sel = { from: "", to: "", tag: "", student: "", word: "" };
 
@@ -161,6 +208,47 @@
     a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm("Delete this entry?")) { J.removeEntry(e.id); render(); } }));
     c.appendChild(a);
     return c;
+  }
+
+  // ---------- the book: two pages showing, page-turn buttons on either side ----------
+  const spreads = (n) => Math.max(1, Math.ceil(n / (PER_PAGE * 2)));
+  function buildBook(sorted) {
+    const wrap = mk("div", "jr-bookwrap");
+    const total = spreads(sorted.length);
+    spread = Math.max(0, Math.min(spread, total - 1));
+    const prev = btn("‹", "jr-turn jr-turn-prev", () => turn(-1)); prev.title = "Previous pages"; prev.setAttribute("aria-label", "Previous pages");
+    const next = btn("›", "jr-turn jr-turn-next", () => turn(1)); next.title = "Next pages"; next.setAttribute("aria-label", "Next pages");
+    const book = mk("div", "jr-book");
+    const left = mk("div", "jr-page jr-page-left"), right = mk("div", "jr-page jr-page-right");
+    book.append(left, mk("div", "jr-spine"), right);
+    const info = mk("div", "jr-bookinfo");
+    function fill() {
+      const base = spread * PER_PAGE * 2;
+      [[left, base], [right, base + PER_PAGE]].forEach(([pg, from], i) => {
+        pg.innerHTML = "";
+        sorted.slice(from, from + PER_PAGE).forEach((e) => pg.appendChild(entryCard(e)));
+        pg.appendChild(mk("div", "jr-pageno", String(spread * 2 + i + 1)));
+      });
+      prev.disabled = spread === 0; next.disabled = spread >= total - 1;
+      info.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2} of ${total * 2} · ${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`;
+    }
+    function turn(dir) {
+      if (turning || spread + dir < 0 || spread + dir >= total) return;
+      const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const T = reduce ? 0 : parseInt(getComputedStyle(book).getPropertyValue("--jr-ms")) || 260;
+      const name = dir > 0 ? "next" : "prev";
+      turning = true; editingId = null;
+      book.classList.add(`jr-out-${name}`);
+      setTimeout(() => {
+        spread += dir; fill();
+        book.classList.remove(`jr-out-${name}`); book.classList.add(`jr-in-${name}`);
+        setTimeout(() => { book.classList.remove(`jr-in-${name}`); turning = false; }, T);
+      }, T);
+    }
+    fill();
+    const row = mk("div", "jr-bookrow"); row.append(prev, book, next);
+    wrap.append(row, info);
+    return wrap;
   }
 
   // ---------- sections ----------
@@ -290,8 +378,7 @@
     const want = [...tagFilter].map((t) => t.toLowerCase());
     const sorted = J.entries.filter((e) => !want.length || e.tags.some((t) => want.includes(t.toLowerCase()))).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || "").localeCompare(a.createdAt || ""));
     if (!sorted.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
-    (showAll ? sorted : sorted.slice(0, 20)).forEach((e) => panel.appendChild(entryCard(e)));
-    if (sorted.length > 20) panel.appendChild(btn(showAll ? "Show latest 20 only" : `Show all ${sorted.length} entries`, "btn btn-ghost btn-small", () => { showAll = !showAll; render(); }));
+    if (sorted.length) panel.appendChild(buildBook(sorted));
 
     [["journal-counts", countsSection()], ["journal-search", searchSection()], ["journal-settings", settingsSection()]].forEach(([id, sec]) => {
       panel.appendChild(sec);
@@ -304,7 +391,7 @@
     const cid = AttendanceModule.currentCourseId || ScoringModule.currentCourseId;
     if (!cid) { status.textContent = ""; return; }
     if (loadedFor === cid && J.currentCourseId === cid) return;
-    try { status.textContent = "Loading…"; await J.load(cid); loadedFor = cid; status.textContent = ""; editingId = null; creating = false; showAll = false; }
+    try { status.textContent = "Loading…"; await J.load(cid); loadedFor = cid; status.textContent = ""; editingId = null; creating = false; spread = 0; }
     catch (e) { J.entries = []; status.textContent = `Couldn't load journal: ${e.message}`; }
   }
 
