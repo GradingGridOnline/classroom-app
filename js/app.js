@@ -3103,7 +3103,7 @@ function buildItemScoreSourcesPanel(item) {
           await saveScoringThen(renderScoring);
         });
         addGridWideRow(testSelect);
-      } else if (tool.type === "presentation") {
+      } else if (tool.type === "presentation" || tool.type === "table") {
         const projectSelect = document.createElement("select");
         projectSelect.style.width = "100%";
         projectSelect.style.marginBottom = "6px";
@@ -3111,11 +3111,11 @@ function buildItemScoreSourcesPanel(item) {
         blankProject.value = "";
         blankProject.textContent = "— choose a project —";
         projectSelect.appendChild(blankProject);
-        ScoringModule.presentationProjects(tool.id).forEach((project) => {
+        (tool.type === "table" ? ScoringModule.tableProjects(tool.id) : ScoringModule.presentationProjects(tool.id)).forEach((project, pi) => {
           const opt = document.createElement("option");
           opt.value = project.id;
           opt.textContent = project.name;
-          if (sources.projectSelections[tool.id] === project.id) opt.selected = true;
+          if ((sources.projectSelections[tool.id] || (tool.type === "table" ? ScoringModule.tableProjects(tool.id)[0].id : "")) === project.id) opt.selected = true;
           projectSelect.appendChild(opt);
         });
         projectSelect.addEventListener("change", async () => {
@@ -3807,9 +3807,87 @@ function buildToolNameRow(tool) {
  * column's mode); columns are configurable in Settings below, and a
  * fixed "Total Score" column at the end adds up each row.
  */
+const trackerToolProject = new Map(); // toolId -> id of the project tab showing
+
 function renderScoringToolTableView(tool, container) {
+  const projects = ScoringModule.tableProjects(tool.id);
+  let projectId = trackerToolProject.get(tool.id);
+  if (!projects.some((p) => p.id === projectId)) projectId = projects[0].id;
+  trackerToolProject.set(tool.id, projectId);
+  ScoringModule.setActiveTableProject(tool.id, projectId);
   const cfg = ScoringModule.getTableConfig(tool.id);
   container.innerHTML = "";
+  const rerenderTracker = () => renderScoringToolView(tool, container);
+
+  const projectRow = document.createElement("div");
+  projectRow.className = "level-tab-row level3-row";
+  projects.forEach((project) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab-btn" + (project.id === projectId ? " tab-btn-active" : "");
+    btn.textContent = project.name;
+    btn.addEventListener("click", () => {
+      trackerToolProject.set(tool.id, project.id);
+      rerenderTracker();
+    });
+    projectRow.appendChild(btn);
+  });
+  const newProjectBtn = document.createElement("button");
+  newProjectBtn.type = "button";
+  newProjectBtn.className = "btn btn-ghost btn-small";
+  newProjectBtn.textContent = "+ New Project";
+  newProjectBtn.style.alignSelf = "center";
+  newProjectBtn.style.margin = "0 0 6px 8px";
+  newProjectBtn.addEventListener("click", async () => {
+    const name = prompt("Name for the new project:", `Project ${projects.length + 1}`);
+    if (name === null) return;
+    try {
+      const project = ScoringModule.addTableProject(tool.id, name);
+      trackerToolProject.set(tool.id, project.id);
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    await saveScoringThen(rerenderTracker);
+  });
+  projectRow.appendChild(newProjectBtn);
+  container.appendChild(projectRow);
+
+  const projectHead = document.createElement("div");
+  projectHead.className = "panel-toolbar";
+  const projectTitle = document.createElement("span");
+  projectTitle.className = "hint";
+  projectTitle.textContent = `Project: ${cfg.name}`;
+  projectHead.appendChild(projectTitle);
+  const projectBtns = document.createElement("div");
+  projectBtns.className = "panel-toolbar-buttons";
+  const renameProjectBtn = document.createElement("button");
+  renameProjectBtn.type = "button";
+  renameProjectBtn.className = "btn btn-ghost btn-small";
+  renameProjectBtn.textContent = "Rename Project";
+  renameProjectBtn.addEventListener("click", async () => {
+    const name = prompt("Rename project:", cfg.name);
+    if (name === null) return;
+    ScoringModule.renameTableProject(tool.id, projectId, name);
+    await saveScoringThen(rerenderTracker);
+  });
+  const deleteProjectBtn = document.createElement("button");
+  deleteProjectBtn.type = "button";
+  deleteProjectBtn.className = "btn btn-ghost btn-small";
+  deleteProjectBtn.textContent = "Delete Project";
+  deleteProjectBtn.addEventListener("click", async () => {
+    if (!confirm(`Delete the project "${cfg.name}"? Its columns and scores are removed, and Main Scores items pulling from it lose those scores.`)) return;
+    try {
+      ScoringModule.removeTableProject(tool.id, projectId);
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    await saveScoringThen(rerenderTracker);
+  });
+  projectBtns.append(renameProjectBtn, deleteProjectBtn);
+  projectHead.appendChild(projectBtns);
+  container.appendChild(projectHead);
 
   const hint = document.createElement("p");
   hint.className = "hint";

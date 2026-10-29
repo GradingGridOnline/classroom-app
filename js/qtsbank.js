@@ -387,8 +387,8 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       if (sel && sel[toolId] === testId) delete sel[toolId];
     }));
     (data.tools || []).forEach((t) => {
-      if (t.type !== "table" || !t.config || !Array.isArray(t.config.columns)) return;
-      t.config.columns.forEach((col) => { if (col.testSource && col.testSource.toolId === toolId && col.testSource.testId === testId) col.testSource = { toolId: "", testId: "" }; });
+      if (t.type !== "table" || !t.config) return;
+      (Array.isArray(t.config.projects) ? t.config.projects : [t.config]).forEach((pc) => (pc.columns || []).forEach((col) => { if (col.testSource && col.testSource.toolId === toolId && col.testSource.testId === testId) col.testSource = { toolId: "", testId: "" }; }));
     });
     await storage.saveFile(`scoring-${courseId}.json`, data);
     invalidate();

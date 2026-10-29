@@ -160,6 +160,7 @@
 
   add("tracker", "Scoring", "Progress Tracker", `
 <p>A simple grid for ongoing work (homework, tasks…). A <b>Total Score</b> column is always added at the end.</p>
+<p><b>Projects</b> — like the Presentation Calc, a tracker can hold several projects (tabs along the top; <b>+ New Project</b>, Rename, Delete). Each has its own columns, settings and scores. In an item's Sources panel, pick which project the item pulls from.</p>
 <h4>Set up (Edit Settings inside the tool)</h4>
 <ul>
 <li><b>First column</b> — rows are <b>Students</b> or <b>Groups</b>.</li>

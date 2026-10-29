@@ -355,13 +355,12 @@ const ScoringModule = {
   /** Clears any Progress Tracker column that pulls from the given Test & Quiz Bank (and, if testId is given, only that test). */
   _clearTableTestSources(sourceToolId, testId) {
     this.tools.forEach((tool) => {
-      if (tool.type !== "table" || !tool.config || !Array.isArray(tool.config.columns)) return;
-      tool.config.columns.forEach((column) => {
+      this._tableProjectConfigs(tool).forEach((pc) => (pc.columns || []).forEach((column) => {
         const source = column.testSource;
         if (source && source.toolId === sourceToolId && (!testId || source.testId === testId)) {
           column.testSource = { toolId: "", testId: "" };
         }
-      });
+      }));
     });
   },
 
@@ -393,11 +392,27 @@ const ScoringModule = {
   // computeItemEffectiveScore below).
 
   /** Returns tool.config for a Progress Tracker, creating/normalizing it (and migrating any older Table-tool data) in place first. Returns null if the tool doesn't exist. */
-  getTableConfig(toolId) {
+  getTableConfig(toolId, projectId) {
     const tool = this.findTool(toolId);
     if (!tool) return null;
     if (!tool.config || typeof tool.config !== "object") tool.config = {};
-    const cfg = tool.config;
+    // A tracker holds projects: tool.config = { projects: [{ id, name, ...the flat tracker settings }] }.
+    // One saved before projects existed becomes a single project called "Project 1".
+    if (!Array.isArray(tool.config.projects)) {
+      const project = Object.assign({}, tool.config);
+      project.id = project.id || "tp" + Math.random().toString(36).slice(2, 9);
+      project.name = "Project 1";
+      tool.config = { projects: [project] };
+    }
+    if (tool.config.projects.length === 0) {
+      tool.config.projects.push({ id: "tp" + Math.random().toString(36).slice(2, 9), name: "Project 1" });
+    }
+    const projects = tool.config.projects;
+    if (!this._tableActive) this._tableActive = {};
+    const wanted = projectId || this._tableActive[toolId];
+    const cfg = projects.find((p) => p.id === wanted) || projects[0];
+    if (!cfg.id) cfg.id = "tp" + Math.random().toString(36).slice(2, 9);
+    if (!cfg.name) cfg.name = "Project";
 
     if (!cfg.firstColumn || typeof cfg.firstColumn !== "object") cfg.firstColumn = {};
     if (cfg.firstColumn.mode !== "groups" && cfg.firstColumn.mode !== "students") {
@@ -456,6 +471,66 @@ const ScoringModule = {
     if (droppedIds.size > 0) this._purgeTableValues(cfg, { columnIds: droppedIds });
 
     return cfg;
+  },
+
+  /** Every project of a Progress Tracker (an older, un-nested tracker counts as one). */
+  tableProjects(toolId) {
+    if (!this.getTableConfig(toolId)) return [];
+    return this.findTool(toolId).config.projects;
+  },
+
+  /** The project config objects of a tracker tool, without normalizing (for code that only clears/patches columns). */
+  _tableProjectConfigs(tool) {
+    if (!tool || tool.type !== "table" || !tool.config) return [];
+    return Array.isArray(tool.config.projects) ? tool.config.projects : [tool.config];
+  },
+
+  /** Which project the tracker's editing screen shows (the first if unset). */
+  setActiveTableProject(toolId, projectId) {
+    if (!this._tableActive) this._tableActive = {};
+    this._tableActive[toolId] = projectId;
+  },
+
+  /** Runs fn with the tracker temporarily pointed at `projectId` (the first project if blank/gone). */
+  withTableProject(toolId, projectId, fn) {
+    if (!this._tableActive) this._tableActive = {};
+    const prev = this._tableActive[toolId];
+    const cfg = this.getTableConfig(toolId, projectId);
+    this._tableActive[toolId] = cfg ? cfg.id : projectId;
+    try {
+      return fn();
+    } finally {
+      this._tableActive[toolId] = prev;
+    }
+  },
+
+  addTableProject(toolId, name) {
+    if (!this.getTableConfig(toolId)) throw new Error("That tracker no longer exists.");
+    const projects = this.findTool(toolId).config.projects;
+    if (projects.length >= 30) throw new Error("You've reached the limit of 30 projects.");
+    const project = { id: "tp" + Math.random().toString(36).slice(2, 9), name: (name || "").trim() || `Project ${projects.length + 1}` };
+    projects.push(project);
+    this.getTableConfig(toolId, project.id);
+    return project;
+  },
+
+  renameTableProject(toolId, projectId, name) {
+    const project = this.tableProjects(toolId).find((p) => p.id === projectId);
+    if (project) project.name = (name || "").trim() || project.name;
+  },
+
+  /** Removes a project (the last one can't be removed) and clears it from Main Scores items pulling from it. */
+  removeTableProject(toolId, projectId) {
+    const tool = this.findTool(toolId);
+    const projects = this.tableProjects(toolId);
+    if (projects.length <= 1) throw new Error("A tracker needs at least one project.");
+    tool.config.projects = projects.filter((p) => p.id !== projectId);
+    this.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const selections = item.scoreSources && item.scoreSources.projectSelections;
+        if (selections && selections[toolId] === projectId) delete selections[toolId];
+      });
+    });
   },
 
   setTableFirstColumnMode(toolId, mode) {
@@ -2045,12 +2120,14 @@ const ScoringModule = {
         sources.push({ key: toolId, label, weight, points: pPoints });
         return;
       }
-      const sum = this._trackerSumForStudent(tool, studentId);
-      if (sum === null) return;
-      const cfg = this.getTableConfig(tool.id);
-      const points = this._scaleToItem(sum, { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id, this._trackerRowKey(tool, studentId)) }, item);
-      if (points === null) return;
-      sources.push({ key: toolId, label, weight, points });
+      const trackerPoints = this.withTableProject(toolId, sourcesCfg.projectSelections[toolId], () => {
+        const sum = this._trackerSumForStudent(tool, studentId);
+        if (sum === null) return null;
+        const cfg = this.getTableConfig(tool.id);
+        return this._scaleToItem(sum, { mode: cfg.mode === "max" ? "max" : "raw", maxPoints: this.tableMaxTotal(tool.id, this._trackerRowKey(tool, studentId)) }, item);
+      });
+      if (trackerPoints === null) return;
+      sources.push({ key: toolId, label, weight, points: trackerPoints });
     });
 
     sources.forEach((src) => {

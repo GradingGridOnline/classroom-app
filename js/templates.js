@@ -120,9 +120,11 @@ const TemplatesModule = {
     if (scoring) {
       const tools = (Array.isArray(scoring.tools) ? this._clone(scoring.tools) : []).map((tool) => {
         if (tool.config && typeof tool.config === "object") {
-          tool.config.values = {}; // entered scores
-          tool.config.subValues = {}; // entered sub-row scores
-          tool.config.off = {}; // per-student "turned off" boxes
+          if (tool.type !== "table") {
+            tool.config.values = {}; // entered scores
+            tool.config.subValues = {}; // entered sub-row scores
+            tool.config.off = {}; // per-student "turned off" boxes
+          }
           if (tool.type === "presentation") {
             // Keep each project's rubrics and settings; drop its imported students + groups and entered scores.
             const clearProject = (project) => {
@@ -139,9 +141,15 @@ const TemplatesModule = {
           if (tool.type === "testbank") {
             tool.config.tests = []; // uploaded tests/quizzes and their scores
           }
-          if (tool.type === "table" && Array.isArray(tool.config.columns)) {
-            tool.config.columns.forEach((column) => {
-              if (column.testSource) column.testSource = { toolId: "", testId: "" }; // the tests aren't kept
+          if (tool.type === "table") {
+            // Each tracker project keeps its columns but loses entered scores and test links.
+            (Array.isArray(tool.config.projects) ? tool.config.projects : [tool.config]).forEach((pc) => {
+              pc.values = {};
+              pc.subValues = {};
+              pc.off = {};
+              (pc.columns || []).forEach((column) => {
+                if (column.testSource) column.testSource = { toolId: "", testId: "" }; // the tests aren't kept
+              });
             });
           }
         }
@@ -263,6 +271,16 @@ const TemplatesModule = {
       const nc = (nt.config = nt.config && typeof nt.config === "object" ? nt.config : {});
 
       if (nt.type === "table") {
+        const nest = (c) => {
+          if (Array.isArray(c.projects)) return c.projects;
+          const flat = Object.assign({}, c);
+          flat.id = flat.id || "tp" + Math.random().toString(36).slice(2, 9);
+          flat.name = flat.name || "Project 1";
+          return [flat];
+        };
+        const oldProjects = nest(oc);
+        const tmplProjects = nest(nc);
+        const carryTable = (nc, oc) => {
         nc.values = {};
         const colMap = {};
         this._pair(Array.isArray(oc.columns) ? oc.columns : [], Array.isArray(nc.columns) ? nc.columns : []).forEach(
@@ -301,6 +319,25 @@ const TemplatesModule = {
             nc.off[`${parts[0]}|${subMap[parts[1]]}|${colMap[parts[2]]}`] = true;
           }
         });
+        };
+        const used = new Set();
+        const merged = [];
+        this._pair(oldProjects, tmplProjects).forEach(({ tmpl: tp, old: op }) => {
+          if (op) {
+            used.add(op);
+            carryTable(tp, op);
+            projectIdMap[op.id] = tp.id;
+          }
+          merged.push(tp);
+        });
+        oldProjects.forEach((op) => {
+          if (!used.has(op)) {
+            projectIdMap[op.id] = op.id;
+            merged.push(op);
+          }
+        });
+        Object.keys(nc).forEach((k) => delete nc[k]);
+        nc.projects = merged;
       } else if (nt.type === "testbank") {
         nc.tests = Array.isArray(oc.tests) ? oc.tests : [];
       } else if (nt.type === "presentation") {
