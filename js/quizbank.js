@@ -529,6 +529,7 @@
     left.appendChild(typeSel);
     left.appendChild(h("label", "", `${kindName(quiz)} name:`));
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
+    left.appendChild(button("Print", "btn btn-ghost btn-small", () => window.QuizPrint && QuizPrint.open(quiz, test.name)));
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
     bar.appendChild(left);
     bar.appendChild(h("span", "count-badge", isSurveyKind(quiz.kind) ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
@@ -1604,6 +1605,7 @@
             }),
           },
         ]));
+      group.appendChild(button("Print", "btn btn-ghost btn-small qz-menu-btn", () => window.QuizPrint && QuizPrint.open(quiz, t.name)));
       group.appendChild(menuButton("Export CSV", "#4a5568", exportItems(t, quiz)));
       group.appendChild(shareBtn);
       if (tiesBtn) group.appendChild(tiesBtn);

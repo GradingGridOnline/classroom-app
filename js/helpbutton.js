@@ -197,6 +197,7 @@
 <ol>
 <li>Open <b>settings</b>: option label style (A, a, 1, I…), number of options, <b>time limit</b>, <b>attempts</b> allowed and which attempt counts.</li>
 <li>In each section add questions: <b>+ Multiple choice</b>, <b>+ Multiple select</b> (students tick every option that applies; tick all the correct ones, with optional <b>Partial credit</b>) or <b>+ Fill in the blank</b>. Set points, the correct answer, and alternate accepted answers for blanks. <b>Line below</b> puts a dividing line under a question on the students\' form. The <b>Type</b> menu at the top switches the item between Quiz, Answer Collection, Research Survey and Formative Survey. <b>Duplicate</b> copies a question.</li>
+<li><b>Print</b> (in the list and the editor) opens a print dialog with a live preview: font, size, spacing, pagination, borders. A Quiz or Survey prints a question sheet; an Answer Collection prints a test booklet and/or a matching marksheet (bubbles and blanks only).</li>
 <li>The maximum score is the total of the question points.</li>
 </ol>
 <h4>Collecting answers (QR Code ▾ menu)</h4>
