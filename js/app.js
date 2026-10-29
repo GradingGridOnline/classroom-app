@@ -264,6 +264,39 @@ el.savePeriodsBtn.addEventListener("click", async () => {
   }
 });
 
+/** A small popover under `anchor` to choose a course's day of the week and period. */
+function openSchedulePicker(anchor, course) {
+  document.querySelectorAll(".schedule-picker").forEach((n) => n.remove());
+  const pop = document.createElement("div");
+  pop.className = "schedule-picker";
+  pop.style.cssText = "position:absolute;z-index:9000;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;box-shadow:0 4px 18px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px;min-width:230px;";
+  const mk = (text, select) => { const l = document.createElement("label"); l.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:10px;"; const sp = document.createElement("span"); sp.textContent = text; l.append(sp, select); pop.appendChild(l); };
+  const daySel = document.createElement("select");
+  const none = document.createElement("option"); none.value = ""; none.textContent = "No day"; daySel.appendChild(none);
+  CoursesModule.DAYS_FULL.forEach((n, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = n; if (course.weekday === i) o.selected = true; daySel.appendChild(o); });
+  const perSel = document.createElement("select");
+  const none2 = document.createElement("option"); none2.value = ""; none2.textContent = "No period"; perSel.appendChild(none2);
+  PeriodsModule.periods.forEach((period) => { const o = document.createElement("option"); o.value = period.id; o.textContent = PeriodsModule.label(period.id); if (course.periodId === period.id) o.selected = true; perSel.appendChild(o); });
+  mk("Day", daySel); mk("Period", perSel);
+  const apply = () => {
+    CoursesModule.setWeekday(course.id, daySel.value);
+    CoursesModule.setPeriod(course.id, perSel.value);
+    anchor.textContent = CoursesModule.scheduleName(course) || "Set day & period";
+  };
+  daySel.addEventListener("change", apply);
+  perSel.addEventListener("change", apply);
+  const done = document.createElement("button"); done.type = "button"; done.className = "btn btn-primary btn-small"; done.textContent = "Done";
+  const close = () => { pop.remove(); document.removeEventListener("mousedown", outside, true); if (CoursesModule.sortMode === "period") renderCourseList(); };
+  const outside = (ev) => { if (!pop.contains(ev.target) && ev.target !== anchor) close(); };
+  done.addEventListener("click", close);
+  pop.appendChild(done);
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, Math.min(r.left + window.scrollX, window.scrollX + window.innerWidth - pop.offsetWidth - 8))}px`;
+  pop.style.top = `${r.bottom + window.scrollY + 4}px`;
+  setTimeout(() => document.addEventListener("mousedown", outside, true), 0);
+}
+
 function renderPeriodsList() {
   el.periodsTbody.innerHTML = "";
 
@@ -337,6 +370,36 @@ function renderPeriodsList() {
     el.periodsTbody.appendChild(tr);
   });
 }
+
+/** "Day of the week" display options (global): full / three-letter name, and a hyphen before the period. */
+(function buildDayFormatSettings() {
+  const block = el.addPeriodBtn.closest(".settings-block");
+  if (!block) return;
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "margin-top:14px;padding-top:10px;border-top:1px solid var(--line);";
+  wrap.innerHTML = '<h4 style="margin:0 0 6px">Day of the week</h4><p class="hint">How a course\'s day is written wherever its schedule appears (course list, printed seating chart, quiz printouts…).</p>';
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;flex-wrap:wrap;gap:12px;align-items:center;";
+  const styleSel = document.createElement("select");
+  [["full", "Full name (Monday)"], ["short", "Three letters (Mon)"]].forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; styleSel.appendChild(o); });
+  const hy = document.createElement("input"); hy.type = "checkbox";
+  const hl = document.createElement("label"); hl.append(hy, document.createTextNode(" Hyphen between day and period (Mon-Period 2)"));
+  const sample = document.createElement("span"); sample.className = "hint";
+  const sync = () => {
+    styleSel.value = CoursesModule.dayFormat.style; hy.checked = CoursesModule.dayFormat.hyphen;
+    sample.textContent = "Example: " + CoursesModule.dayName(1) + (CoursesModule.dayFormat.hyphen ? "-" : " ") + "Period 2";
+  };
+  const change = async () => {
+    CoursesModule.dayFormat = { style: styleSel.value, hyphen: hy.checked };
+    sync();
+    renderCourseList();
+    try { await CoursesModule.save(); } catch (err) { alert(`Couldn't save: ${err.message}`); }
+  };
+  styleSel.addEventListener("change", change); hy.addEventListener("change", change);
+  row.append(styleSel, hl, sample); wrap.appendChild(row); block.appendChild(wrap);
+  window.syncDayFormatSettings = sync;
+  sync();
+})();
 
 el.addPeriodBtn.addEventListener("click", async () => {
   try {
@@ -457,6 +520,7 @@ async function showCourses() {
   try {
     await PeriodsModule.load();
     await CoursesModule.load();
+    if (window.syncDayFormatSettings) window.syncDayFormatSettings();
     await TemplatesModule.load();
     renderCourseList();
     renderPeriodsList();
@@ -527,25 +591,16 @@ function renderCourseList() {
     nameSpan.addEventListener("click", () => openCourseDetail(course));
     li.appendChild(nameSpan);
 
-    const periodSelect = document.createElement("select");
-    periodSelect.className = "course-period-select";
-    const noneOpt = document.createElement("option");
-    noneOpt.value = "";
-    noneOpt.textContent = "No period";
-    periodSelect.appendChild(noneOpt);
-    PeriodsModule.periods.forEach((period) => {
-      const opt = document.createElement("option");
-      opt.value = period.id;
-      opt.textContent = PeriodsModule.label(period.id);
-      if (course.periodId === period.id) opt.selected = true;
-      periodSelect.appendChild(opt);
+    const scheduleBtn = document.createElement("button");
+    scheduleBtn.type = "button";
+    scheduleBtn.className = "course-period-select course-schedule-btn";
+    scheduleBtn.textContent = CoursesModule.scheduleName(course) || "Set day & period";
+    scheduleBtn.title = "Click to choose the day of the week and period";
+    scheduleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openSchedulePicker(scheduleBtn, course);
     });
-    periodSelect.addEventListener("click", (e) => e.stopPropagation());
-    periodSelect.addEventListener("change", () => {
-      CoursesModule.setPeriod(course.id, periodSelect.value);
-      if (CoursesModule.sortMode === "period") renderCourseList(); // the order depends on it
-    });
-    li.appendChild(periodSelect);
+    li.appendChild(scheduleBtn);
     li.appendChild(buildCourseTemplateSelect(course));
 
     if (manual) {
@@ -1272,11 +1327,7 @@ function fontSizeToFit(text, maxWidthPx, fontWeight = "400", maxSizePx = 40) {
 
 /** "Period 2 (09:00–10:30)" for a course's assigned period — with whichever of the start / end times the period has — or "" if the course has no period assigned. */
 function printPeriodLine(course) {
-  const period = course && course.periodId ? PeriodsModule.find(course.periodId) : null;
-  if (!period) return "";
-  const time =
-    period.startTime && period.endTime ? `${period.startTime}–${period.endTime}` : period.startTime || period.endTime || "";
-  return time ? `${period.name} (${time})` : period.name;
+  return CoursesModule.scheduleLine(course);
 }
 
 /** "&n=<course name>&p=<period and time>" for the QR pop-out windows, so the course shows above the code. */
@@ -1449,14 +1500,16 @@ function buildSeatingPrintCourseBox(courseName, course) {
   const nameP = document.createElement("p");
   nameP.textContent = courseName;
   content.appendChild(nameP);
-  // Period name and its time go on separate lines, under the course name.
-  const period = course && course.periodId ? PeriodsModule.find(course.periodId) : null;
-  if (period) {
+  // Day + period name and the period's time go on separate lines, under the course name.
+  const periodRec = course && course.periodId ? PeriodsModule.find(course.periodId) : null;
+  const schedName = CoursesModule.scheduleName(course);
+  if (schedName) {
     const periodP = document.createElement("p");
-    periodP.textContent = period.name;
+    periodP.textContent = schedName;
     content.appendChild(periodP);
-    const time =
-      period.startTime && period.endTime ? `${period.startTime}–${period.endTime}` : period.startTime || period.endTime || "";
+    const time = periodRec
+      ? (periodRec.startTime && periodRec.endTime ? `${periodRec.startTime}–${periodRec.endTime}` : periodRec.startTime || periodRec.endTime || "")
+      : "";
     if (time) {
       const timeP = document.createElement("p");
       timeP.textContent = time;
@@ -7997,7 +8050,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
   const POLL_MS = 600;
 
   const MODULES = [
-    { name: "courses", mod: CoursesModule, scoped: false, snap: () => ({ courses: CoursesModule.courses, sortMode: CoursesModule.sortMode }) },
+    { name: "courses", mod: CoursesModule, scoped: false, snap: () => ({ courses: CoursesModule.courses, sortMode: CoursesModule.sortMode, dayFormat: CoursesModule.dayFormat }) },
     { name: "periods", mod: PeriodsModule, scoped: false, snap: () => ({ periods: PeriodsModule.periods }) },
     { name: "templates", mod: TemplatesModule, scoped: false, snap: () => ({ templates: TemplatesModule.templates }) },
     { name: "rubricbank", mod: RubricBankModule, scoped: false, snap: () => ({ rubrics: RubricBankModule.rubrics, sections: RubricBankModule.sections }) },

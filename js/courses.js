@@ -28,11 +28,40 @@ const COURSE_SORT_MODES = {
 const CoursesModule = {
   courses: [],
   sortMode: "manual",
+  // How a course's day of the week is written everywhere: style "full" (Monday) or "short" (Mon); hyphen between day and period.
+  dayFormat: { style: "full", hyphen: true },
+  DAYS_FULL: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+  DAYS_SHORT: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+
+  /** A day number (0 = Sunday … 6 = Saturday) as text in the chosen style; "" if none. */
+  dayName(day) {
+    if (day === null || day === undefined || day === "" || !(day >= 0 && day <= 6)) return "";
+    return (this.dayFormat.style === "short" ? this.DAYS_SHORT : this.DAYS_FULL)[Number(day)];
+  },
+
+  /** "Monday-Period 2" / "Mon Period 2" / just the day or just the period, per the global day format; "" if the course has neither. */
+  scheduleName(course) {
+    if (!course) return "";
+    const day = this.dayName(course.weekday);
+    const period = course.periodId && window.PeriodsModule ? PeriodsModule.find(course.periodId) : null;
+    const pn = period ? period.name : "";
+    return day && pn ? day + (this.dayFormat.hyphen ? "-" : " ") + pn : day || pn;
+  },
+
+  /** scheduleName plus the period's times, e.g. "Mon-Period 2 (09:00–10:30)". */
+  scheduleLine(course) {
+    const name = this.scheduleName(course);
+    const period = course && course.periodId && window.PeriodsModule ? PeriodsModule.find(course.periodId) : null;
+    const time = period ? (period.startTime && period.endTime ? `${period.startTime}–${period.endTime}` : period.startTime || period.endTime || "") : "";
+    return time ? `${name} (${time})` : name;
+  },
 
   async load() {
     const data = await storage.loadFile("courses.json");
     this.courses = data && Array.isArray(data.courses) ? data.courses : [];
     this.sortMode = data && COURSE_SORT_MODES[data.sortMode] ? data.sortMode : "manual";
+    const df = data && data.dayFormat && typeof data.dayFormat === "object" ? data.dayFormat : {};
+    this.dayFormat = { style: df.style === "short" ? "short" : "full", hyphen: df.hyphen !== false };
     this._backfill();
     return this.courses;
   },
@@ -41,13 +70,14 @@ const CoursesModule = {
   _backfill() {
     this.courses.forEach((c) => {
       if (!("periodId" in c)) c.periodId = null;
+      if (!(c.weekday >= 0 && c.weekday <= 6)) c.weekday = null;
       if (typeof c.archived !== "boolean") c.archived = false;
       if (!("templateId" in c)) c.templateId = null;
     });
   },
 
   async save() {
-    await storage.saveFile("courses.json", { courses: this.courses, sortMode: this.sortMode });
+    await storage.saveFile("courses.json", { courses: this.courses, sortMode: this.sortMode, dayFormat: this.dayFormat });
   },
 
   _newId() {
@@ -63,6 +93,12 @@ const CoursesModule = {
     const course = { id: this._newId(), name: trimmed, periodId: null, archived: false, templateId: null };
     this.courses.push(course);
     return course;
+  },
+
+  /** Sets (or clears, with "" / null) the day of the week a course meets: 0 = Sunday … 6 = Saturday. */
+  setWeekday(id, day) {
+    const course = this.find(id);
+    if (course) course.weekday = day === "" || day === null || day === undefined ? null : Number(day);
   },
 
   /** Assigns (or clears, with null) which global Period this course meets during. */
@@ -120,13 +156,14 @@ const CoursesModule = {
       const info = (course) => {
         const idx = periods.findIndex((p) => p.id === course.periodId);
         if (idx === -1) return { has: false };
-        return { has: true, time: periods[idx].startTime || "99:99", idx };
+        return { has: true, time: periods[idx].startTime || "99:99", idx, day: course.weekday >= 0 ? ((course.weekday + 6) % 7) + 1 : 0 }; // Monday first; no day sorts first
       };
       return [...active].sort((a, b) => {
         const ia = info(a);
         const ib = info(b);
         if (ia.has !== ib.has) return ia.has ? -1 : 1; // courses with no period go last
         if (ia.has) {
+          if (ia.day !== ib.day) return ia.day - ib.day;
           if (ia.time !== ib.time) return ia.time < ib.time ? -1 : 1;
           if (ia.idx !== ib.idx) return ia.idx - ib.idx;
         }
@@ -180,6 +217,7 @@ const CoursesModule = {
       id: this._newId(),
       name: `${source.name} (copy)`,
       periodId: source.periodId,
+      weekday: source.weekday === undefined ? null : source.weekday,
       archived: false,
       templateId: source.templateId || null,
     };

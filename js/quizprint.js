@@ -14,7 +14,7 @@
   const PAGES = { A4: [210, 297], Letter: [215.9, 279.4], B5: [176, 250] };
   const DEFAULTS = {
     font: 1, size: 11, lineHeight: 1.4, qGap: 14, optGap: 3, optLayout: "vertical", marker: "plain",
-    answerSpace: "line", blankLines: 2, title: "", instructions: "", nameLine: true, showPoints: true, showSections: true,
+    answerSpace: "line", blankLines: 2, title: "", instructions: "", courseLine: false, nameLine: true, showPoints: true, showSections: true,
     separator: "none", pageBorder: false, pageSize: "A4", orientation: "portrait", margin: 18,
     perPage: 0, sectionBreak: false, keepTogether: true, pageNumbers: true,
     doBooklet: true, doMarksheet: true, msColumns: 2, msRowGap: 9, msBlank: 40,
@@ -65,6 +65,7 @@
     const items = flatten(quiz);
     const head = (t) => {
       let h = `<div class="doc-head"><h1>${esc(t)}</h1>`;
+      if (o.courseLine && o.courseText) h += `<div class="courseline">${esc(o.courseText)}</div>`;
       if (o.nameLine) h += `<div class="idline"><span>Name: <span class="ul" style="width:11em"></span></span><span>Class: <span class="ul" style="width:5em"></span></span><span>Date: <span class="ul" style="width:6em"></span></span></div>`;
       if (o.instructions.trim()) h += `<div class="instr">${esc(o.instructions)}</div>`;
       return h + "</div>";
@@ -102,6 +103,7 @@
   function marksheetHtml(quiz, o, title) {
     const items = flatten(quiz).filter((x) => x.q);
     let h = `<section class="sheet fixed ms"><div class="doc-head"><h1>${esc(title)} — Marksheet</h1>`;
+    if (o.courseLine && o.courseText) h += `<div class="courseline">${esc(o.courseText)}</div>`;
     if (o.nameLine) h += `<div class="idline"><span>Name: <span class="ul" style="width:11em"></span></span><span>Class: <span class="ul" style="width:5em"></span></span><span>Date: <span class="ul" style="width:6em"></span></span></div>`;
     h += `<div class="instr">Mark your answers here, not on the test booklet.</div></div>`;
     const cols = Math.max(1, o.msColumns), per = Math.ceil(items.length / cols) || 1;
@@ -150,7 +152,7 @@ ol.opts.cols{display:grid;grid-template-columns:1fr 1fr;gap:${o.optGap}px 1.4em}
 .lab{font-weight:600;margin-right:.2em}.bx{display:inline-block;width:.8em;height:.8em;border:1.2px solid #000;margin-right:.35em;vertical-align:-1px}
 .bb{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border:1.2px solid #000;border-radius:50%;font-size:.85em;padding:0 .25em}.bb.sq{border-radius:3px}
 .ans{margin:8px 0 0 2.3em}.blanklines{margin:6px 0 0 2.3em}.wl{border-bottom:1px solid #000;height:1.9em}
-.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
+.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
 .pn{text-align:center;font-size:.85em;margin-top:auto;padding-top:8px}
 ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 @media screen{body{background:#cfcfcf;padding:10px}.sheet{background:#fff;width:${W}mm;min-height:${H}mm;margin:0 auto 12px;padding:${o.margin}mm;box-shadow:0 1px 6px rgba(0,0,0,.4);display:flex;flex-direction:column}${o.pageBorder ? ".sheet{padding:calc(" + o.margin + "mm + 6mm) !important}" : ""}}
@@ -160,6 +162,9 @@ ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 
   function open(quiz, name) {
     const o = load();
+    // The current course and its day / period, for the optional heading line.
+    const course = window.CoursesModule && window.RosterModule ? CoursesModule.find(RosterModule.currentCourseId) : null;
+    o.courseText = course ? [course.name, CoursesModule.scheduleLine(course)].filter(Boolean).join(" — ") : "";
     const answers = quiz.kind === "answers";
     const ov = document.createElement("div");
     ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;";
@@ -188,6 +193,7 @@ ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
     group("Contents");
     if (answers) { row("Test booklet", chk("doBooklet")); row("Marksheet", chk("doMarksheet")); }
     row("Title", txt("title")); row("Instructions", txt("instructions", true));
+    if (o.courseText) row("Course & day/period line", chk("courseLine"));
     row("Name / class / date line", chk("nameLine"));
     row("Section headings", chk("showSections"));
     if (!answers) row("Show points", chk("showPoints"));

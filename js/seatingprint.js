@@ -74,9 +74,10 @@
   const studentName = (s) => (s.classNumber ? `#${s.classNumber} ${s.name || "(unnamed)"}` : s.name || "(unnamed)");
   const periodInfo = (course) => {
     const period = course && course.periodId ? PeriodsModule.find(course.periodId) : null;
-    if (!period) return { name: "", time: "" };
+    const name = CoursesModule.scheduleName(course);
+    if (!period) return { name, time: "" };
     const time = period.startTime && period.endTime ? `${period.startTime}–${period.endTime}` : period.startTime || period.endTime || "";
-    return { name: period.name || "", time };
+    return { name, time };
   };
   const p = (cls, text) => {
     const e = document.createElement("p");

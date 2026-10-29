@@ -33,7 +33,7 @@
 </ol>
 <h4>Buttons on each course</h4>
 <ul>
-<li><b>Period</b> drop-down — assigns one of the class periods you made in Settings → Periods. The period (and its time) can print on seating charts and QR windows.</li>
+<li><b>Day &amp; period</b> button — shows e.g. <i>Monday-Period 2</i>; click it to choose the day of the week and the class period (from Settings → Periods). They print on seating charts, QR windows and (optionally) quiz printouts, and "Order: by period" sorts by day, then time.</li>
 <li><b>↑ / ↓</b> — change the order (when <b>Order</b> is set to manual). The <b>Order</b> menu can also sort by name.</li>
 <li><b>Rename</b>, <b>Duplicate</b> (copies the course and everything saved in it), <b>Delete</b>.</li>
 <li><b>Archive</b> — moves a finished course to <b>Archived courses</b> (open that section below the list to <b>Restore</b> it).</li>
@@ -241,6 +241,7 @@
 <li><b>QR code colors</b> — how the pop-up QR windows look: match the theme, bright, or dark.</li>
 <li><b>Your data</b> — <b>Export everything (backup)</b> saves all your data to a file; <b>Import from Google Drive</b> brings in old courses (one time).</li>
 <li><b>Periods</b> — your class periods. Click <b>+ Add Period</b>, type a name and start / end times (like 9:00 and 10:30), then <b>Save Periods</b>. Courses can then be assigned a period.</li>
+<li><b>Day of the week</b> (under Periods) — choose full names or three letters, and whether a hyphen separates the day from the period.</li>
 </ul>
 <p>Click <b>← Back</b> to return.</p>`);
 

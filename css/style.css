@@ -2274,3 +2274,13 @@ textarea {
 [data-theme="tron-legacy"] .attendance-table tfoot td {
   background: #0e1217;
 }
+
+.course-schedule-btn {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small, 5px);
+  padding: 3px 10px;
+  cursor: pointer;
+  min-width: 140px;
+}
