@@ -23,6 +23,7 @@
     .timer.low { border-color:var(--bad); color:var(--bad); background:#fdecea; }
     .block { border:1.5px solid var(--line); border-radius:10px; padding:14px 12px 4px; margin-bottom:16px; }
     .block h2 { margin:0 0 12px; font:700 1.1rem Georgia,serif; color:var(--dark); }
+    .note { white-space:pre-wrap; font-style:italic; margin:0 0 14px; padding:6px 10px; border-left:4px solid var(--line); }
     hr.qdiv { border:0; border-top:2px solid var(--line); margin:4px 0 18px; }
     .q { margin-bottom:16px; } .qt { font-weight:600; margin-bottom:6px; } .pts { color:var(--soft); font-weight:400; font-size:.85rem; }
     .opt { display:flex; gap:10px; width:100%; text-align:left; font:inherit; padding:10px 12px; margin-bottom:6px; border:1.5px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); cursor:pointer; }
@@ -121,7 +122,11 @@
         form.config.sections.forEach((sec) => {
           const block = document.createElement("div"); block.className = "block";
           if (sec.title) { const h = document.createElement("h2"); h.textContent = sec.title; block.appendChild(h); }
+          const notes = sec.notes || [], qids = new Set(sec.questions.map((x) => x.id));
+          const addNotes = (pred) => notes.filter(pred).forEach((nt) => { const d = document.createElement("div"); d.className = "note"; d.textContent = nt.text; block.appendChild(d); });
+          addNotes((x) => x.at === "start");
           sec.questions.forEach((q) => {
+            addNotes((x) => x.at === "before" && x.q === q.id);
             num++;
             const wrap = document.createElement("div"); wrap.className = "q";
             const qt = document.createElement("div"); qt.className = "qt";
@@ -172,8 +177,10 @@
               wrap.appendChild(t);
             }
             block.appendChild(wrap);
+            addNotes((x) => x.at === "after" && x.q === q.id);
             if (q.divider) { const hr = document.createElement("hr"); hr.className = "qdiv"; block.appendChild(hr); }
           });
+          addNotes((x) => x.at === "end" || ((x.at === "before" || x.at === "after") && !qids.has(x.q)));
           box.appendChild(block);
         });
         refresh();

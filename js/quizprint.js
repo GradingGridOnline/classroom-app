@@ -27,7 +27,10 @@
     const out = []; let n = 0;
     (quiz.sections || []).forEach((sec, si) => {
       out.push({ section: sec, si });
-      (sec.questions || []).forEach((q) => out.push({ q, n: ++n }));
+      (window.quizSectionFlow ? quizSectionFlow(sec) : (sec.questions || []).map((q) => ({ q }))).forEach((it) => {
+        if (it.note) out.push({ note: it.note });
+        else out.push({ q: it.q, n: ++n });
+      });
     });
     return out;
   }
@@ -70,7 +73,8 @@
     items.forEach((it) => {
       if (it.section) {
         if (o.showSections && it.section.title) blocks.push({ html: `<h2>${esc(it.section.title)}</h2>`, heading: true, newPage: o.sectionBreak && it.si > 0 });
-      } else blocks.push({ html: questionHtml(quiz, it.q, it.n, o, booklet), q: true });
+      } else if (it.note) blocks.push({ html: `<div class="note">${esc(it.note.text)}</div>` });
+      else blocks.push({ html: questionHtml(quiz, it.q, it.n, o, booklet), q: true });
     });
     const pages = [];
     if (o.perPage > 0) {
@@ -99,14 +103,20 @@
     const items = flatten(quiz).filter((x) => x.q);
     let h = `<section class="sheet fixed ms"><div class="doc-head"><h1>${esc(title)} — Marksheet</h1>`;
     if (o.nameLine) h += `<div class="idline"><span>Name: <span class="ul" style="width:11em"></span></span><span>Class: <span class="ul" style="width:5em"></span></span><span>Date: <span class="ul" style="width:6em"></span></span></div>`;
-    h += `<div class="instr">Mark your answers here, not on the test booklet.</div></div><div class="mscols">`;
-    items.forEach(({ q, n }) => {
-      h += `<div class="msrow"><span class="msn">${n}</span>`;
-      if (q.type === "mc" || q.type === "multi") {
-        (q.choices || []).forEach((c, i) => { h += `<span class="bb${q.type === "multi" ? " sq" : ""}">${esc(label(quiz, i))}</span>`; });
-      } else h += `<span class="ul" style="width:${o.msBlank}mm"></span>`;
+    h += `<div class="instr">Mark your answers here, not on the test booklet.</div></div>`;
+    const cols = Math.max(1, o.msColumns), per = Math.ceil(items.length / cols) || 1;
+    h += `<div class="mscols">`;
+    for (let c = 0; c < cols; c++) {
+      h += `<div class="mscol">`;
+      items.slice(c * per, (c + 1) * per).forEach(({ q, n }) => {
+        h += `<div class="msrow"><span class="msn">${n}</span>`;
+        if (q.type === "mc" || q.type === "multi") {
+          (q.choices || []).forEach((c2, i) => { h += `<span class="bb${q.type === "multi" ? " sq" : ""}">${esc(label(quiz, i))}</span>`; });
+        } else h += `<span class="ul" style="width:${o.msBlank}mm"></span>`;
+        h += "</div>";
+      });
       h += "</div>";
-    });
+    }
     return h + "</div></section>";
   }
 
@@ -140,7 +150,7 @@ ol.opts.cols{display:grid;grid-template-columns:1fr 1fr;gap:${o.optGap}px 1.4em}
 .lab{font-weight:600;margin-right:.2em}.bx{display:inline-block;width:.8em;height:.8em;border:1.2px solid #000;margin-right:.35em;vertical-align:-1px}
 .bb{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border:1.2px solid #000;border-radius:50%;font-size:.85em;padding:0 .25em}.bb.sq{border-radius:3px}
 .ans{margin:8px 0 0 2.3em}.blanklines{margin:6px 0 0 2.3em}.wl{border-bottom:1px solid #000;height:1.9em}
-.mscols{column-count:${o.msColumns};column-gap:12mm}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
+.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
 .pn{text-align:center;font-size:.85em;margin-top:auto;padding-top:8px}
 ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 @media screen{body{background:#cfcfcf;padding:10px}.sheet{background:#fff;width:${W}mm;min-height:${H}mm;margin:0 auto 12px;padding:${o.margin}mm;box-shadow:0 1px 6px rgba(0,0,0,.4);display:flex;flex-direction:column}${o.pageBorder ? ".sheet{padding:calc(" + o.margin + "mm + 6mm) !important}" : ""}}
@@ -154,21 +164,21 @@ ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
     const ov = document.createElement("div");
     ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;";
     const box = document.createElement("div");
-    box.style.cssText = "background:var(--card,#fff);color:var(--text,#111);width:min(1200px,96vw);height:92vh;border-radius:10px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.5);";
+    box.style.cssText = "background:var(--card,#fff);color:var(--ink,#111);width:min(1200px,96vw);height:92vh;border-radius:10px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.5);";
     const bar = document.createElement("div");
-    bar.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border,#ccc);";
+    bar.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line,#ccc);";
     bar.innerHTML = `<b>Print ${esc(name || "")} — ${answers ? "Answer Collection (test booklet + marksheet)" : window.isSurveyKind && isSurveyKind(quiz.kind) ? "Survey" : "Quiz"}</b>`;
     const btns = document.createElement("div"); btns.style.cssText = "display:flex;gap:8px;";
     const printBtn = document.createElement("button"); printBtn.className = "btn btn-primary"; printBtn.textContent = "Print";
     const closeBtn = document.createElement("button"); closeBtn.className = "btn btn-ghost"; closeBtn.textContent = "Close";
     btns.append(printBtn, closeBtn); bar.appendChild(btns);
     const main = document.createElement("div"); main.style.cssText = "flex:1;display:flex;min-height:0;";
-    const side = document.createElement("div"); side.style.cssText = "width:320px;overflow:auto;padding:10px 14px;border-right:1px solid var(--border,#ccc);font-size:13px;";
+    const side = document.createElement("div"); side.style.cssText = "width:320px;overflow:auto;padding:10px 14px;border-right:1px solid var(--line,#ccc);font-size:13px;";
     const frame = document.createElement("iframe"); frame.style.cssText = "flex:1;border:0;background:#cfcfcf;";
     main.append(side, frame); box.append(bar, main); ov.appendChild(box); document.body.appendChild(ov);
 
     const refresh = () => { save(o); frame.srcdoc = build(quiz, name, o); };
-    const group = (t) => { const g = document.createElement("div"); g.innerHTML = `<h4 style="margin:12px 0 4px;border-bottom:1px solid var(--border,#ccc)">${t}</h4>`; side.appendChild(g); };
+    const group = (t) => { const g = document.createElement("div"); g.innerHTML = `<h4 style="margin:12px 0 4px;border-bottom:1px solid var(--line,#ccc)">${t}</h4>`; side.appendChild(g); };
     const row = (text, input) => { const l = document.createElement("label"); l.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0;"; const s = document.createElement("span"); s.textContent = text; l.append(s, input); side.appendChild(l); return l; };
     const sel = (key, opts, num) => { const s = document.createElement("select"); opts.forEach(([v, t]) => { const op = document.createElement("option"); op.value = v; op.textContent = t; if (String(o[key]) === String(v)) op.selected = true; s.appendChild(op); }); s.addEventListener("change", () => { o[key] = num ? Number(s.value) : s.value; refresh(); }); return s; };
     const chk = (key) => { const c = document.createElement("input"); c.type = "checkbox"; c.checked = !!o[key]; c.addEventListener("change", () => { o[key] = c.checked; refresh(); }); return c; };
