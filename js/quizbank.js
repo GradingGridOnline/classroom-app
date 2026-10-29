@@ -222,6 +222,29 @@
       if (q.correct >= count) q.correct = 0;
       if (Array.isArray(q.correctSet)) { q.correctSet = q.correctSet.filter((i) => i < count); if (!q.correctSet.length) q.correctSet = [0]; }
     },
+    /** Changes a question's type (multiple choice, multiple select, fill in the blank), keeping what can be kept: option texts, the correct option(s) and accepted answers. */
+    setQuizQuestionType(q, type) {
+      if (!["mc", "multi", "blank"].includes(type) || q.type === type) return;
+      const from = q.type;
+      if (from === "blank" && !q.choices.length) q.choices = Array(4).fill("");
+      if (type !== "blank") {
+        while (q.choices.length < 2) q.choices.push("");
+        if (type === "multi") {
+          const key = from === "mc" ? [q.correct] : multiSet(q.correctSet);
+          q.correctSet = key.filter((i) => i < q.choices.length);
+          if (!q.correctSet.length) q.correctSet = [0];
+          q.partial = q.partial === true;
+        } else {
+          q.correct = from === "multi" ? multiSet(q.correctSet)[0] || 0 : q.correct || 0;
+          if (q.correct >= q.choices.length) q.correct = 0;
+        }
+      } else if (!q.accepted.some(Boolean)) {
+        const keys = from === "multi" ? multiSet(q.correctSet) : [q.correct];
+        const texts = keys.map((i) => (q.choices[i] || "").trim()).filter(Boolean);
+        q.accepted = texts.length ? [texts[0]] : [""];
+      }
+      q.type = type;
+    },
     /** A student's answers after the teacher's edits. */
     quizEffectiveAnswers(s) {
       return { ...(s.answers || {}), ...(s.overrides || {}) };
@@ -608,7 +631,15 @@
         box.style.marginBottom = "14px";
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("span", "qz-qnum", `Q${n}`));
-        row.appendChild(h("span", "qz-pill", typeName(q)));
+        const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
+          label: `Change to ${label}`,
+          onClick: () => {
+            if (quiz.submissions.some((s) => (s.answers || {})[q.id] !== undefined && (s.answers || {})[q.id] !== "") && !confirm("Students have already answered this question. Their answers are kept and re-graded as the new type, which may mark some wrong. Change the type?")) return;
+            ScoringModule.setQuizQuestionType(q, id); regrade(); rerender();
+          },
+        })));
+        pill.className = "qz-pill qz-pill-btn"; pill.style.cssText = "background:transparent;cursor:pointer;"; pill.title = "Click to change the question type";
+        row.appendChild(pill);
         if (answersOnly) {
           const spacer = h("span");
           spacer.style.flex = "1";
