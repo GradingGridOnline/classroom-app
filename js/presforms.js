@@ -201,10 +201,15 @@ const PresentationFormsModule = {
         Object.entries(p.ratings || {}).forEach(([studentId, value]) => ratings.push([who, studentId, Number(value)]));
       }
     });
+    // Scores and comments typed in by hand (respondent "manual:…") are not on the server, so they are kept.
+    const isManual = (r) => String(r[0]).startsWith("manual:");
+    (set.scores || []).filter(isManual).forEach((r) => scores.push(r));
+    (set.comments || []).filter(isManual).forEach((r) => comments.push(r));
     set.scores = scores;
     set.comments = comments;
     set.ratings = ratings;
-    set.respondentCount = (rows || []).length;
+    set._manualCount = new Set([...scores, ...comments].filter(isManual).map((r) => r[0])).size;
+    set.respondentCount = (rows || []).length + set._manualCount;
     set.syncedAt = new Date().toISOString();
 
     const answered = new Set((rows || []).map((r) => String(r.respondent)));

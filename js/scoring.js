@@ -877,6 +877,12 @@ const ScoringModule = {
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
     if (typeof project.totalColumn.maxPoints !== "number") project.totalColumn.maxPoints = 0;
 
+    // Students who missed the presentations (studentId -> true) and what that costs them.
+    if (!project.absent || typeof project.absent !== "object") project.absent = {};
+    if (!project.absencePenalty || typeof project.absencePenalty !== "object") project.absencePenalty = {};
+    if (project.absencePenalty.mode !== "points") project.absencePenalty.mode = "percent";
+    if (typeof project.absencePenalty.amount !== "number" || !(project.absencePenalty.amount >= 0)) project.absencePenalty.amount = 0;
+
     if (!Array.isArray(project.scoreUploads)) project.scoreUploads = [];
     project.scoreUploads.forEach((upload) => {
       ["scores", "comments", "ratings"].forEach((key) => {
@@ -1205,6 +1211,42 @@ const ScoringModule = {
       return Number.isNaN(num) ? null : num;
     });
     return result.total === null ? 0 : result.total;
+  },
+
+  /** How much an absent student loses from a Total Score of `sum`: a percentage of it, or a fixed number of points. */
+  presentationAbsenceDeduction(project, sum) {
+    const pen = project.absencePenalty || { mode: "percent", amount: 0 };
+    const amount = Number(pen.amount) || 0;
+    if (!(amount > 0)) return 0;
+    return Math.min(sum, pen.mode === "points" ? amount : (sum * amount) / 100);
+  },
+
+  isPresentationAbsent(project, studentId) {
+    return !!(project && project.absent && project.absent[studentId]);
+  },
+
+  setPresentationAbsent(toolId, projectId, studentId, absent) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
+    if (absent) project.absent[studentId] = true; else delete project.absent[studentId];
+  },
+
+  setPresentationAbsencePenalty(toolId, projectId, mode, amount) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return;
+    project.absencePenalty = { mode: mode === "points" ? "points" : "percent", amount: Math.max(0, Number(amount) || 0) };
+    if (project.absencePenalty.mode === "percent") project.absencePenalty.amount = Math.min(100, project.absencePenalty.amount);
+  },
+
+  /** A student's Total Score: their group's total, less the absence penalty if they were marked absent. Null if there is no group total. */
+  computePresentationStudentSum(toolId, projectId, studentId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return null;
+    const entry = project.roster.find((e) => e.studentId === studentId);
+    if (!entry || !entry.group) return null;
+    const sum = this.computePresentationSum(toolId, projectId, entry.group);
+    if (sum === null) return null;
+    return this.isPresentationAbsent(project, studentId) ? sum - this.presentationAbsenceDeduction(project, sum) : sum;
   },
 
   // ----- Presentation Calc: score-sheet templates (CSV) -----
@@ -1639,9 +1681,15 @@ const ScoringModule = {
       classAverage: average(roster.map((entry) => scoreFor(entry, col))),
       isTotal: false,
     }));
+    let totalScore = totalFor(target);
+    let totalLabel = "Total (weighted)";
+    if (studentId && totalScore !== null && this.isPresentationAbsent(project, studentId) && this.presentationAbsenceDeduction(project, totalScore) > 0) {
+      totalScore -= this.presentationAbsenceDeduction(project, totalScore);
+      totalLabel = "Total (weighted, after absence penalty)";
+    }
     rows.push({
-      label: "Total (weighted)",
-      score: totalFor(target),
+      label: totalLabel,
+      score: totalScore,
       max: this._weightedTotal(columns, () => null).max,
       classAverage: average(roster.map((entry) => totalFor(entry))),
       isTotal: true,
@@ -1655,7 +1703,7 @@ const ScoringModule = {
     if (!project) return null;
     const entry = project.roster.find((e) => e.studentId === studentId);
     if (!entry || !entry.group) return null;
-    const sum = this.computePresentationSum(tool.id, projectId, entry.group);
+    const sum = this.computePresentationStudentSum(tool.id, projectId, studentId);
     if (sum === null) return null;
     return this._totalContribution(project, sum);
   },
@@ -1956,7 +2004,7 @@ const ScoringModule = {
         const project = projectId ? this.getPresentationProject(toolId, projectId) : null;
         const entry = project && project.roster.find((e) => e.studentId === studentId);
         if (!entry || !entry.group) return;
-        const sum = this.computePresentationSum(toolId, projectId, entry.group);
+        const sum = this.computePresentationStudentSum(toolId, projectId, studentId);
         if (sum === null) return;
         const pPoints = this._scaleToItem(sum, project.totalColumn, item);
         if (pPoints === null) return;

@@ -68,6 +68,25 @@ class GoogleDriveProvider extends StorageProvider {
     }
   }
 
+  /** Sets up Google sign-in WITHOUT the silent re-auth attempt — used for the one-time "Import from Google Drive" (and Google Forms / Gmail features), where a button click triggers the sign-in. */
+  async initInteractive() {
+    if (this.tokenClient) return;
+    await this._waitForGoogleScript();
+    this.tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: this.config.google.clientId,
+      scope: this.config.google.scopes,
+      callback: () => {},
+      error_callback: (err) => {
+        if (this._pendingReject) {
+          const msg =
+            err && err.type === "popup_failed_to_open" ? "popup_blocked" : err && err.type === "popup_closed" ? "popup_closed" : (err && err.type) || "sign_in_error";
+          this._pendingReject(new Error(msg));
+        }
+      },
+    });
+    this._restoreSavedToken();
+  }
+
   async signIn() {
     await this._requestToken({ prompt: "consent" });
     await this._loadUserEmail();
@@ -184,7 +203,9 @@ class GoogleDriveProvider extends StorageProvider {
         done(resolve);
       };
       try {
-        this.tokenClient.requestAccessToken({ prompt });
+        const opts = { prompt };
+        if (this.userEmail) opts.hint = this.userEmail; // skips the "choose an account" screen for a known account
+        this.tokenClient.requestAccessToken(opts);
       } catch (e) {
         done(reject, e);
       }
@@ -193,13 +214,33 @@ class GoogleDriveProvider extends StorageProvider {
 
   async _getAccessToken() {
     if (this.isSignedIn()) return this.accessToken;
-    // Try a silent refresh (no prompt) before falling back to interactive.
-    try {
-      await this._requestToken({ prompt: "" }, 4000);
-    } catch {
-      await this._requestToken({ prompt: "consent" }, 120000);
+    // One sign-in at a time: every caller that arrives while a sign-in is open waits for that same one
+    // (without this, each email in a batch could open its own Google window).
+    if (!this._tokenFlight) {
+      this._tokenFlight = (async () => {
+        try {
+          // Try a silent refresh (no prompt) before falling back to interactive.
+          try {
+            await this._requestToken({ prompt: "" }, 8000);
+          } catch {
+            await this._requestToken({ prompt: "consent" }, 120000);
+          }
+          if (!this.userEmail) { try { await this._loadUserEmail(); } catch (e) {} } // remembered, so the next refresh can skip the account chooser
+          this._saveTokenToStorage();
+        } finally {
+          this._tokenFlight = null;
+        }
+      })();
     }
+    await this._tokenFlight;
     return this.accessToken;
+  }
+
+  /** Forgets the current token (e.g. Google said it is no longer valid) so the next request gets a fresh one. */
+  invalidateToken() {
+    this.accessToken = null;
+    this.tokenExpiresAt = 0;
+    this._clearSavedToken();
   }
 
   /** Public wrapper — other modules (e.g. the email-collection feature) reuse the same authenticated token for Forms/Drive calls beyond plain file save/load. */

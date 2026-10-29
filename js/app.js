@@ -4729,7 +4729,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
 
       const labelTd = document.createElement("td");
       labelTd.textContent = `Group ${group}`;
-      const members = cfg.roster.filter((e) => e.group === group).map((e) => e.name || "(unnamed)");
+      const members = cfg.roster.filter((e) => e.group === group).map((e) => (e.name || "(unnamed)") + (ScoringModule.isPresentationAbsent(cfg, e.studentId) ? " (absent)" : ""));
       if (members.length > 0) {
         const memberLine = document.createElement("div");
         memberLine.className = "hint";
@@ -4782,6 +4782,54 @@ function buildPresentationScoresPage(tool, cfg, container) {
     table.appendChild(tbody);
     wrap.appendChild(table);
     scoresSection.body.appendChild(wrap);
+  }
+
+  // Students who were absent from the presentations, and the penalty that costs them.
+  if (groups.length > 0) {
+    const abs = makePresSection("Absences");
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = "Tick a student who was absent from the presentations. Their own score is then reduced by the penalty below (the rest of their group keeps the group's score). The penalty applies in Main Scores and on that student's report page.";
+    abs.body.appendChild(note);
+    const penRow = document.createElement("div");
+    penRow.className = "mapping-row";
+    const penLabel = document.createElement("label");
+    penLabel.textContent = "Absence penalty";
+    const penMode = document.createElement("select");
+    [["percent", "% of the student's Total Score"], ["points", "points off the Total Score"]].forEach(([id, text]) => {
+      const o = document.createElement("option"); o.value = id; o.textContent = text; if (id === cfg.absencePenalty.mode) o.selected = true; penMode.appendChild(o);
+    });
+    const penAmount = document.createElement("input");
+    penAmount.type = "text"; penAmount.inputMode = "decimal"; penAmount.className = "point-value-input";
+    penAmount.value = String(cfg.absencePenalty.amount);
+    const savePen = () => { ScoringModule.setPresentationAbsencePenalty(tool.id, cfg.id, penMode.value, penAmount.value); renderScoringToolView(tool, container); };
+    penMode.addEventListener("change", savePen);
+    penAmount.addEventListener("change", savePen);
+    penRow.append(penLabel, penAmount, penMode);
+    abs.body.appendChild(penRow);
+    const list = document.createElement("div");
+    cfg.roster.filter((e) => e.group).sort((x, y) => x.group - y.group || String(x.name).localeCompare(String(y.name))).forEach((entry) => {
+      const label = document.createElement("label");
+      label.style.cssText = "display:inline-flex;gap:6px;align-items:center;margin:2px 16px 2px 0;white-space:nowrap;";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = ScoringModule.isPresentationAbsent(cfg, entry.studentId);
+      cb.addEventListener("change", () => { ScoringModule.setPresentationAbsent(tool.id, cfg.id, entry.studentId, cb.checked); renderScoringToolView(tool, container); });
+      label.append(cb, document.createTextNode(`Group ${entry.group} · ${entry.name || "(unnamed)"}`));
+      list.appendChild(label);
+    });
+    abs.body.appendChild(list);
+    const absent = cfg.roster.filter((e) => e.group && ScoringModule.isPresentationAbsent(cfg, e.studentId));
+    if (absent.length) {
+      const sum = document.createElement("p");
+      sum.className = "hint";
+      sum.textContent = "Scores after the penalty: " + absent.map((e) => {
+        const v = ScoringModule.computePresentationStudentSum(tool.id, cfg.id, e.studentId);
+        return `${e.name || "(unnamed)"} ${v === null ? "—" : Math.round(v * 100) / 100}`;
+      }).join(" · ");
+      abs.body.appendChild(sum);
+    }
+    page.appendChild(abs.section);
   }
 
   // Same raw / out-of-max setting as the Progress Tracker's Total Score column.
@@ -6180,7 +6228,7 @@ function buildScoreSheetDetails(tool, project, upload) {
     sorted.forEach(([respondentKey, group, text]) => {
       const p = document.createElement("p");
       p.style.margin = "0 0 6px";
-      const who = respondentKey.startsWith("#") ? "" : ` · ${respondentKey}`;
+      const who = respondentKey.startsWith("#") ? "" : ` · ${respondentKey.replace(/^manual:/, "")} (typed in)`;
       const label = document.createElement("strong");
       label.textContent = `${group ? `Group ${group}` : "Global"}${who}: `;
       p.append(label, document.createTextNode(text));
@@ -6631,13 +6679,20 @@ function buildPdfEmailMessage({ to, subject, body, filename, pdfBytes }) {
 }
 
 async function sendGmailMessage(message) {
-  const token = await storage.getAccessToken();
   const raw = btoa(message).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ raw }),
-  });
+  const post = async () => {
+    const token = await storage.getAccessToken();
+    return fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ raw }),
+    });
+  };
+  let response = await post();
+  if (response.status === 401 && storage.invalidateGoogleToken) { // token went stale: get one fresh token (one sign-in), then retry this email once
+    storage.invalidateGoogleToken();
+    response = await post();
+  }
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     if (response.status === 401 || response.status === 403) {
@@ -6733,6 +6788,9 @@ async function emailPresentationReports(tool, project, kind, targetStudentId, te
     : `Send ${jobs.length} email(s), each with a PDF (${label}), to ${jobs.length === 1 ? jobs[0].to : "these students"}?` +
       (skipped.length > 0 ? `\n\nNo email address on the Roster, so skipped: ${skipped.join(", ")}.` : "");
   if (!confirm(summary)) return;
+  // Sign in to Google ONCE, up front; every email in the batch then reuses that token.
+  try { status.textContent = "Signing in to Google…"; await storage.getAccessToken(); }
+  catch (err) { status.textContent = `Couldn't sign in to Google (${err.message}). Allow pop-ups for this site and try again.`; return; }
 
   // ----- Make the PDFs (one per page, reused by everyone who gets that page) and send -----
   const stage = document.createElement("div");
@@ -7567,6 +7625,9 @@ async function emailReportCards(targetStudentId, testAddress, status) {
     : `Send ${jobs.length} report card email(s), each with a PDF?` +
       (skipped.length > 0 ? `\n\nNo email address on the Roster, so skipped: ${skipped.join(", ")}.` : "");
   if (!confirm(summary)) return;
+  // Sign in to Google ONCE, up front; every email in the batch then reuses that token.
+  try { status.textContent = "Signing in to Google…"; await storage.getAccessToken(); }
+  catch (err) { status.textContent = `Couldn't sign in to Google (${err.message}). Allow pop-ups for this site and try again.`; return; }
 
   const stage = document.createElement("div");
   stage.id = "ggo-pdf-stage";

@@ -148,6 +148,21 @@
       test.maxPoints = this.quizTotal(q); // a quiz's max score is always the sum of its question points
       return q;
     },
+    /** Switches an item between Quiz, Answer Collection, Research Survey and Formative Survey. Points are set aside while it is a survey and come back when it is not. */
+    setQuizKind(toolId, testId, kind) {
+      const test = this.findTest(toolId, testId);
+      const quiz = this.normalizeQuiz(test);
+      if (!quiz || !["standard", "answers", "survey", "formative"].includes(kind) || quiz.kind === kind) return;
+      const wasSurvey = isSurveyKind(quiz.kind), willSurvey = isSurveyKind(kind);
+      quiz.sections.forEach((sec) => sec.questions.forEach((x) => {
+        if (!wasSurvey && willSurvey) x.keptPoints = x.points;
+        if (wasSurvey && !willSurvey) x.points = Number.isFinite(Number(x.keptPoints)) ? Number(x.keptPoints) : 1;
+      }));
+      quiz.kind = kind;
+      if (kind === "formative" && !Array.isArray(quiz.runs)) quiz.runs = [];
+      this.normalizeQuiz(test);
+      this.regradeQuiz(toolId, testId);
+    },
     /** Quizzes ignore manual max-score edits: their max is the sum of the question points. */
     setTestMaxPoints(toolId, testId, value) {
       const test = this.findTest(toolId, testId);
@@ -309,6 +324,7 @@
           questions: s.questions.map((x) => ({
             id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: isSurveyKind(quiz.kind) ? 0 : x.points,
             choices: isChoiceQ(x) ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
+            divider: x.dividerAfter ? true : undefined,
           })),
         })),
       };
@@ -472,6 +488,22 @@
     const bar = h("div", "panel-toolbar qz-header");
     const left = h("div", "panel-toolbar-buttons");
     left.appendChild(button("← Back to bank", "btn btn-ghost", () => { editing.delete(tool.id); rerender(); }));
+    left.appendChild(h("label", "", "Type:"));
+    const typeSel = h("select");
+    [["standard", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]].forEach(([id, text]) => {
+      const o = h("option", "", text); o.value = id; if (id === quiz.kind) o.selected = true; typeSel.appendChild(o);
+    });
+    typeSel.title = "Change this item between a Quiz, an Answer Collection and a Survey. Questions are kept; points are set aside for surveys and restored when you switch back.";
+    typeSel.addEventListener("change", () => {
+      const to = typeSel.value;
+      const lose = isSurveyKind(to) && !isSurveyKind(quiz.kind) && quiz.submissions.length;
+      if (lose && !confirm("Switching to a survey stops scoring: the answer key and points are kept but ignored, and students' scores are hidden until you switch back. Continue?")) { typeSel.value = quiz.kind; return; }
+      ScoringModule.setQuizKind(tool.id, test.id, to);
+      viewOf.set(tool.id, "build");
+      if (quiz.token) alert("This item's QR code is open: click Get Responses in the list to publish the new type to students.");
+      rerender();
+    });
+    left.appendChild(typeSel);
     left.appendChild(h("label", "", `${kindName(quiz)} name:`));
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
@@ -591,9 +623,11 @@
           row.appendChild(h("span", "hint", "pts"));
           row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
         }
+        row.appendChild(button(q.dividerAfter ? "Line below ✓" : "Line below", "btn btn-ghost btn-small", () => { q.dividerAfter = !q.dividerAfter; rerender(); }));
         row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
         row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
         box.appendChild(row);
+        if (q.dividerAfter) box.style.borderBottom = "4px double var(--line, #999)";
 
         if (isChoiceQ(q)) {
           const cnt = h("div", "mapping-row");
