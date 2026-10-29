@@ -877,11 +877,18 @@ const ScoringModule = {
     if (project.totalColumn.mode !== "max") project.totalColumn.mode = "raw";
     if (typeof project.totalColumn.maxPoints !== "number") project.totalColumn.maxPoints = 0;
 
-    // Students who missed the presentations (studentId -> true) and what that costs them.
-    if (!project.absent || typeof project.absent !== "object") project.absent = {};
+    // Absence penalty: the penalty each attendance code (A, L, …) costs, taken from the record of one chosen class date.
+    if (typeof project.absenceSession !== "string") project.absenceSession = "";
+    if (!project.absenceOverride || typeof project.absenceOverride !== "object") project.absenceOverride = {};
     if (!project.absencePenalty || typeof project.absencePenalty !== "object") project.absencePenalty = {};
-    if (project.absencePenalty.mode !== "points") project.absencePenalty.mode = "percent";
-    if (typeof project.absencePenalty.amount !== "number" || !(project.absencePenalty.amount >= 0)) project.absencePenalty.amount = 0;
+    const pen = project.absencePenalty;
+    if (pen.mode !== "points") pen.mode = "percent";
+    if (!pen.amounts || typeof pen.amounts !== "object") pen.amounts = {};
+    if (typeof pen.amount === "number") { if (pen.amount > 0 && pen.amounts.A === undefined) pen.amounts.A = pen.amount; delete pen.amount; } // older single penalty = the penalty for "A"
+    if (project.absent && typeof project.absent === "object") { // older check marks = "penalize"
+      Object.keys(project.absent).forEach((id) => { if (project.absent[id] && !project.absenceOverride[id]) project.absenceOverride[id] = "penalize"; });
+      delete project.absent;
+    }
 
     if (!Array.isArray(project.scoreUploads)) project.scoreUploads = [];
     project.scoreUploads.forEach((upload) => {
@@ -1213,29 +1220,56 @@ const ScoringModule = {
     return result.total === null ? 0 : result.total;
   },
 
-  /** How much an absent student loses from a Total Score of `sum`: a percentage of it, or a fixed number of points. */
-  presentationAbsenceDeduction(project, sum) {
-    const pen = project.absencePenalty || { mode: "percent", amount: 0 };
-    const amount = Number(pen.amount) || 0;
-    if (!(amount > 0)) return 0;
-    return Math.min(sum, pen.mode === "points" ? amount : (sum * amount) / 100);
+  /** The attendance code (P, A, L, E, …) a student has on the class date chosen for this project ("" if none). */
+  presentationAttendanceCode(project, studentId) {
+    if (!project || !project.absenceSession || !window.AttendanceModule) return "";
+    const A = window.AttendanceModule;
+    if (A.currentCourseId !== this.currentCourseId || !A.sessions.some((x) => x.id === project.absenceSession)) return "";
+    return (A.getRecord(studentId, project.absenceSession) || {}).code || "";
   },
 
-  isPresentationAbsent(project, studentId) {
-    return !!(project && project.absent && project.absent[studentId]);
+  /** What a student's status costs, as { code, source: "attendance"|"penalize"|"waived", amount } (amount in % or points, per absencePenalty.mode). */
+  presentationPenaltyInfo(project, studentId) {
+    const amounts = (project.absencePenalty && project.absencePenalty.amounts) || {};
+    const code = this.presentationAttendanceCode(project, studentId);
+    const override = (project.absenceOverride || {})[studentId];
+    if (override === "waive") return { code, source: "waived", amount: 0 };
+    if (override === "penalize") return { code, source: "penalize", amount: Number(amounts.A) || Math.max(0, ...Object.values(amounts).map(Number).filter(Number.isFinite)) };
+    return { code, source: "attendance", amount: code ? Number(amounts[code]) || 0 : 0 };
   },
 
-  setPresentationAbsent(toolId, projectId, studentId, absent) {
+  /** How much a student loses from a Total Score of `sum`. */
+  presentationAbsenceDeduction(project, sum, studentId) {
+    const info = this.presentationPenaltyInfo(project, studentId);
+    if (!(info.amount > 0)) return 0;
+    return Math.min(sum, project.absencePenalty.mode === "points" ? info.amount : (sum * info.amount) / 100);
+  },
+
+  isPresentationPenalized(project, studentId) {
+    return this.presentationPenaltyInfo(project, studentId).amount > 0;
+  },
+
+  setPresentationAbsenceSession(toolId, projectId, sessionId) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (project) project.absenceSession = sessionId || "";
+  },
+
+  setPresentationAbsenceOverride(toolId, projectId, studentId, value) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return;
-    if (absent) project.absent[studentId] = true; else delete project.absent[studentId];
+    if (value === "penalize" || value === "waive") project.absenceOverride[studentId] = value; else delete project.absenceOverride[studentId];
   },
 
-  setPresentationAbsencePenalty(toolId, projectId, mode, amount) {
+  setPresentationAbsencePenalty(toolId, projectId, mode, code, amount) {
     const project = this.getPresentationProject(toolId, projectId);
     if (!project) return;
-    project.absencePenalty = { mode: mode === "points" ? "points" : "percent", amount: Math.max(0, Number(amount) || 0) };
-    if (project.absencePenalty.mode === "percent") project.absencePenalty.amount = Math.min(100, project.absencePenalty.amount);
+    const pen = project.absencePenalty;
+    if (mode) pen.mode = mode === "points" ? "points" : "percent";
+    if (code) {
+      let v = Math.max(0, Number(amount) || 0);
+      if (pen.mode === "percent") v = Math.min(100, v);
+      if (v > 0) pen.amounts[code] = v; else delete pen.amounts[code];
+    }
   },
 
   /** A student's Total Score: their group's total, less the absence penalty if they were marked absent. Null if there is no group total. */
@@ -1246,7 +1280,7 @@ const ScoringModule = {
     if (!entry || !entry.group) return null;
     const sum = this.computePresentationSum(toolId, projectId, entry.group);
     if (sum === null) return null;
-    return this.isPresentationAbsent(project, studentId) ? sum - this.presentationAbsenceDeduction(project, sum) : sum;
+    return sum - this.presentationAbsenceDeduction(project, sum, studentId);
   },
 
   // ----- Presentation Calc: score-sheet templates (CSV) -----
@@ -1683,8 +1717,8 @@ const ScoringModule = {
     }));
     let totalScore = totalFor(target);
     let totalLabel = "Total (weighted)";
-    if (studentId && totalScore !== null && this.isPresentationAbsent(project, studentId) && this.presentationAbsenceDeduction(project, totalScore) > 0) {
-      totalScore -= this.presentationAbsenceDeduction(project, totalScore);
+    if (studentId && totalScore !== null && this.presentationAbsenceDeduction(project, totalScore, studentId) > 0) {
+      totalScore -= this.presentationAbsenceDeduction(project, totalScore, studentId);
       totalLabel = "Total (weighted, after absence penalty)";
     }
     rows.push({

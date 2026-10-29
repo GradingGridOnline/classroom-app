@@ -4658,7 +4658,25 @@ function buildPresentationScoresPage(tool, cfg, container) {
     scoresSection.body.appendChild(using);
   }
 
-  if (groups.length > 0 && rubricColumnCount > 0) {
+  const viewKey = `${tool.id}|${cfg.id}`;
+  const view = presScoreView.get(viewKey) === "student" ? "student" : "group";
+  if (groups.length > 0) {
+    const toggle = document.createElement("div");
+    toggle.className = "attendance-view-toggle";
+    [["group", "By group"], ["student", "By student"]].forEach(([id, text]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn-small " + (view === id ? "btn-primary" : "btn-ghost");
+      b.textContent = text;
+      b.addEventListener("click", () => { presScoreView.set(viewKey, id); renderScoringToolView(tool, container); });
+      toggle.appendChild(b);
+    });
+    scoresSection.body.appendChild(toggle);
+  }
+
+  if (view === "student" && groups.length > 0) {
+    scoresSection.body.appendChild(buildPresStudentTable(tool, cfg, container, columns));
+  } else if (groups.length > 0 && rubricColumnCount > 0) {
     const wrap = document.createElement("div");
     wrap.className = "attendance-table-wrap";
     const table = document.createElement("table");
@@ -4729,7 +4747,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
 
       const labelTd = document.createElement("td");
       labelTd.textContent = `Group ${group}`;
-      const members = cfg.roster.filter((e) => e.group === group).map((e) => (e.name || "(unnamed)") + (ScoringModule.isPresentationAbsent(cfg, e.studentId) ? " (absent)" : ""));
+      const members = cfg.roster.filter((e) => e.group === group).map((e) => (e.name || "(unnamed)") + (ScoringModule.presentationAttendanceCode(cfg, e.studentId) && ScoringModule.presentationAttendanceCode(cfg, e.studentId) !== "P" ? ` (${ScoringModule.presentationAttendanceCode(cfg, e.studentId)})` : ""));
       if (members.length > 0) {
         const memberLine = document.createElement("div");
         memberLine.className = "hint";
@@ -4784,48 +4802,64 @@ function buildPresentationScoresPage(tool, cfg, container) {
     scoresSection.body.appendChild(wrap);
   }
 
-  // Students who were absent from the presentations, and the penalty that costs them.
+  // Penalty for missing (or being late to) the presentations, taken from the attendance record of one class date.
   if (groups.length > 0) {
     const abs = makePresSection("Absences");
     const note = document.createElement("p");
     note.className = "hint";
-    note.textContent = "Tick a student who was absent from the presentations. Their own score is then reduced by the penalty below (the rest of their group keeps the group's score). The penalty applies in Main Scores and on that student's report page.";
+    note.textContent = "Choose the class date on which the presentations were given. Each student's attendance code on that date (A = absent, L = late, …) decides their penalty, set below. Only that student's own score is reduced; the rest of their group keeps the group's score. The penalty applies in Main Scores and on the student's report page. Use the By student view to waive or force a penalty for one student.";
     abs.body.appendChild(note);
-    const penRow = document.createElement("div");
-    penRow.className = "mapping-row";
-    const penLabel = document.createElement("label");
-    penLabel.textContent = "Absence penalty";
-    const penMode = document.createElement("select");
-    [["percent", "% of the student's Total Score"], ["points", "points off the Total Score"]].forEach(([id, text]) => {
-      const o = document.createElement("option"); o.value = id; o.textContent = text; if (id === cfg.absencePenalty.mode) o.selected = true; penMode.appendChild(o);
+    const sessions = AttendanceModule.currentCourseId === ScoringModule.currentCourseId ? AttendanceModule.sessions : [];
+    const dateRow = document.createElement("div");
+    dateRow.className = "mapping-row";
+    const dateLabel = document.createElement("label");
+    dateLabel.textContent = "Class date";
+    const dateSel = document.createElement("select");
+    const none = document.createElement("option"); none.value = ""; none.textContent = sessions.length ? "(no penalty — choose a date)" : "(no attendance sessions yet)"; dateSel.appendChild(none);
+    sessions.forEach((s, i) => {
+      const o = document.createElement("option"); o.value = s.id;
+      o.textContent = `Class ${s.number || i + 1}${s.date ? " — " + s.date : " (no date set)"}`;
+      if (s.id === cfg.absenceSession) o.selected = true;
+      dateSel.appendChild(o);
     });
-    const penAmount = document.createElement("input");
-    penAmount.type = "text"; penAmount.inputMode = "decimal"; penAmount.className = "point-value-input";
-    penAmount.value = String(cfg.absencePenalty.amount);
-    const savePen = () => { ScoringModule.setPresentationAbsencePenalty(tool.id, cfg.id, penMode.value, penAmount.value); renderScoringToolView(tool, container); };
-    penMode.addEventListener("change", savePen);
-    penAmount.addEventListener("change", savePen);
-    penRow.append(penLabel, penAmount, penMode);
-    abs.body.appendChild(penRow);
-    const list = document.createElement("div");
-    cfg.roster.filter((e) => e.group).sort((x, y) => x.group - y.group || String(x.name).localeCompare(String(y.name))).forEach((entry) => {
+    dateSel.addEventListener("change", () => { ScoringModule.setPresentationAbsenceSession(tool.id, cfg.id, dateSel.value); renderScoringToolView(tool, container); });
+    dateRow.append(dateLabel, dateSel);
+    abs.body.appendChild(dateRow);
+
+    const modeRow = document.createElement("div");
+    modeRow.className = "mapping-row";
+    const modeLabel = document.createElement("label");
+    modeLabel.textContent = "Penalty is";
+    const modeSel = document.createElement("select");
+    [["percent", "a % of the student's Total Score"], ["points", "points off the Total Score"]].forEach(([id, text]) => {
+      const o = document.createElement("option"); o.value = id; o.textContent = text; if (id === cfg.absencePenalty.mode) o.selected = true; modeSel.appendChild(o);
+    });
+    modeSel.addEventListener("change", () => { ScoringModule.setPresentationAbsencePenalty(tool.id, cfg.id, modeSel.value); renderScoringToolView(tool, container); });
+    modeRow.append(modeLabel, modeSel);
+    abs.body.appendChild(modeRow);
+
+    const unit = cfg.absencePenalty.mode === "points" ? "points" : "%";
+    AttendanceModule.settings.participationTypes.filter((code) => code !== "P").forEach((code) => {
+      const row = document.createElement("div");
+      row.className = "mapping-row";
       const label = document.createElement("label");
-      label.style.cssText = "display:inline-flex;gap:6px;align-items:center;margin:2px 16px 2px 0;white-space:nowrap;";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = ScoringModule.isPresentationAbsent(cfg, entry.studentId);
-      cb.addEventListener("change", () => { ScoringModule.setPresentationAbsent(tool.id, cfg.id, entry.studentId, cb.checked); renderScoringToolView(tool, container); });
-      label.append(cb, document.createTextNode(`Group ${entry.group} · ${entry.name || "(unnamed)"}`));
-      list.appendChild(label);
+      label.textContent = `Penalty for "${code}"`;
+      const input = document.createElement("input");
+      input.type = "text"; input.inputMode = "decimal"; input.className = "point-value-input";
+      input.value = cfg.absencePenalty.amounts[code] ? String(cfg.absencePenalty.amounts[code]) : "";
+      input.placeholder = "0";
+      input.addEventListener("change", () => { ScoringModule.setPresentationAbsencePenalty(tool.id, cfg.id, null, code, input.value); renderScoringToolView(tool, container); });
+      row.append(label, input, document.createTextNode(` ${unit}`));
+      abs.body.appendChild(row);
     });
-    abs.body.appendChild(list);
-    const absent = cfg.roster.filter((e) => e.group && ScoringModule.isPresentationAbsent(cfg, e.studentId));
-    if (absent.length) {
+
+    const hit = cfg.roster.filter((e) => e.group && ScoringModule.isPresentationPenalized(cfg, e.studentId));
+    if (hit.length) {
       const sum = document.createElement("p");
       sum.className = "hint";
-      sum.textContent = "Scores after the penalty: " + absent.map((e) => {
+      sum.textContent = "Penalized: " + hit.map((e) => {
         const v = ScoringModule.computePresentationStudentSum(tool.id, cfg.id, e.studentId);
-        return `${e.name || "(unnamed)"} ${v === null ? "—" : Math.round(v * 100) / 100}`;
+        return `${e.name || "(unnamed)"} (${ScoringModule.presentationPenaltyInfo(cfg, e.studentId).code || "forced"}) → ${v === null ? "—" : Math.round(v * 100) / 100}`;
       }).join(" · ");
       abs.body.appendChild(sum);
     }
