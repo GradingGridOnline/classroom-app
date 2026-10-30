@@ -232,6 +232,7 @@
 <li><b>+ New Entry</b> — add a subject and date, optionally tick students (none = the whole class), write the entry, and choose or add tags. Each entry shows its subject, date, tags, a collapsible student list and the first 3 lines (<b>Show full entry</b> for the rest). Click tags in the <b>By tag</b> list (an outlined tag fills in when selected) (Entry Counts &amp; Timeline) to list only entries with those tags. Entries are laid out like a book in date order (oldest on page 1, top; <b>Show full entry</b> opens it in a large window with Edit and Delete), opening at the latest entry, three per page with two pages showing; use the ‹ › buttons at the sides to turn the page (the page-turn animation and book style follow the theme). with that day's attendance and each student's attendance so far and current score beside them (turn this off in Journal Settings).</li>
 <li><b>Entry Counts &amp; Timeline</b> — entries per month, per tag and per student (fewest first, so you can see who has been missed).</li>
 <li><b>Search &amp; Report</b> — filter by date range, tag, student or keyword, then <b>Export CSV</b>.</li>
+<li>The entry box has a small editor: <b>B</b>, <i>I</i>, <u>U</u>, AA (all caps), small caps, <b>Normal</b> (clears formatting from the selected text) and a colour picker. Select text first. Formatting shows in the book and the full-entry window; search and CSV use plain text.</li>
 <li>Click <b>Save Journal</b>, or leave Autosave on.</li>
 </ol>`);
 

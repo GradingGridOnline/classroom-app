@@ -23,19 +23,22 @@ const JournalModule = {
     await storage.saveFile(this.fileName(this.currentCourseId), { entries: this.entries, settings: this.settings });
   },
 
+  /** Formatting (bold, colour, caps…) kept next to the plain text, cleaned to a safe subset. */
+  cleanRich(r) { return r && window.QuizRich ? QuizRich.clean(r) : ""; },
+
   newId() { return `jr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; },
 
-  addEntry({ date, subject, text, students, tags }) {
+  addEntry({ date, subject, text, rich, students, tags }) {
     const now = new Date().toISOString();
-    const e = { id: this.newId(), date, subject: (subject || "").trim(), text: (text || "").trim(), students: [...(students || [])], tags: this.cleanTags(tags), createdAt: now, updatedAt: now };
+    const e = { id: this.newId(), date, subject: (subject || "").trim(), text: (text || "").trim(), rich: this.cleanRich(rich), students: [...(students || [])], tags: this.cleanTags(tags), createdAt: now, updatedAt: now };
     this.entries.push(e);
     return e;
   },
 
-  updateEntry(id, { date, subject, text, students, tags }) {
+  updateEntry(id, { date, subject, text, rich, students, tags }) {
     const e = this.entries.find((x) => x.id === id);
     if (!e) return null;
-    e.date = date; e.subject = (subject || "").trim(); e.text = (text || "").trim(); e.students = [...(students || [])]; e.tags = this.cleanTags(tags);
+    e.date = date; e.subject = (subject || "").trim(); e.text = (text || "").trim(); e.rich = this.cleanRich(rich); e.students = [...(students || [])]; e.tags = this.cleanTags(tags);
     e.updatedAt = new Date().toISOString();
     return e;
   },

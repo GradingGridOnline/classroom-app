@@ -162,7 +162,11 @@
 
     const subj = mk("input"); subj.placeholder = "Subject"; subj.value = st.subject; subj.style.width = "100%"; subj.addEventListener("input", () => { st.subject = subj.value; });
     f.appendChild(subj);
-    const text = mk("textarea"); text.placeholder = "Journal entry…"; text.value = entry ? entry.text : ""; f.appendChild(text);
+    const body = { text: entry ? entry.text : "", rich: entry ? entry.rich || "" : "" };
+    const text = QuizRich.editor({ text: body.text, rich: body.rich, placeholder: "Journal entry…", onChange: (t, r) => { body.text = t; body.rich = r; } });
+    text.style.width = "100%"; text.style.boxSizing = "border-box";
+    text.querySelector("[contenteditable]").style.minHeight = "110px";
+    f.appendChild(text);
 
     const tagBox = mk("div");
     const drawTags = () => {
@@ -186,8 +190,8 @@
     const acts = mk("div", "jr-row");
     acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => {
       if (!st.date) { alert("Choose a date."); return; }
-      if (!text.value.trim() && !st.subject.trim() && !st.tags.size) { alert("Write something first."); return; }
-      const data = { date: st.date, subject: st.subject, text: text.value, students: [...st.students], tags: [...st.tags] };
+      if (!body.text.trim() && !st.subject.trim() && !st.tags.size) { alert("Write something first."); return; }
+      const data = { date: st.date, subject: st.subject, text: body.text, rich: body.rich, students: [...st.students], tags: [...st.tags] };
       if (entry) J.updateEntry(entry.id, data); else { J.addEntry(data); spread = null; }
       editingId = null; creating = false; render();
       if (onDone) onDone();
@@ -207,7 +211,7 @@
       const d = mk("details"); d.appendChild(mk("summary", "", `Students (${e.students.length})`));
       d.appendChild(mk("div", "jr-meta", e.students.map(sName).join(", "))); c.appendChild(d);
     } else c.appendChild(mk("div", "jr-meta", "Whole class"));
-    const tx = mk("div", "jr-text", e.text); c.appendChild(tx);
+    const tx = mk("div", "jr-text"); tx.innerHTML = QuizRich.show(e); c.appendChild(tx);
     c.appendChild(btn("Show full entry", "btn btn-ghost btn-small", () => openEntry(e.id)));
     if (J.settings.snapshots) {
       const sn = snapParts(e);
@@ -237,7 +241,7 @@
       head.appendChild(hl); head.appendChild(btn("✕ Close", "btn btn-ghost btn-small", close)); box.appendChild(head);
       if (e.tags.length) { const t = mk("div", "jr-modal-row"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); box.appendChild(t); }
       box.appendChild(mk("div", "jr-meta jr-modal-row", e.students.length ? `Students (${e.students.length}): ${e.students.map(sName).join(", ")}` : "Whole class"));
-      box.appendChild(mk("div", "jr-modal-text", e.text));
+      { const mt = mk("div", "jr-modal-text"); mt.innerHTML = QuizRich.show(e); box.appendChild(mt); }
       if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); box.appendChild(d); } }
       const a = mk("div", "jr-row jr-modal-row");
       a.appendChild(btn("Edit", "btn btn-primary btn-small", () => { box.innerHTML = ""; box.appendChild(buildForm(e, show, show)); }));
