@@ -134,8 +134,8 @@
         if (!Array.isArray(s.notes)) s.notes = [];
         s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), rich: window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "", kind: ["text", "passage"].includes(x.kind) ? x.kind : "instructions", at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "" }));
         s.questions.forEach((x) => {
-          x.rich = window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "";
           if (x.group && !s.notes.some((nn) => nn.id === x.group && nn.kind === "passage")) delete x.group; // its Paragraph box was removed
+          x.rich = window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "";
           if (!Array.isArray(x.choices)) x.choices = [];
           if (!Array.isArray(x.accepted)) x.accepted = [];
           x.points = isSurveyKind(q.kind) ? 0 : Number(x.points) || 0;
@@ -146,6 +146,7 @@
             x.partial = x.partial === true;
           }
         });
+        if (window.QuizRich) QuizRich.regroup(s);
       });
       q.submissions.forEach((s) => {
         if (!s.answers || typeof s.answers !== "object") s.answers = {};
@@ -692,6 +693,12 @@
         text: ["Text box", "#6b7280", "Text for students: an explanation, a heading… (no question number)"],
         passage: ["Paragraph", "#7c3aed", "Paragraph for students to read (no question number); the questions attached below belong to it"],
       };
+      let cur = body; // where the next box goes: the section, or the Paragraph unit being drawn
+      const units = new Map();
+      const moveBtns = (what) => [
+        button("↑", "btn btn-ghost btn-small", () => { if (QuizRich.move(sec, what, -1)) { regrade(); rerender(); } }),
+        button("↓", "btn btn-ghost btn-small", () => { if (QuizRich.move(sec, what, 1)) { regrade(); rerender(); } }),
+      ].map((b, i) => { b.title = i ? "Move down" : "Move up"; b.disabled = !QuizRich.canMove(sec, what, i ? 1 : -1); return b; });
       const noteBox = (note) => {
         const look = NOTE_LOOK[note.kind] || NOTE_LOOK.instructions;
         const nb = h("div", "category-manage-item qz-q");
@@ -702,12 +709,13 @@
         if (note.kind === "passage") {
           nr.appendChild(menuButton("Add question", look[1], [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].map(([id, lab]) => ({ label: lab, onClick: () => attach(note, id) }))));
         }
+        moveBtns({ note }).forEach((b) => nr.appendChild(b));
         nr.appendChild(button("×", "btn btn-ghost btn-small", () => {
           if (note.kind === "passage" && sec.questions.some((x) => x.group === note.id) && !confirm("Delete this paragraph? Its attached questions are kept as ordinary questions.")) return;
           sec.notes = sec.notes.filter((x) => x !== note); rerender();
         }));
         nb.appendChild(nr);
-        body.appendChild(nb);
+        cur.appendChild(nb);
       };
       const grouped = new Set(sec.questions.map((x) => x.group).filter(Boolean));
       const placedHere = (x) => !(x.kind === "passage" && grouped.has(x.id));
@@ -717,11 +725,19 @@
       const ids = new Set(sec.questions.map((x) => x.id));
       sec.questions.forEach((q, qi) => {
         n++;
+        cur = body;
+        if (q.group) {
+          if (!units.has(q.group)) {
+            const unit = h("div", "qz-unit"); unit.style.cssText = "border:2px solid #7c3aed;border-radius:10px;padding:8px 8px 0;margin-bottom:16px;background:rgba(124,58,237,.05);";
+            body.appendChild(unit); units.set(q.group, unit); cur = unit;
+            const pn = sec.notes.find((x) => x.id === q.group && x.kind === "passage"); if (pn) noteBox(pn);
+          }
+          cur = units.get(q.group);
+        }
         sec.notes.filter((x) => placedHere(x) && x.at === "before" && x.q === q.id).forEach(noteBox);
-        if (q.group && !shownGroups.has(q.group)) { shownGroups.add(q.group); const pn = sec.notes.find((x) => x.id === q.group && x.kind === "passage"); if (pn) noteBox(pn); }
         const box = h("div", "category-manage-item qz-q " + (isChoiceQ(q) ? "qz-q-mc" : "qz-q-blank"));
         box.style.marginBottom = "14px";
-        if (q.group) box.style.marginLeft = "26px"; // attached to a Paragraph above
+        if (q.group) box.style.marginLeft = "18px"; // attached to the Paragraph above
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("span", "qz-qnum", `Q${n}`));
         const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
@@ -755,6 +771,7 @@
             ...kinds.map(([id, lab]) => ({ label: `${ar} ${lab} ${a}`, onClick: () => insertQ(id, below) })),
           ];
         };
+        moveBtns({ q }).forEach((b) => row.appendChild(b));
         row.appendChild(menuButton("Insert", "#b8860b", [...side(false), ...side(true)]));
         row.appendChild(button(q.dividerAfter ? "Line below ✓" : "Line below", "btn btn-ghost btn-small", () => { q.dividerAfter = !q.dividerAfter; rerender(); }));
         row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
@@ -824,9 +841,10 @@
           box.appendChild(button("+ Add alternate answer", "btn btn-ghost btn-small", () => { q.accepted.push(""); rerender(); }));
           box.appendChild(h("p", "hint", "Case, spacing and full-width/half-width forms are ignored; numbers match as numbers (42 = 042)."));
         }
-        body.appendChild(box);
+        cur.appendChild(box);
         sec.notes.filter((x) => placedHere(x) && x.at === "after" && x.q === q.id).forEach(noteBox);
       });
+      cur = body;
       sec.notes.filter((x) => placedHere(x) && (x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q)))).forEach(noteBox);
       if (sec.questions.length === 0 && sec.notes.length === 0) body.appendChild(h("p", "hint", "No questions yet — use the buttons above."));
       container.appendChild(section);

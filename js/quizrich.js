@@ -140,7 +140,7 @@
     return wrap;
   }
 
-  /** A section's contents in reading order: [{ q } | { note }]. Notes sit "start", "end", or before/after a question; a Paragraph (kind "passage") that has questions attached (q.group = its id) comes right before its first question. */
+  /** A section's contents in reading order: [{ q } | { note }]. Notes sit "start", "end", or before/after a question; a Paragraph (kind "passage") that has questions attached (q.group = its id) comes right before its first question (and their notes). */
   function flow(sec) {
     const notes = sec.notes || [], qs = sec.questions || [], ids = new Set(qs.map((x) => x.id));
     const grouped = new Set(qs.map((x) => x.group).filter(Boolean));
@@ -149,8 +149,8 @@
     const out = [], shown = new Set();
     notes.filter((x) => placed(x) && x.at === "start").forEach((note) => out.push({ note }));
     qs.forEach((q) => {
-      notes.filter((x) => placed(x) && x.at === "before" && x.q === q.id).forEach((note) => out.push({ note }));
       if (q.group && passages.has(q.group) && !shown.has(q.group)) { shown.add(q.group); out.push({ note: passages.get(q.group) }); }
+      notes.filter((x) => placed(x) && x.at === "before" && x.q === q.id).forEach((note) => out.push({ note }));
       out.push({ q });
       notes.filter((x) => placed(x) && x.at === "after" && x.q === q.id).forEach((note) => out.push({ note }));
     });
@@ -158,5 +158,97 @@
     return out;
   }
 
-  window.QuizRich = { clean, plain, show, editor, esc, flow };
+  /** Top-level reading order with each Paragraph and its questions as ONE item: [{ note } | { q } | { group: passageNote, items: [...] }]. */
+  function topItems(sec) {
+    const items = flow(sec), out = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.note && it.note.kind === "passage" && (sec.questions || []).some((x) => x.group === it.note.id)) {
+        let left = sec.questions.filter((x) => x.group === it.note.id).length;
+        const g = { group: it.note, items: [] };
+        while (left > 0 && ++i < items.length) { g.items.push(items[i]); if (items[i].q) left--; }
+        out.push(g);
+      } else out.push(it);
+    }
+    return out;
+  }
+
+  /** Makes every Paragraph's questions sit side by side (at the position of its first one). */
+  function regroup(sec) {
+    const qs = sec.questions || [], seen = new Set(), out = [];
+    qs.forEach((q) => {
+      if (!q.group) { out.push(q); return; }
+      if (seen.has(q.group)) return;
+      seen.add(q.group);
+      qs.filter((x) => x.group === q.group).forEach((x) => out.push(x));
+    });
+    sec.questions = out;
+  }
+
+  /** Re-anchors a note so it sits at top-level position k of the reading order (k counted without the note itself). */
+  function placeNote(sec, note, k) {
+    sec.notes = sec.notes.filter((x) => x !== note);
+    const rest = topItems(sec);
+    const next = rest[k];
+    if (!next) { note.at = "end"; note.q = ""; sec.notes.push(note); return; }
+    if (next.note) { // same anchor as the note that will follow it, and just before it in the list
+      note.at = next.note.at; note.q = next.note.q;
+      sec.notes.splice(sec.notes.indexOf(next.note), 0, note);
+      return;
+    }
+    const q = next.q || (next.group && sec.questions.find((x) => x.group === next.group.id));
+    note.at = "before"; note.q = q ? q.id : "";
+    const same = sec.notes.filter((x) => x.at === "before" && x.q === note.q);
+    const after = same.length ? sec.notes.indexOf(same[same.length - 1]) + 1 : sec.notes.length;
+    sec.notes.splice(after, 0, note);
+  }
+
+  /** Moves one thing up (-1) or down (+1): { q } a question, { note } a note / paragraph box. Returns true if it moved. */
+  function move(sec, what, dir) {
+    regroup(sec);
+    const qs = sec.questions;
+    if (what.q) {
+      const q = what.q;
+      if (q.group) { // inside its Paragraph: only past its own siblings
+        const mates = qs.filter((x) => x.group === q.group), i = mates.indexOf(q), j = i + dir;
+        if (j < 0 || j >= mates.length) return false;
+        const a = qs.indexOf(mates[i]), b = qs.indexOf(mates[j]);
+        qs[a] = mates[j]; qs[b] = q;
+        return true;
+      }
+      const blocks = []; const seen = new Set();
+      qs.forEach((x) => { if (!x.group) blocks.push([x]); else if (!seen.has(x.group)) { seen.add(x.group); blocks.push(qs.filter((y) => y.group === x.group)); } });
+      const i = blocks.findIndex((b) => b[0] === q), j = i + dir;
+      if (j < 0 || j >= blocks.length) return false;
+      [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+      sec.questions = [].concat(...blocks);
+      return true;
+    }
+    const note = what.note;
+    if (note.kind === "passage" && qs.some((x) => x.group === note.id)) { // the whole Paragraph unit
+      const blocks = []; const seen = new Set();
+      qs.forEach((x) => { if (!x.group) blocks.push([x]); else if (!seen.has(x.group)) { seen.add(x.group); blocks.push(qs.filter((y) => y.group === x.group)); } });
+      const i = blocks.findIndex((b) => b[0].group === note.id), j = i + dir;
+      if (j < 0 || j >= blocks.length) return false;
+      [blocks[i], blocks[j]] = [blocks[j], blocks[i]];
+      sec.questions = [].concat(...blocks);
+      return true;
+    }
+    const top = topItems(sec), pos = top.findIndex((x) => x.note === note);
+    const k = pos + dir;
+    if (pos < 0 || k < 0 || k > top.length - 1) return false;
+    placeNote(sec, note, k);
+    return true;
+  }
+
+  /** Can this question / note move up (-1) or down (+1)? */
+  function canMove(sec, what, dir) {
+    const copy = JSON.parse(JSON.stringify({ questions: sec.questions, notes: sec.notes }));
+    const idOf = (x) => x.id;
+    const t = { questions: copy.questions, notes: copy.notes };
+    const w = what.q ? { q: t.questions.find((x) => x.id === what.q.id) } : { note: t.notes.find((x) => x.id === what.note.id) };
+    return move(t, w, dir);
+  }
+
+  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove };
 })();
