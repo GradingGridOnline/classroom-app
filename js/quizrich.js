@@ -140,5 +140,23 @@
     return wrap;
   }
 
-  window.QuizRich = { clean, plain, show, editor, esc };
+  /** A section's contents in reading order: [{ q } | { note }]. Notes sit "start", "end", or before/after a question; a Paragraph (kind "passage") that has questions attached (q.group = its id) comes right before its first question. */
+  function flow(sec) {
+    const notes = sec.notes || [], qs = sec.questions || [], ids = new Set(qs.map((x) => x.id));
+    const grouped = new Set(qs.map((x) => x.group).filter(Boolean));
+    const passages = new Map(notes.filter((x) => x.kind === "passage").map((x) => [x.id, x]));
+    const placed = (x) => !(x.kind === "passage" && grouped.has(x.id)); // those are placed by their questions
+    const out = [], shown = new Set();
+    notes.filter((x) => placed(x) && x.at === "start").forEach((note) => out.push({ note }));
+    qs.forEach((q) => {
+      notes.filter((x) => placed(x) && x.at === "before" && x.q === q.id).forEach((note) => out.push({ note }));
+      if (q.group && passages.has(q.group) && !shown.has(q.group)) { shown.add(q.group); out.push({ note: passages.get(q.group) }); }
+      out.push({ q });
+      notes.filter((x) => placed(x) && x.at === "after" && x.q === q.id).forEach((note) => out.push({ note }));
+    });
+    notes.filter((x) => placed(x) && (x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q)))).forEach((note) => out.push({ note }));
+    return out;
+  }
+
+  window.QuizRich = { clean, plain, show, editor, esc, flow };
 })();

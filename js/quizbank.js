@@ -23,20 +23,9 @@
     return [...new Set(arr.filter((x) => x !== "" && x !== null && x !== undefined).map(Number).filter((n) => Number.isInteger(n) && n >= 0))].sort((a, b) => a - b);
   };
   /** A section's questions and instruction notes in reading order: [{ q } | { note }]. Notes sit "start", "end", or "before"/"after" a question (note.q is its id). */
-  window.quizSectionFlow = (sec) => {
-    const notes = sec.notes || [], qs = sec.questions || [], ids = new Set(qs.map((x) => x.id));
-    const out = [];
-    notes.filter((x) => x.at === "start").forEach((note) => out.push({ note }));
-    qs.forEach((q) => {
-      notes.filter((x) => x.at === "before" && x.q === q.id).forEach((note) => out.push({ note }));
-      out.push({ q });
-      notes.filter((x) => x.at === "after" && x.q === q.id).forEach((note) => out.push({ note }));
-    });
-    notes.filter((x) => x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q))).forEach((note) => out.push({ note }));
-    return out;
-  };
+  window.quizSectionFlow = (sec) => QuizRich.flow(sec);
   const isChoiceQ = (q) => q.type === "mc" || q.type === "multi";
-  const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : q.type === "para" ? "Paragraph" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
+  const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : q.type === "para" ? "Long answer" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
   const viewOf = new Map(); // toolId -> "build" | "review"
@@ -143,9 +132,10 @@
       q.sections.forEach((s) => {
         if (!Array.isArray(s.questions)) s.questions = [];
         if (!Array.isArray(s.notes)) s.notes = [];
-        s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), rich: window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "", at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "" }));
+        s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), rich: window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "", kind: ["text", "passage"].includes(x.kind) ? x.kind : "instructions", at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "" }));
         s.questions.forEach((x) => {
           x.rich = window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "";
+          if (x.group && !s.notes.some((nn) => nn.id === x.group && nn.kind === "passage")) delete x.group; // its Paragraph box was removed
           if (!Array.isArray(x.choices)) x.choices = [];
           if (!Array.isArray(x.accepted)) x.accepted = [];
           x.points = isSurveyKind(q.kind) ? 0 : Number(x.points) || 0;
@@ -370,11 +360,12 @@
         showAttempts: quiz.settings.showAttempts && quiz.settings.attemptsAllowed !== 1,
         sections: quiz.sections.map((s) => ({
           title: s.title,
-          notes: (s.notes || []).filter((x) => x.text.trim()).map((x) => ({ id: x.id, text: x.text, rich: x.rich || undefined, at: x.at, q: x.q })),
+          notes: (s.notes || []).filter((x) => x.text.trim()).map((x) => ({ id: x.id, text: x.text, rich: x.rich || undefined, kind: x.kind, at: x.at, q: x.q })),
           questions: s.questions.map((x) => ({
             id: x.id, type: x.type, text: answersOnly ? "" : x.text, rich: answersOnly ? undefined : x.rich || undefined, points: isSurveyKind(quiz.kind) ? 0 : x.points,
             choices: isChoiceQ(x) ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
             divider: x.dividerAfter ? true : undefined,
+            group: x.group || undefined,
           })),
         })),
       };
@@ -671,8 +662,10 @@
       tb.appendChild(button("+ Multiple choice", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Multiple select", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "multi"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Fill in the blank", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "blank"); } catch (e) { alert(e.message); return; } rerender(); }));
-      tb.appendChild(button("+ Paragraph", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "para"); } catch (e) { alert(e.message); return; } rerender(); }));
-      tb.appendChild(button("+ Instructions", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", at: "end", q: "" }); rerender(); }));
+      tb.appendChild(button("+ Long answer", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "para"); } catch (e) { alert(e.message); return; } rerender(); }));
+      tb.appendChild(button("+ Paragraph", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", kind: "passage", at: "end", q: "" }); rerender(); }));
+      tb.appendChild(button("+ Text box", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", kind: "text", at: "end", q: "" }); rerender(); }));
+      tb.appendChild(button("+ Instructions", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: "end", q: "" }); rerender(); }));
       if (quiz.sections.length > 1) {
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
           if (!confirm(`Delete "${sec.title}" and its ${sec.questions.length} question(s)?`)) return;
@@ -684,28 +677,54 @@
       top.appendChild(tb);
       body.appendChild(top);
 
+      const attach = (note, type) => { // add a question to a Paragraph box: after its last attached question, else where the box sits
+        try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; }
+        const nq = sec.questions.pop(); nq.group = note.id;
+        let at = -1; sec.questions.forEach((x, i) => { if (x.group === note.id) at = i; });
+        if (at >= 0) at += 1;
+        else if (note.at === "start") at = 0;
+        else if (note.at === "before" || note.at === "after") { const i = sec.questions.findIndex((x) => x.id === note.q); at = i < 0 ? sec.questions.length : i + (note.at === "after" ? 1 : 0); }
+        else at = sec.questions.length;
+        sec.questions.splice(at, 0, nq); regrade(); rerender();
+      };
+      const NOTE_LOOK = {
+        instructions: ["Instructions", "#b8860b", "Instructions for students (shown here, in the form and when printed)"],
+        text: ["Text box", "#6b7280", "Text for students: an explanation, a heading… (no question number)"],
+        passage: ["Paragraph", "#7c3aed", "Paragraph for students to read (no question number); the questions attached below belong to it"],
+      };
       const noteBox = (note) => {
+        const look = NOTE_LOOK[note.kind] || NOTE_LOOK.instructions;
         const nb = h("div", "category-manage-item qz-q");
-        nb.style.cssText = "margin-bottom:14px;border-left:5px solid #b8860b;";
+        nb.style.cssText = `margin-bottom:14px;border-left:5px solid ${look[1]};`;
         const nr = h("div", "category-manage-top-row");
-        nr.appendChild(h("span", "qz-pill", "Instructions"));
-        const ta = QuizRich.editor({ text: note.text, rich: note.rich, placeholder: "Instructions for students (shown here, in the form and when printed)", onChange: (t, r) => { note.text = t; note.rich = r; } });
-        nr.appendChild(ta);
-        nr.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.notes = sec.notes.filter((x) => x !== note); rerender(); }));
+        nr.appendChild(h("span", "qz-pill", look[0]));
+        nr.appendChild(QuizRich.editor({ text: note.text, rich: note.rich, placeholder: look[2], onChange: (t, r) => { note.text = t; note.rich = r; } }));
+        if (note.kind === "passage") {
+          nr.appendChild(menuButton("Add question", look[1], [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].map(([id, lab]) => ({ label: lab, onClick: () => attach(note, id) }))));
+        }
+        nr.appendChild(button("×", "btn btn-ghost btn-small", () => {
+          if (note.kind === "passage" && sec.questions.some((x) => x.group === note.id) && !confirm("Delete this paragraph? Its attached questions are kept as ordinary questions.")) return;
+          sec.notes = sec.notes.filter((x) => x !== note); rerender();
+        }));
         nb.appendChild(nr);
         body.appendChild(nb);
       };
-      sec.notes.filter((x) => x.at === "start").forEach(noteBox);
-      const addNote = (at, qid) => { sec.notes.push({ id: newId("n"), text: "", at, q: qid }); rerender(); };
+      const grouped = new Set(sec.questions.map((x) => x.group).filter(Boolean));
+      const placedHere = (x) => !(x.kind === "passage" && grouped.has(x.id));
+      const shownGroups = new Set();
+      sec.notes.filter((x) => placedHere(x) && x.at === "start").forEach(noteBox);
+      const addNote = (at, qid, kind) => { sec.notes.push({ id: newId("n"), text: "", kind: kind || "instructions", at, q: qid }); rerender(); };
       const ids = new Set(sec.questions.map((x) => x.id));
       sec.questions.forEach((q, qi) => {
         n++;
-        sec.notes.filter((x) => x.at === "before" && x.q === q.id).forEach(noteBox);
+        sec.notes.filter((x) => placedHere(x) && x.at === "before" && x.q === q.id).forEach(noteBox);
+        if (q.group && !shownGroups.has(q.group)) { shownGroups.add(q.group); const pn = sec.notes.find((x) => x.id === q.group && x.kind === "passage"); if (pn) noteBox(pn); }
         const box = h("div", "category-manage-item qz-q " + (isChoiceQ(q) ? "qz-q-mc" : "qz-q-blank"));
         box.style.marginBottom = "14px";
+        if (q.group) box.style.marginLeft = "26px"; // attached to a Paragraph above
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("span", "qz-qnum", `Q${n}`));
-        const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Paragraph"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
+        const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
           label: `Change to ${label}`,
           onClick: () => {
             if (quiz.submissions.some((s) => (s.answers || {})[q.id] !== undefined && (s.answers || {})[q.id] !== "") && !confirm("Students have already answered this question. Their answers are kept and re-graded as the new type, which may mark some wrong. Change the type?")) return;
@@ -725,14 +744,18 @@
           row.appendChild(h("span", "hint", "pts"));
           row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
         }
-        const insertQ = (type, below) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } const nq = sec.questions.pop(); sec.questions.splice(qi + (below ? 1 : 0), 0, nq); regrade(); rerender(); };
-        const kinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Paragraph"]];
-        row.appendChild(menuButton("Insert", "#b8860b", [
-          { label: "↑ Instructions above", onClick: () => addNote("before", q.id) },
-          ...kinds.map(([id, lab]) => ({ label: `↑ ${lab} above`, onClick: () => insertQ(id, false) })),
-          { label: "↓ Instructions below", onClick: () => addNote("after", q.id) },
-          ...kinds.map(([id, lab]) => ({ label: `↓ ${lab} below`, onClick: () => insertQ(id, true) })),
-        ]));
+        const insertQ = (type, below) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } const nq = sec.questions.pop(); if (q.group) nq.group = q.group; sec.questions.splice(qi + (below ? 1 : 0), 0, nq); regrade(); rerender(); };
+        const kinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]];
+        const side = (below) => {
+          const a = below ? "below" : "above", ar = below ? "↓" : "↑", at = below ? "after" : "before";
+          return [
+            { label: `${ar} Instructions ${a}`, onClick: () => addNote(at, q.id, "instructions") },
+            { label: `${ar} Text box ${a}`, onClick: () => addNote(at, q.id, "text") },
+            { label: `${ar} Paragraph ${a}`, onClick: () => addNote(at, q.id, "passage") },
+            ...kinds.map(([id, lab]) => ({ label: `${ar} ${lab} ${a}`, onClick: () => insertQ(id, below) })),
+          ];
+        };
+        row.appendChild(menuButton("Insert", "#b8860b", [...side(false), ...side(true)]));
         row.appendChild(button(q.dividerAfter ? "Line below ✓" : "Line below", "btn btn-ghost btn-small", () => { q.dividerAfter = !q.dividerAfter; rerender(); }));
         row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
         row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
@@ -802,9 +825,9 @@
           box.appendChild(h("p", "hint", "Case, spacing and full-width/half-width forms are ignored; numbers match as numbers (42 = 042)."));
         }
         body.appendChild(box);
-        sec.notes.filter((x) => x.at === "after" && x.q === q.id).forEach(noteBox);
+        sec.notes.filter((x) => placedHere(x) && x.at === "after" && x.q === q.id).forEach(noteBox);
       });
-      sec.notes.filter((x) => x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q))).forEach(noteBox);
+      sec.notes.filter((x) => placedHere(x) && (x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q)))).forEach(noteBox);
       if (sec.questions.length === 0 && sec.notes.length === 0) body.appendChild(h("p", "hint", "No questions yet — use the buttons above."));
       container.appendChild(section);
     });
