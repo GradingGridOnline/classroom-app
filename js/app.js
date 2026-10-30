@@ -5833,6 +5833,12 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
     const qrTd = document.createElement("td");
     qrTd.textContent = set.token ? "Open" : "Closed";
     if (set.token) qrTd.className = "pres-qr-open";
+    if (set.token && set.timeLimit) {
+      const lim = document.createElement("div");
+      lim.className = "hint";
+      lim.textContent = `${set.timeLimit} min each, from login`;
+      qrTd.appendChild(lim);
+    }
     if (set.token && set.closesAt) {
       const left = document.createElement("div");
       left.className = "hint pres-timer-left";
@@ -5859,7 +5865,7 @@ function buildPresDataSetTable(tool, project, container, kind, statusEl) {
         const key = `${tool.id}|${project.id}|${kind}`;
         let minutes = 0; try { minutes = Number(localStorage.getItem(`ggo-pres-timer-${kind}`)) || 0; } catch (e) {}
         const made = await PresentationFormsModule.launch(tool.id, project.id, set.id, minutes);
-        say(`"${set.name}" is open${kind === "teacher" ? "" : ` for ${made.count} student(s)`}${minutes > 0 ? `, closing automatically in ${minutes} min` : ""}.` + (made.shared && made.shared.length ? ` Left out (School ID shared by several students): ${made.shared.join(", ")}.` : ""));
+        say(`"${set.name}" is open${kind === "teacher" ? "" : ` for ${made.count} student(s)`}${minutes > 0 ? `; each student gets ${minutes} min from when they log in` : ""}.` + (made.shared && made.shared.length ? ` Left out (School ID shared by several students): ${made.shared.join(", ")}.` : ""));
         presFormsSave();
         rerender();
         window.open(`presqr.html?k=${kind}&u=${encodeURIComponent(made.url + (window.QRStyles ? QRStyles.query(set.style) : ""))}${qrCourseQuery()}`, "ggo-pres-qr", "width=480,height=620");
@@ -5981,7 +5987,7 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     const timerWrap = document.createElement("label");
     timerWrap.className = "hint";
     timerWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin-left:10px;";
-    timerWrap.title = "Applies to the next QR code you launch in this section. The form closes by itself when time is up.";
+    timerWrap.title = "Applies to the next QR code you launch in this section. Each student\'s clock starts when they enter their School ID; their answers are sent automatically when it runs out.";
     timerWrap.appendChild(document.createTextNode("Time limit"));
     const timerInput = document.createElement("input");
     timerInput.type = "number"; timerInput.min = "1"; timerInput.max = "600"; timerInput.placeholder = "none";
@@ -5989,14 +5995,14 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     try { timerInput.value = localStorage.getItem(`ggo-pres-timer-${kind}`) || ""; } catch (e) {}
     timerInput.addEventListener("input", () => { try { localStorage.setItem(`ggo-pres-timer-${kind}`, timerInput.value.trim()); } catch (e) {} });
     timerWrap.appendChild(timerInput);
-    timerWrap.appendChild(document.createTextNode("minutes (blank = no limit)"));
+    timerWrap.appendChild(document.createTextNode("minutes per student (blank = no limit)"));
     bar.appendChild(timerWrap);
     body.appendChild(bar);
 
     const explain = document.createElement("p");
     explain.className = "hint";
     explain.textContent =
-      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Launch New QR Code opens a form on that data set (it then reads Show QR Code); with a Time limit set, students see a countdown and the form closes by itself when it ends (keep this page open so the answers are collected at that moment); Close QR Code stops new answers, keeps the data set, and lets you launch again. The data set marked \"In use\" is loaded into the Scores grid and used for reports; choosing another one (Use this set) loads it right away.";
+      "Get Responses copies what students have submitted so far into the data set. The form always follows your current rubrics, groups and roster, so there is nothing to update. Launch New QR Code opens a form on that data set (it then reads Show QR Code); with a Time limit set, each student's countdown starts when they log in and their answers are sent automatically when it runs out; Close QR Code stops new answers, keeps the data set, and lets you launch again. The data set marked \"In use\" is loaded into the Scores grid and used for reports; choosing another one (Use this set) loads it right away.";
     body.appendChild(explain);
 
     const status = document.createElement("p");

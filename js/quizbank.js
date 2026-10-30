@@ -138,6 +138,7 @@
       st.showAttempts = st.showAttempts === true;
       if (!Array.isArray(q.sections)) q.sections = [];
       if (!Array.isArray(q.submissions)) q.submissions = [];
+      if (!Array.isArray(q.removed)) q.removed = []; // attempts the teacher deleted ("sid|attempt|time"): Get Responses won't bring them back
       if (typeof q.token !== "string") q.token = null;
       q.sections.forEach((s) => {
         if (!Array.isArray(s.questions)) s.questions = [];
@@ -401,8 +402,10 @@
       if (error) throw this.explain(error);
       const nameOf = new Map(people.map((p) => [p.sid, p.name]));
       const known = new Map(quiz.submissions.map((s) => [`${s.sid}|${s.attempt}`, s]));
+      const gone = new Set(quiz.removed || []);
       (data || []).forEach((r) => {
         const attempt = Number(r.attempt) || 1;
+        if (gone.has(`${r.respondent}|${attempt}|${r.submitted_at}`)) return;
         const k = `${r.respondent}|${attempt}`;
         const rec = known.get(k) || { sid: r.respondent, attempt, overrides: {} };
         rec.name = nameOf.get(r.respondent) || rec.name || "";
@@ -417,6 +420,21 @@
         responses: quiz.submissions.length, students: done.size, expected: people.length,
         missing: people.filter((p) => !done.has(p.sid)).map((p) => p.name || p.sid),
       };
+    },
+    /** Deletes one student's attempt: from this quiz (scores are re-calculated) and, if the QR code is open, from the server so the attempt no longer counts against them. Returns { serverCleared }. */
+    async removeAttempt(toolId, testId, sub) {
+      const quiz = ScoringModule.quizOf(toolId, testId);
+      let serverCleared = !quiz.token;
+      if (quiz.token) {
+        try {
+          const { error } = await this.client().from("quiz_responses").delete().eq("token", quiz.token).eq("respondent", sub.sid).eq("attempt", sub.attempt);
+          serverCleared = !error;
+        } catch (e) { serverCleared = false; }
+        if (!serverCleared && sub.at) quiz.removed.push(`${sub.sid}|${sub.attempt}|${sub.at}`);
+      }
+      quiz.submissions = quiz.submissions.filter((x) => x !== sub);
+      ScoringModule.regradeQuiz(toolId, testId);
+      return { serverCleared };
     },
     /** Closes the QR code and deletes server copies; graded answers stay in this app. */
     async close(toolId, testId) {
@@ -574,6 +592,18 @@
       wrap.appendChild(l);
     });
     return wrap;
+  }
+
+  /** A "Delete attempt" button for one student's response row. */
+  function deleteAttemptBtn(tool, container, test, quiz, s) {
+    return button("Delete attempt", "btn btn-ghost btn-small", async () => {
+      if (!confirm(`Delete ${s.name || s.sid}'s attempt ${s.attempt} of "${test.name}"? Their answers and score for this attempt are erased and the score is re-calculated.`)) return;
+      try {
+        const r = await QuizForms.removeAttempt(tool.id, test.id, s);
+        if (!r.serverCleared) alert("Deleted here. The server's copy couldn't be removed, so if the QR code is still open the student may not get another try; use Close QR Code to reset it. It won't come back when you Get Responses.");
+      } catch (e) { alert(e.message); }
+      renderScoringToolView(tool, container);
+    });
   }
 
   // ---------- the question editor ----------
@@ -875,6 +905,7 @@
       lastSid = s.sid;
       const nameTd = h("td", "", s.name || "(not on roster)");
       nameTd.appendChild(h("div", "hint", s.sid));
+      nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.appendChild(nameTd);
       tr.appendChild(h("td", "", String(s.attempt)));
       const scoreTd = h("td");
@@ -1292,6 +1323,7 @@
       const tr = h("tr");
       const nameTd = h("td", "", s.name || "(not on roster)");
       nameTd.appendChild(h("div", "hint", s.sid));
+      nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.append(nameTd, h("td", "", String(s.attempt)));
       qs.forEach((x) => tr.appendChild(h("td", "", optionText(quiz, x.q, eff[x.q.id]))));
       tbody.appendChild(tr);
@@ -1382,6 +1414,7 @@
       lastSid = s.sid;
       const nameTd = h("td", "", s.name || "(not on roster)");
       nameTd.appendChild(h("div", "hint", s.sid));
+      nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.appendChild(nameTd);
       tr.appendChild(h("td", "", String(s.attempt)));
       const score = h("td", "", `${ScoringModule.gradeQuizSubmission(quiz, eff)} / ${total}`);

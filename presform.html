@@ -266,7 +266,7 @@
         return missing;
       }
 
-      let closesAt = 0, timerId = null;
+      let closesAt = 0, timerId = null, perStudent = false;
       function timeUp() { return closesAt && Date.now() >= closesAt; }
       function startTimer(iso) {
         clearInterval(timerId); closesAt = iso ? new Date(iso).getTime() : 0;
@@ -277,7 +277,11 @@
           box.hidden = false;
           box.textContent = s > 0 ? "Time left: " + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") : "Time is up.";
           box.style.color = s <= 60 ? "#c00" : "";
-          if (s <= 0) { clearInterval(timerId); $("answer-form").hidden = true; say("Time is up — this form is closed.", true); }
+          if (s <= 0) {
+            clearInterval(timerId);
+            if (perStudent && form && !$("answer-form").hidden) { box.textContent = "Time is up — sending your answers…"; sendAnswers(true); }
+            else { $("answer-form").hidden = true; say("Time is up — this form is closed.", true); }
+          }
         };
         tick(); timerId = setInterval(tick, 1000);
       }
@@ -304,7 +308,16 @@
             $("instr").hidden = !$("instr").textContent;
             if (kind === "peer") $("sub").textContent = "Group " + result.group + " — rate your group members";
             say("");
-            startTimer(result.config && result.config.closesAt);
+            const lim = Number(result.config && result.config.timeLimit) || 0;
+            perStudent = lim > 0;
+            let endIso = result.config && result.config.closesAt;
+            if (perStudent) { // this student's own clock starts at their login (and survives a reload)
+              const k = "pf-start-" + token + "-" + value; let st = 0;
+              try { st = Number(sessionStorage.getItem(k)) || 0; } catch (e) {}
+              if (!st) { st = Date.now(); try { sessionStorage.setItem(k, String(st)); } catch (e) {} }
+              endIso = new Date(st + lim * 60000).toISOString();
+            }
+            startTimer(endIso);
             if (timeUp()) { $("id-form").hidden = true; $("answer-form").hidden = true; return; }
             renderQuestions();
             showStep("answer");
@@ -339,11 +352,11 @@
         sendAnswers();
       });
 
-      async function sendAnswers() {
+      async function sendAnswers(force) {
         let payload;
         if (kind !== "peer") payload = { scores: answers, comments: comments, global: globalComment };
         else payload = { ratings: answers };
-        if (timeUp()) { say("Time is up — this form is closed.", true); $("answer-form").hidden = true; return; }
+        if (timeUp() && !force) { say("Time is up — this form is closed.", true); $("answer-form").hidden = true; return; }
         $("send-btn").disabled = true; $("blank-btn").disabled = true; say("Saving…");
         try {
           const result = await rpc("pres_submit", { p_token: token, p_school_id: schoolId, p_payload: payload });

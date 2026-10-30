@@ -107,11 +107,12 @@ const PresentationFormsModule = {
   },
 
   /** Saves the questions + allowed students to the server. Returns { shared: [School IDs left out because several students have them], people }. */
-  async _publish(toolId, projectId, kind, token, closesAt) {
+  async _publish(toolId, projectId, kind, token, closesAt, timeLimit) {
     if (window.PhraseBankModule) await PhraseBankModule.ensureLoaded();
     const project = ScoringModule.getPresentationProject(toolId, projectId);
     const { config, people } = this.build(toolId, projectId, kind);
-    config.closesAt = closesAt || null; // students' page shows a countdown and stops accepting answers then
+    config.closesAt = closesAt || null; // (older forms) a fixed closing time for everyone
+    config.timeLimit = Number(timeLimit) > 0 ? Number(timeLimit) : null; // minutes each student gets, counted from when THEY log in
     const title = `${project.name}${kind === "peer" ? " — rate your group members" : kind === "teacher" ? " — teacher scores" : " — score the presentations"}`;
     const { data, error } = await this._client().rpc("pres_publish", { p_token: token, p_title: title, p_config: config, p_people: people });
     if (error) throw this._explain(error);
@@ -137,15 +138,16 @@ const PresentationFormsModule = {
     const { error } = await client.from("pres_forms").insert({ token, kind: set.kind, title: project.name });
     if (error) throw this._explain(error);
     let result;
-    const closesAt = Number(minutes) > 0 ? new Date(Date.now() + Number(minutes) * 60000).toISOString() : null;
+    const timeLimit = Number(minutes) > 0 ? Number(minutes) : null; // per student, starting at their login
     try {
-      result = await this._publish(toolId, projectId, set.kind, token, closesAt);
+      result = await this._publish(toolId, projectId, set.kind, token, null, timeLimit);
     } catch (err) {
       await client.from("pres_forms").delete().eq("token", token);
       throw err;
     }
     set.token = token;
-    set.closesAt = closesAt;
+    set.closesAt = null;
+    set.timeLimit = timeLimit;
     return { url: this.urlFor(token), shared: result.shared, count: result.people.length };
   },
 
@@ -180,7 +182,7 @@ const PresentationFormsModule = {
     const kind = set.kind;
     let note = "";
     try {
-      await this._publish(toolId, projectId, kind, set.token, set.closesAt || null);
+      await this._publish(toolId, projectId, kind, set.token, set.closesAt || null, set.timeLimit || null);
     } catch (err) {
       note = ` (The form could not be refreshed: ${err.message})`;
     }
@@ -232,6 +234,7 @@ const PresentationFormsModule = {
     if (error) throw this._explain(error);
     set.token = null;
     set.closesAt = null;
+    set.timeLimit = null;
   },
 
   /** Finds forms whose time limit has passed in this tool: copies their answers into the data set, then closes them. Returns the names handled. */
