@@ -159,27 +159,36 @@
         t.addEventListener("input", () => onInput(t.value));
         const phrases = ((form && form.config && form.config.phrases) || []).filter((p) => p && p.t);
         if (!phrases.length) return t;
-        // "Insert a phrase" menu: picking one adds it to the comment.
+        // "Phrases" button opens a persistent panel under the box; clicking a phrase adds it and the panel stays open until "Close".
         const wrap = document.createElement("div");
-        const sel = document.createElement("select");
-        sel.style.cssText = "width:100%;font:inherit;padding:8px;margin-bottom:6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);";
-        const first = document.createElement("option"); first.value = ""; first.textContent = "Insert a phrase…"; sel.appendChild(first);
+        const panel = document.createElement("div");
+        panel.hidden = true;
+        panel.style.cssText = "border:1.5px solid var(--line);border-radius:8px;background:var(--chip);padding:8px 10px;margin-top:6px;";
         const groups = new Map();
         phrases.forEach((p) => { const k = p.c || ""; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p.t); });
         groups.forEach((list, cat) => {
-          const parent = cat ? document.createElement("optgroup") : sel;
-          if (cat) parent.label = cat;
-          list.forEach((text) => { const o = document.createElement("option"); o.value = text; o.textContent = text.length > 70 ? text.slice(0, 67) + "…" : text; parent.appendChild(o); });
-          if (cat) sel.appendChild(parent);
+          if (cat) { const h = document.createElement("div"); h.textContent = cat; h.style.cssText = "font-weight:700;font-size:.85rem;color:var(--green-dark);margin:6px 0 4px;"; panel.appendChild(h); }
+          const row = document.createElement("div"); row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;";
+          list.forEach((text) => {
+            const b = document.createElement("button"); b.type = "button"; b.textContent = text;
+            b.style.cssText = "font:inherit;font-size:.9rem;text-align:left;padding:6px 10px;border:1.5px solid var(--green);border-radius:16px;background:#fff;color:var(--green-dark);cursor:pointer;";
+            b.addEventListener("click", () => {
+              const cur = t.value;
+              t.value = cur && !/\s$/.test(cur) ? cur + " " + text : cur + text;
+              onInput(t.value);
+              t.focus(); t.setSelectionRange(t.value.length, t.value.length);
+            });
+            row.appendChild(b);
+          });
+          panel.appendChild(row);
         });
-        sel.addEventListener("change", () => {
-          if (!sel.value) return;
-          const cur = t.value;
-          t.value = cur && !/\s$/.test(cur) ? cur + " " + sel.value : cur + sel.value;
-          sel.value = "";
-          onInput(t.value);
-        });
-        wrap.append(sel, t);
+        const close = document.createElement("button"); close.type = "button"; close.className = "link"; close.textContent = "Close Comments Selector";
+        const open = document.createElement("button"); open.type = "button"; open.className = "link"; open.textContent = "Open Comments Selector";
+        open.style.marginTop = "4px";
+        open.addEventListener("click", () => { panel.hidden = false; open.hidden = true; });
+        close.addEventListener("click", () => { panel.hidden = true; open.hidden = false; });
+        panel.appendChild(close);
+        wrap.append(t, open, panel);
         return wrap;
       }
 
