@@ -978,6 +978,7 @@ const ScoringModule = {
     const ts = project.templateSettings;
     if (typeof ts.audienceInstructions !== "string") ts.audienceInstructions = "";
     if (typeof ts.audienceComments !== "boolean") ts.audienceComments = true;
+    if (ts.teacherPhraseCollections !== undefined && !Array.isArray(ts.teacherPhraseCollections)) delete ts.teacherPhraseCollections; // unset = every phrase collection
     if (typeof ts.peerInstructions !== "string") ts.peerInstructions = "";
     if (typeof ts.emailSubject !== "string") ts.emailSubject = "";
     if (typeof ts.emailMessage !== "string") ts.emailMessage = "";

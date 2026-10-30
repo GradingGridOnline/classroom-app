@@ -6036,35 +6036,80 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     phraseBox.appendChild(h);
     const hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Often-used comments. On the teacher form they appear as an \"Insert a phrase\" menu above each comment box; phrases with the same category are grouped together. Click Get Responses / relaunch to publish changes to an open form.";
+    hint.textContent = "Keep your often-used comments in collections (click a collection's name to fold it). Tick the collections to put on THIS project's teacher form; they appear as the Comments Selector under each comment box, grouped by each phrase's category. Click Get Responses / relaunch to publish changes to an open form.";
     phraseBox.appendChild(hint);
-    PhraseBankModule.phrases.forEach((ph) => {
-      const row = document.createElement("div");
-      row.className = "mapping-row";
-      const cat = document.createElement("input");
-      cat.type = "text"; cat.placeholder = "Category (optional)"; cat.value = ph.category; cat.style.width = "11em";
-      cat.addEventListener("input", () => { ph.category = cat.value; phraseSave(); });
-      const txt = document.createElement("input");
-      txt.type = "text"; txt.placeholder = "Phrase"; txt.value = ph.text; txt.style.flex = "1";
-      txt.addEventListener("input", () => { ph.text = txt.value; phraseSave(); });
+    const chosen = () => (Array.isArray(settings.teacherPhraseCollections) ? new Set(settings.teacherPhraseCollections) : new Set(PhraseBankModule.collections.map((c) => c.id)));
+    const setChosen = (set) => { settings.teacherPhraseCollections = [...set]; };
+    PhraseBankModule.collections.forEach((col) => {
+      const box = document.createElement("div");
+      box.style.cssText = "border:1px solid var(--line);border-radius:8px;margin:8px 0;padding:6px 10px;";
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+      const use = document.createElement("input");
+      use.type = "checkbox"; use.checked = chosen().has(col.id); use.title = "Put this collection on this project's teacher form";
+      use.addEventListener("change", () => { const set = chosen(); if (use.checked) set.add(col.id); else set.delete(col.id); setChosen(set); presFormsSave(); });
+      const fold = document.createElement("button");
+      fold.type = "button"; fold.className = "btn btn-ghost btn-small";
+      fold.textContent = `${col.collapsed ? "▸" : "▾"} ${col.name} (${PhraseBankModule.inCollection(col.id).length})`;
+      fold.title = "Show / hide this collection's phrases";
+      fold.addEventListener("click", () => { col.collapsed = !col.collapsed; phraseSave(); renderPhrases(); });
+      const rename = document.createElement("button");
+      rename.type = "button"; rename.className = "btn btn-ghost btn-small"; rename.textContent = "Rename";
+      rename.addEventListener("click", () => { const n = prompt("Collection name:", col.name); if (n === null || !n.trim()) return; col.name = n.trim(); phraseSave(); renderPhrases(); });
       const del = document.createElement("button");
-      del.type = "button"; del.className = "btn btn-ghost btn-small"; del.textContent = "×"; del.title = "Remove this phrase";
-      del.addEventListener("click", () => { PhraseBankModule.remove(ph.id); phraseSave(); renderPhrases(); });
-      row.append(cat, txt, del);
-      phraseBox.appendChild(row);
+      del.type = "button"; del.className = "btn btn-ghost btn-small"; del.textContent = "Delete";
+      del.addEventListener("click", () => {
+        const count = PhraseBankModule.inCollection(col.id).length;
+        if (!confirm(`Delete the collection "${col.name}"${count ? ` and its ${count} phrase(s)` : ""}? This affects every course.`)) return;
+        PhraseBankModule.removeCollection(col.id);
+        if (Array.isArray(settings.teacherPhraseCollections)) settings.teacherPhraseCollections = settings.teacherPhraseCollections.filter((x) => x !== col.id);
+        phraseSave(); presFormsSave(); renderPhrases();
+      });
+      const lab = document.createElement("label");
+      lab.style.cssText = "display:inline-flex;align-items:center;gap:6px;";
+      lab.append(use, document.createTextNode("Use"));
+      head.append(lab, fold, rename, del);
+      box.appendChild(head);
+      if (!col.collapsed) {
+        PhraseBankModule.inCollection(col.id).forEach((ph) => {
+          const row = document.createElement("div");
+          row.className = "mapping-row";
+          const cat = document.createElement("input");
+          cat.type = "text"; cat.placeholder = "Category (optional)"; cat.value = ph.category; cat.style.width = "11em";
+          cat.addEventListener("input", () => { ph.category = cat.value; phraseSave(); });
+          const txt = document.createElement("input");
+          txt.type = "text"; txt.placeholder = "Phrase"; txt.value = ph.text; txt.style.flex = "1";
+          txt.addEventListener("input", () => { ph.text = txt.value; phraseSave(); });
+          const x = document.createElement("button");
+          x.type = "button"; x.className = "btn btn-ghost btn-small"; x.textContent = "×"; x.title = "Remove this phrase";
+          x.addEventListener("click", () => { PhraseBankModule.remove(ph.id); phraseSave(); renderPhrases(); });
+          row.append(cat, txt, x);
+          box.appendChild(row);
+        });
+        const add = document.createElement("button");
+        add.type = "button"; add.className = "btn btn-ghost btn-small"; add.textContent = "+ Add phrase";
+        add.addEventListener("click", () => {
+          try {
+            const mine = PhraseBankModule.inCollection(col.id);
+            PhraseBankModule.add(col.id, mine.length ? mine[mine.length - 1].category : "");
+          } catch (err) { alert(err.message); return; }
+          renderPhrases();
+          const inputs = phraseBox.querySelectorAll('input[placeholder="Phrase"]');
+          if (inputs.length) inputs[inputs.length - 1].focus();
+        });
+        box.appendChild(add);
+      }
+      phraseBox.appendChild(box);
     });
-    const addBtn = document.createElement("button");
-    addBtn.type = "button"; addBtn.className = "btn btn-ghost btn-small"; addBtn.textContent = "+ Add phrase";
-    addBtn.addEventListener("click", () => {
-      try {
-        const last = PhraseBankModule.phrases[PhraseBankModule.phrases.length - 1];
-        PhraseBankModule.add(last ? last.category : "");
-      } catch (err) { alert(err.message); return; }
-      renderPhrases();
-      const inputs = phraseBox.querySelectorAll('input[placeholder="Phrase"]');
-      if (inputs.length) inputs[inputs.length - 1].focus();
+    const addCol = document.createElement("button");
+    addCol.type = "button"; addCol.className = "btn btn-ghost btn-small"; addCol.textContent = "+ New collection";
+    addCol.addEventListener("click", () => {
+      const n = prompt("Name for the new collection:", `Collection ${PhraseBankModule.collections.length + 1}`);
+      if (n === null) return;
+      try { const c = PhraseBankModule.addCollection(n); if (Array.isArray(settings.teacherPhraseCollections)) { settings.teacherPhraseCollections.push(c.id); presFormsSave(); } } catch (err) { alert(err.message); return; }
+      phraseSave(); renderPhrases();
     });
-    phraseBox.appendChild(addBtn);
+    phraseBox.appendChild(addCol);
   };
   PhraseBankModule.ensureLoaded().then(renderPhrases).catch(() => { phraseBox.textContent = "Couldn't load the phrase bank."; });
   finishSection(teacher);
@@ -8103,7 +8148,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
     { name: "courses", mod: CoursesModule, scoped: false, snap: () => ({ courses: CoursesModule.courses, sortMode: CoursesModule.sortMode, dayFormat: CoursesModule.dayFormat }) },
     { name: "periods", mod: PeriodsModule, scoped: false, snap: () => ({ periods: PeriodsModule.periods }) },
     { name: "templates", mod: TemplatesModule, scoped: false, snap: () => ({ templates: TemplatesModule.templates }) },
-    { name: "phrasebank", mod: PhraseBankModule, scoped: false, snap: () => ({ phrases: PhraseBankModule.phrases }) },
+    { name: "phrasebank", mod: PhraseBankModule, scoped: false, snap: () => ({ phrases: PhraseBankModule.phrases, collections: PhraseBankModule.collections }) },
     { name: "rubricbank", mod: RubricBankModule, scoped: false, snap: () => ({ rubrics: RubricBankModule.rubrics, sections: RubricBankModule.sections }) },
     { name: "roster", mod: RosterModule, scoped: true, snap: () => ({ students: RosterModule.students }) },
     {

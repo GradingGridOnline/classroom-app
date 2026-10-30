@@ -65,7 +65,7 @@ const PresentationFormsModule = {
         groups,
       };
       if (isTeacher) {
-        const phrases = window.PhraseBankModule ? PhraseBankModule.forForm() : [];
+        const phrases = window.PhraseBankModule ? PhraseBankModule.forForm(ts.teacherPhraseCollections) : [];
         if (phrases.length) config.phrases = phrases; // the "Insert a phrase" menu on the teacher form
         return { config, people: [] };
       } // teachers type their name; there is no list to check
