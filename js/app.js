@@ -6017,6 +6017,50 @@ function buildPresentationTemplatesPage(tool, cfg, container) {
     "Teacher Scores — QR Code",
     "Teachers scan the QR code, type their name, and score every group on the Active Teacher Rubrics (with comments)."
   );
+  // Shared phrase bank (all courses): shows as an "Insert a phrase" menu beside each group's comment box on the teacher form.
+  const phraseBox = document.createElement("div");
+  phraseBox.style.cssText = "margin-top:10px;";
+  teacher.body.appendChild(phraseBox);
+  const phraseSave = (() => { let t; return () => { clearTimeout(t); t = setTimeout(() => PhraseBankModule.save().catch((e) => alert(`Couldn't save phrases: ${e.message}`)), 500); }; })();
+  const renderPhrases = () => {
+    phraseBox.innerHTML = "";
+    const h = document.createElement("h4");
+    h.className = "pres-subhead";
+    h.textContent = "Comment phrases (shared by all courses)";
+    phraseBox.appendChild(h);
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Often-used comments. On the teacher form they appear as an \"Insert a phrase\" menu above each comment box; phrases with the same category are grouped together. Click Get Responses / relaunch to publish changes to an open form.";
+    phraseBox.appendChild(hint);
+    PhraseBankModule.phrases.forEach((ph) => {
+      const row = document.createElement("div");
+      row.className = "mapping-row";
+      const cat = document.createElement("input");
+      cat.type = "text"; cat.placeholder = "Category (optional)"; cat.value = ph.category; cat.style.width = "11em";
+      cat.addEventListener("input", () => { ph.category = cat.value; phraseSave(); });
+      const txt = document.createElement("input");
+      txt.type = "text"; txt.placeholder = "Phrase"; txt.value = ph.text; txt.style.flex = "1";
+      txt.addEventListener("input", () => { ph.text = txt.value; phraseSave(); });
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "btn btn-ghost btn-small"; del.textContent = "×"; del.title = "Remove this phrase";
+      del.addEventListener("click", () => { PhraseBankModule.remove(ph.id); phraseSave(); renderPhrases(); });
+      row.append(cat, txt, del);
+      phraseBox.appendChild(row);
+    });
+    const addBtn = document.createElement("button");
+    addBtn.type = "button"; addBtn.className = "btn btn-ghost btn-small"; addBtn.textContent = "+ Add phrase";
+    addBtn.addEventListener("click", () => {
+      try {
+        const last = PhraseBankModule.phrases[PhraseBankModule.phrases.length - 1];
+        PhraseBankModule.add(last ? last.category : "");
+      } catch (err) { alert(err.message); return; }
+      renderPhrases();
+      const inputs = phraseBox.querySelectorAll('input[placeholder="Phrase"]');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+    phraseBox.appendChild(addBtn);
+  };
+  PhraseBankModule.ensureLoaded().then(renderPhrases).catch(() => { phraseBox.textContent = "Couldn't load the phrase bank."; });
   finishSection(teacher);
 
   // ----- Audience -----
@@ -8053,6 +8097,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
     { name: "courses", mod: CoursesModule, scoped: false, snap: () => ({ courses: CoursesModule.courses, sortMode: CoursesModule.sortMode, dayFormat: CoursesModule.dayFormat }) },
     { name: "periods", mod: PeriodsModule, scoped: false, snap: () => ({ periods: PeriodsModule.periods }) },
     { name: "templates", mod: TemplatesModule, scoped: false, snap: () => ({ templates: TemplatesModule.templates }) },
+    { name: "phrasebank", mod: PhraseBankModule, scoped: false, snap: () => ({ phrases: PhraseBankModule.phrases }) },
     { name: "rubricbank", mod: RubricBankModule, scoped: false, snap: () => ({ rubrics: RubricBankModule.rubrics, sections: RubricBankModule.sections }) },
     { name: "roster", mod: RosterModule, scoped: true, snap: () => ({ students: RosterModule.students }) },
     {

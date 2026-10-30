@@ -157,7 +157,30 @@
         t.placeholder = placeholder;
         t.value = value || "";
         t.addEventListener("input", () => onInput(t.value));
-        return t;
+        const phrases = ((form && form.config && form.config.phrases) || []).filter((p) => p && p.t);
+        if (!phrases.length) return t;
+        // "Insert a phrase" menu: picking one adds it to the comment.
+        const wrap = document.createElement("div");
+        const sel = document.createElement("select");
+        sel.style.cssText = "width:100%;font:inherit;padding:8px;margin-bottom:6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);";
+        const first = document.createElement("option"); first.value = ""; first.textContent = "Insert a phrase…"; sel.appendChild(first);
+        const groups = new Map();
+        phrases.forEach((p) => { const k = p.c || ""; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p.t); });
+        groups.forEach((list, cat) => {
+          const parent = cat ? document.createElement("optgroup") : sel;
+          if (cat) parent.label = cat;
+          list.forEach((text) => { const o = document.createElement("option"); o.value = text; o.textContent = text.length > 70 ? text.slice(0, 67) + "…" : text; parent.appendChild(o); });
+          if (cat) sel.appendChild(parent);
+        });
+        sel.addEventListener("change", () => {
+          if (!sel.value) return;
+          const cur = t.value;
+          t.value = cur && !/\s$/.test(cur) ? cur + " " + sel.value : cur + sel.value;
+          sel.value = "";
+          onInput(t.value);
+        });
+        wrap.append(sel, t);
+        return wrap;
       }
 
       function renderQuestions() {

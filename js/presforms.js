@@ -64,7 +64,11 @@ const PresentationFormsModule = {
         rubrics,
         groups,
       };
-      if (isTeacher) return { config, people: [] }; // teachers type their name; there is no list to check
+      if (isTeacher) {
+        const phrases = window.PhraseBankModule ? PhraseBankModule.forForm() : [];
+        if (phrases.length) config.phrases = phrases; // the "Insert a phrase" menu on the teacher form
+        return { config, people: [] };
+      } // teachers type their name; there is no list to check
       const people = courseStudents
         .filter((s) => String(s.schoolId || "").trim())
         .map((s) => ({ sid: String(s.schoolId).trim(), name: s.name || "", studentId: s.id, group: groupOf.get(s.id) || null }));
@@ -104,6 +108,7 @@ const PresentationFormsModule = {
 
   /** Saves the questions + allowed students to the server. Returns { shared: [School IDs left out because several students have them], people }. */
   async _publish(toolId, projectId, kind, token, closesAt) {
+    if (window.PhraseBankModule) await PhraseBankModule.ensureLoaded();
     const project = ScoringModule.getPresentationProject(toolId, projectId);
     const { config, people } = this.build(toolId, projectId, kind);
     config.closesAt = closesAt || null; // students' page shows a countdown and stops accepting answers then
@@ -125,6 +130,7 @@ const PresentationFormsModule = {
     const set = project && this.setOf(project, uploadId);
     if (!set) throw new Error("That data set no longer exists.");
     if (set.token) return { url: this.urlFor(set.token), shared: [], count: 0 };
+    if (window.PhraseBankModule) await PhraseBankModule.ensureLoaded();
     this.build(toolId, projectId, set.kind); // fail early with a readable message
     const token = this._newToken();
     const client = this._client();

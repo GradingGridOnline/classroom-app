@@ -180,6 +180,7 @@
 <li><b>Student Groups</b> — import the groups from your seating chart (it uses the group numbers on the desks).</li>
 <li><b>Rubrics</b> — activate <b>Teacher</b>, <b>Audience</b> and <b>Peer</b> rubrics by choosing them from the <b>Rubric Bank</b>. The bank is shared by every project and course; use <b>+ Add Section</b> to organise it. Expand or collapse a section — collapsed sections are hidden from the drop-down lists, which keeps them short. Each rubric has a <b>Section</b> menu and ▲ ▼ arrows to move it.</li>
 <li><b>QR Forms</b> — add a data set for each form (Teacher, Audience, Peer Evaluation), then click <b>Launch New QR Code</b> on its row. Students scan with their phones. <b>Show QR Code</b> reshows it, <b>Get Responses</b> collects answers, and the data set you pick is the one used.</li>
+<li><b>Comment phrases</b> — in the Teacher section, build a list of often-used comments (shared by all courses; optional categories). The teacher form then shows an <b>Insert a phrase</b> menu above each comment box. The Peer form already shows each student only their own group members.</li>
 <li><b>Scores</b> — the grid of scores per group. The <b>Weight</b> row sets how much each rubric counts (percentages adding to 100); the Total Score column adds them up.</li>
 </ul>
 <p>You can also email each student or group a PDF report from this tool.</p>`);
