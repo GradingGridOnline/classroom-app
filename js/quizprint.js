@@ -41,7 +41,7 @@
   function questionHtml(quiz, q, n, o, booklet) {
     const choice = q.type === "mc" || q.type === "multi";
     const survey = window.isSurveyKind && isSurveyKind(quiz.kind);
-    let h = `<div class="q"><div class="qh"><span class="qn">${n}.</span><span class="qt">${esc(q.text)}</span>`;
+    let h = `<div class="q"><div class="qh"><span class="qn">${n}.</span><span class="qt">${window.QuizRich ? QuizRich.show(q) : esc(q.text)}</span>`;
     if (o.showPoints && !survey && quiz.kind !== "answers" && q.points) h += `<span class="pts">(${esc(q.points)} pt${Number(q.points) === 1 ? "" : "s"})</span>`;
     h += "</div>";
     if (q.type === "multi") h += `<div class="hintline">Select all that apply.</div>`;
@@ -78,7 +78,7 @@
     items.forEach((it) => {
       if (it.section) {
         if (o.showSections && it.section.title) blocks.push({ html: `<h2>${esc(it.section.title)}</h2>`, heading: true, newPage: o.sectionBreak && it.si > 0 });
-      } else if (it.note) blocks.push({ html: `<div class="note">${esc(it.note.text)}</div>` });
+      } else if (it.note) blocks.push({ html: `<div class="note">${window.QuizRich ? QuizRich.show(it.note) : esc(it.note.text)}</div>` });
       else blocks.push({ html: questionHtml(quiz, it.q, it.n, o, booklet), q: true });
     });
     const pages = [];

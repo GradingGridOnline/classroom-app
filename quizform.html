@@ -69,6 +69,7 @@
   </main>
 
   <script src="js/config.js"></script>
+  <script src="js/quizrich.js"></script>
   <script>
     (function () {
       const cfg = (typeof APP_CONFIG !== "undefined" && APP_CONFIG.supabase) || {};
@@ -123,14 +124,15 @@
           const block = document.createElement("div"); block.className = "block";
           if (sec.title) { const h = document.createElement("h2"); h.textContent = sec.title; block.appendChild(h); }
           const notes = sec.notes || [], qids = new Set(sec.questions.map((x) => x.id));
-          const addNotes = (pred) => notes.filter(pred).forEach((nt) => { const d = document.createElement("div"); d.className = "note"; d.textContent = nt.text; block.appendChild(d); });
+          const addNotes = (pred) => notes.filter(pred).forEach((nt) => { const d = document.createElement("div"); d.className = "note"; d.innerHTML = QuizRich.show(nt); block.appendChild(d); });
           addNotes((x) => x.at === "start");
           sec.questions.forEach((q) => {
             addNotes((x) => x.at === "before" && x.q === q.id);
             num++;
             const wrap = document.createElement("div"); wrap.className = "q";
             const qt = document.createElement("div"); qt.className = "qt";
-            qt.textContent = answersOnly || !q.text ? `${num}. ` : `${num}. ${q.text} `;
+            qt.textContent = `${num}. `;
+            if (!answersOnly && q.text) { const sp = document.createElement("span"); sp.innerHTML = QuizRich.show(q); qt.appendChild(sp); qt.appendChild(document.createTextNode(" ")); }
             if (form.config.kind !== "survey") { const pts = document.createElement("span"); pts.className = "pts"; pts.textContent = `(${q.points} pt${q.points === 1 ? "" : "s"})`; qt.appendChild(pts); }
             wrap.appendChild(qt);
             if (q.type === "multi") {

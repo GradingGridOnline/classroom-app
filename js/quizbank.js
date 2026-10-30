@@ -142,8 +142,9 @@
       q.sections.forEach((s) => {
         if (!Array.isArray(s.questions)) s.questions = [];
         if (!Array.isArray(s.notes)) s.notes = [];
-        s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "" }));
+        s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), rich: window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "", at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "" }));
         s.questions.forEach((x) => {
+          x.rich = window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "";
           if (!Array.isArray(x.choices)) x.choices = [];
           if (!Array.isArray(x.accepted)) x.accepted = [];
           x.points = isSurveyKind(q.kind) ? 0 : Number(x.points) || 0;
@@ -368,9 +369,9 @@
         showAttempts: quiz.settings.showAttempts && quiz.settings.attemptsAllowed !== 1,
         sections: quiz.sections.map((s) => ({
           title: s.title,
-          notes: (s.notes || []).filter((x) => x.text.trim()),
+          notes: (s.notes || []).filter((x) => x.text.trim()).map((x) => ({ id: x.id, text: x.text, rich: x.rich || undefined, at: x.at, q: x.q })),
           questions: s.questions.map((x) => ({
-            id: x.id, type: x.type, text: answersOnly ? "" : x.text, points: isSurveyKind(quiz.kind) ? 0 : x.points,
+            id: x.id, type: x.type, text: answersOnly ? "" : x.text, rich: answersOnly ? undefined : x.rich || undefined, points: isSurveyKind(quiz.kind) ? 0 : x.points,
             choices: isChoiceQ(x) ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
             divider: x.dividerAfter ? true : undefined,
           })),
@@ -658,8 +659,7 @@
         nb.style.cssText = "margin-bottom:14px;border-left:5px solid #b8860b;";
         const nr = h("div", "category-manage-top-row");
         nr.appendChild(h("span", "qz-pill", "Instructions"));
-        const ta = h("textarea"); ta.rows = 2; ta.placeholder = "Instructions for students (shown here, in the form and when printed)"; ta.value = note.text; ta.style.cssText = "flex:1;min-height:2.6em;resize:vertical;";
-        ta.addEventListener("input", () => { note.text = ta.value; });
+        const ta = QuizRich.editor({ text: note.text, rich: note.rich, placeholder: "Instructions for students (shown here, in the form and when printed)", onChange: (t, r) => { note.text = t; note.rich = r; } });
         nr.appendChild(ta);
         nr.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.notes = sec.notes.filter((x) => x !== note); rerender(); }));
         nb.appendChild(nr);
@@ -689,16 +689,20 @@
           spacer.style.flex = "1";
           row.appendChild(spacer);
         } else {
-          const text = textInput(q.text, "Question text", (v) => { q.text = v; });
-          text.style.flex = "1";
-          text.style.maxWidth = "none";
-          row.appendChild(text);
+          row.appendChild(QuizRich.editor({ text: q.text, rich: q.rich, placeholder: "Question text", onChange: (t, r) => { q.text = t; q.rich = r; } }));
         }
         if (!isSurvey) {
           row.appendChild(h("span", "hint", "pts"));
           row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
         }
-        row.appendChild(menuButton("Instructions", "#b8860b", [{ label: "Add above this question", onClick: () => addNote("before", q.id) }, { label: "Add below this question", onClick: () => addNote("after", q.id) }]));
+        const insertQ = (type, below) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } const nq = sec.questions.pop(); sec.questions.splice(qi + (below ? 1 : 0), 0, nq); regrade(); rerender(); };
+        const kinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Paragraph"]];
+        row.appendChild(menuButton("Insert", "#b8860b", [
+          { label: "↑ Instructions above", onClick: () => addNote("before", q.id) },
+          ...kinds.map(([id, lab]) => ({ label: `↑ ${lab} above`, onClick: () => insertQ(id, false) })),
+          { label: "↓ Instructions below", onClick: () => addNote("after", q.id) },
+          ...kinds.map(([id, lab]) => ({ label: `↓ ${lab} below`, onClick: () => insertQ(id, true) })),
+        ]));
         row.appendChild(button(q.dividerAfter ? "Line below ✓" : "Line below", "btn btn-ghost btn-small", () => { q.dividerAfter = !q.dividerAfter; rerender(); }));
         row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
         row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
