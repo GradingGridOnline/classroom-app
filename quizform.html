@@ -170,6 +170,11 @@
                 holder.appendChild(b);
               });
               wrap.appendChild(holder);
+            } else if (q.type === "para") {
+              const t = document.createElement("textarea"); t.rows = 6; t.maxLength = 5000; t.style.cssText = "width:100%;font:inherit;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;min-height:130px;resize:vertical;";
+              t.value = answers[q.id] || "";
+              t.addEventListener("input", () => { answers[q.id] = t.value.trim(); refresh(); });
+              wrap.appendChild(t);
             } else {
               const t = document.createElement("input"); t.type = "text"; t.autocomplete = "off"; t.autocapitalize = "off"; t.spellcheck = false;
               t.value = answers[q.id] || "";

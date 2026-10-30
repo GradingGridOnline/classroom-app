@@ -36,6 +36,8 @@
   }
   const label = (quiz, i) => (window.quizOptionLabel ? window.quizOptionLabel((quiz.settings || {}).labelStyle, i) : String.fromCharCode(65 + i));
 
+  const paraBox = (q) => `<div class="blanklines">${Array(Math.max(1, Math.min(40, Number(q.lines) || 6))).fill('<div class="wl"></div>').join("")}</div>`;
+
   function questionHtml(quiz, q, n, o, booklet) {
     const choice = q.type === "mc" || q.type === "multi";
     const survey = window.isSurveyKind && isSurveyKind(quiz.kind);
@@ -52,7 +54,9 @@
       });
       h += "</ol>";
     }
-    if (!booklet && o.answerSpace === "line") {
+    if (q.type === "para") {
+      if (!booklet) h += paraBox(q);
+    } else if (!booklet && o.answerSpace === "line") {
       if (choice) h += `<div class="ans">${q.type === "multi" ? "Answers" : "Answer"}: <span class="ul" style="width:5em"></span></div>`;
       else h += `<div class="blanklines">${Array(Math.max(1, o.blankLines)).fill('<div class="wl"></div>').join("")}</div>`;
     } else if (!booklet && !choice && o.answerSpace !== "line") {
@@ -114,7 +118,8 @@
         h += `<div class="msrow"><span class="msn">${n}</span>`;
         if (q.type === "mc" || q.type === "multi") {
           (q.choices || []).forEach((c2, i) => { h += `<span class="bb${q.type === "multi" ? " sq" : ""}">${esc(label(quiz, i))}</span>`; });
-        } else h += `<span class="ul" style="width:${o.msBlank}mm"></span>`;
+        } else if (q.type === "para") h += `<div class="msbox" style="height:${Math.max(1, Math.min(40, Number(q.lines) || 6)) * 1.9}em"></div>`;
+        else h += `<span class="ul" style="width:${o.msBlank}mm"></span>`;
         h += "</div>";
       });
       h += "</div>";
@@ -152,7 +157,7 @@ ol.opts.cols{display:grid;grid-template-columns:1fr 1fr;gap:${o.optGap}px 1.4em}
 .lab{font-weight:600;margin-right:.2em}.bx{display:inline-block;width:.8em;height:.8em;border:1.2px solid #000;margin-right:.35em;vertical-align:-1px}
 .bb{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border:1.2px solid #000;border-radius:50%;font-size:.85em;padding:0 .25em}.bb.sq{border-radius:3px}
 .ans{margin:8px 0 0 2.3em}.blanklines{margin:6px 0 0 2.3em}.wl{border-bottom:1px solid #000;height:1.9em}
-.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
+.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msbox{flex:1;border:1.2px solid #000;border-radius:3px}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
 .pn{text-align:center;font-size:.85em;margin-top:auto;padding-top:8px}
 ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 @media screen{body{background:#cfcfcf;padding:10px}.sheet{background:#fff;width:${W}mm;min-height:${H}mm;margin:0 auto 12px;padding:${o.margin}mm;box-shadow:0 1px 6px rgba(0,0,0,.4);display:flex;flex-direction:column}${o.pageBorder ? ".sheet{padding:calc(" + o.margin + "mm + 6mm) !important}" : ""}}

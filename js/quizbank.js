@@ -36,7 +36,7 @@
     return out;
   };
   const isChoiceQ = (q) => q.type === "mc" || q.type === "multi";
-  const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
+  const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : q.type === "para" ? "Paragraph" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
   const viewOf = new Map(); // toolId -> "build" | "review"
@@ -158,6 +158,7 @@
       q.submissions.forEach((s) => {
         if (!s.answers || typeof s.answers !== "object") s.answers = {};
         if (!s.overrides || typeof s.overrides !== "object") s.overrides = {};
+        if (!s.marks || typeof s.marks !== "object") s.marks = {}; // points the teacher gave to paragraph answers: { questionId: n }
         s.attempt = Number(s.attempt) || 1;
       });
       test.maxPoints = this.quizTotal(q); // a quiz's max score is always the sum of its question points
@@ -220,6 +221,7 @@
       section.questions.push({
         id: newId("q"), type, text: "", points: 1,
         choices: type === "mc" || type === "multi" ? Array(quiz.settings.defaultOptions).fill("") : [], correct: 0, accepted: type === "blank" ? [""] : [],
+        ...(type === "para" ? { lines: 6 } : {}),
         ...(type === "multi" ? { correctSet: [0], partial: false } : {}),
       });
     },
@@ -239,10 +241,12 @@
     },
     /** Changes a question's type (multiple choice, multiple select, fill in the blank), keeping what can be kept: option texts, the correct option(s) and accepted answers. */
     setQuizQuestionType(q, type) {
-      if (!["mc", "multi", "blank"].includes(type) || q.type === type) return;
+      if (!["mc", "multi", "blank", "para"].includes(type) || q.type === type) return;
       const from = q.type;
-      if (from === "blank" && !q.choices.length) q.choices = Array(4).fill("");
-      if (type !== "blank") {
+      if ((from === "blank" || from === "para") && !q.choices.length) q.choices = Array(4).fill("");
+      if (type === "para") {
+        if (!(q.lines >= 1)) q.lines = 6;
+      } else if (type !== "blank") {
         while (q.choices.length < 2) q.choices.push("");
         if (type === "multi") {
           const key = from === "mc" ? [q.correct] : multiSet(q.correctSet);
@@ -254,7 +258,7 @@
           if (q.correct >= q.choices.length) q.correct = 0;
         }
       } else if (!q.accepted.some(Boolean)) {
-        const keys = from === "multi" ? multiSet(q.correctSet) : [q.correct];
+        const keys = from === "para" ? [] : from === "multi" ? multiSet(q.correctSet) : [q.correct];
         const texts = keys.map((i) => (q.choices[i] || "").trim()).filter(Boolean);
         q.accepted = texts.length ? [texts[0]] : [""];
       }
@@ -262,11 +266,14 @@
     },
     /** A student's answers after the teacher's edits. */
     quizEffectiveAnswers(s) {
-      return { ...(s.answers || {}), ...(s.overrides || {}) };
+      const eff = { ...(s.answers || {}), ...(s.overrides || {}) };
+      Object.entries(s.marks || {}).forEach(([id, n]) => { eff["#" + id] = n; }); // paragraph marks travel as "#<questionId>"
+      return eff;
     },
     /** Is this answer correct? MC: chosen index equals the key. Blank: matches any accepted answer (spacing/case/full-width ignored; numbers compare as numbers). */
     quizAnswerCorrect(q, ans) {
       if (ans === undefined || ans === null || ans === "") return false;
+      if (q.type === "para") return false; // marked by hand (see quizAnswerFraction)
       if (q.type === "mc") return Number(ans) === q.correct;
       if (q.type === "multi") return this.quizAnswerFraction(q, ans) === 1;
       const a = this._matchKey(ans);
@@ -278,7 +285,8 @@
       });
     },
     /** 0..1 share of the question earned. Multiple select: all-or-nothing, or (with partial credit on) right picks minus wrong picks over the number of right answers. */
-    quizAnswerFraction(q, ans) {
+    quizAnswerFraction(q, ans, mark) {
+      if (q.type === "para") return q.points > 0 ? Math.min(1, Math.max(0, Number(mark) || 0) / q.points) : 0;
       if (q.type !== "multi") return this.quizAnswerCorrect(q, ans) ? 1 : 0;
       const picked = multiSet(ans), key = multiSet(q.correctSet);
       if (!picked.length) return 0;
@@ -286,13 +294,14 @@
       if (hits === key.length && wrong === 0) return 1;
       return q.partial ? Math.max(0, (hits - wrong) / key.length) : 0;
     },
-    gradeQuizQuestion(q, ans) {
+    gradeQuizQuestion(q, ans, mark) {
+      if (q.type === "para") return r2(q.points * this.quizAnswerFraction(q, ans, mark));
       if (q.type === "multi") return r2(q.points * this.quizAnswerFraction(q, ans));
       return this.quizAnswerCorrect(q, ans) ? q.points : 0;
     },
     gradeQuizSubmission(quiz, answers) {
       let sum = 0;
-      quiz.sections.forEach((s) => s.questions.forEach((x) => (sum += this.gradeQuizQuestion(x, (answers || {})[x.id]))));
+      quiz.sections.forEach((s) => s.questions.forEach((x) => (sum += this.gradeQuizQuestion(x, (answers || {})[x.id], (answers || {})["#" + x.id]))));
       return r2(sum);
     },
     /** Rebuilds the test's scores from the stored attempts: one score per student, picked by the quiz's attempt rule (best / latest / first). */
@@ -631,6 +640,7 @@
       tb.appendChild(button("+ Multiple choice", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Multiple select", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "multi"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Fill in the blank", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "blank"); } catch (e) { alert(e.message); return; } rerender(); }));
+      tb.appendChild(button("+ Paragraph", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "para"); } catch (e) { alert(e.message); return; } rerender(); }));
       tb.appendChild(button("+ Instructions", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", at: "end", q: "" }); rerender(); }));
       if (quiz.sections.length > 1) {
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
@@ -665,7 +675,7 @@
         box.style.marginBottom = "14px";
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("span", "qz-qnum", `Q${n}`));
-        const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
+        const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Paragraph"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
           label: `Change to ${label}`,
           onClick: () => {
             if (quiz.submissions.some((s) => (s.answers || {})[q.id] !== undefined && (s.answers || {})[q.id] !== "") && !confirm("Students have already answered this question. Their answers are kept and re-graded as the new type, which may mark some wrong. Change the type?")) return;
@@ -735,6 +745,12 @@
           keyRow.appendChild(sel);
           box.appendChild(keyRow);
           }
+        } else if (q.type === "para") {
+          const lr = h("div", "mapping-row");
+          lr.appendChild(h("label", "", "Writing lines when printed"));
+          lr.appendChild(textInput(String(q.lines || 6), "", (v) => { q.lines = Math.max(1, Math.min(40, Math.round(Number(v) || 6))); rerender(); }, "point-value-input"));
+          box.appendChild(lr);
+          box.appendChild(h("p", "hint", isSurvey ? "Students type a paragraph in a text box. Surveys have no points." : "Students type a paragraph in a text box. It isn't marked automatically: open Results ▸ Review Results and type the points (0 to this question's points) for each student."));
         } else if (isSurvey) {
           box.appendChild(h("p", "hint", "Students type their own answer. Surveys have no answer key and no points."));
         } else {
@@ -826,6 +842,8 @@
         });
         sel.addEventListener("change", () => { q.correct = Number(sel.value); regrade(); refresh(); });
         td.appendChild(sel);
+      } else if (q.type === "para") {
+        td.appendChild(h("span", "hint", "marked by hand"));
       } else {
         const inp = h("input");
         inp.type = "text";
@@ -889,6 +907,23 @@
           });
           ctl.value = current === undefined || current === null || current === "" ? "" : String(current);
           ctl.addEventListener("change", () => setOverride(ctl.value === "" ? "" : Number(ctl.value)));
+        } else if (q.type === "para") {
+          ctl = h("div");
+          const txt = h("div", "", current === undefined || current === null || current === "" ? "(no answer)" : String(current));
+          txt.style.cssText = "white-space:pre-wrap;max-width:26em;max-height:9em;overflow:auto;font-size:.9rem;";
+          const pr = h("label", "hint", "pts ");
+          const pin = h("input"); pin.type = "text"; pin.inputMode = "decimal"; pin.className = "point-value-input";
+          const cur = s.marks[q.id];
+          pin.value = cur === undefined || cur === null ? "" : String(cur);
+          pin.addEventListener("change", () => {
+            const v = pin.value.trim();
+            if (v === "") delete s.marks[q.id];
+            else s.marks[q.id] = Math.max(0, Math.min(q.points, Number(v) || 0));
+            pin.value = s.marks[q.id] === undefined ? "" : String(s.marks[q.id]);
+            regrade(); refresh();
+          });
+          pr.appendChild(pin); pr.append(" / " + q.points);
+          ctl.append(txt, pr);
         } else {
           ctl = h("input");
           ctl.type = "text";
@@ -924,7 +959,7 @@
       rows.forEach((r) => {
         const eff = ScoringModule.quizEffectiveAnswers(r.s);
         r.cells.forEach((c, i) => {
-          const frac = ScoringModule.quizAnswerFraction(c.q, eff[c.q.id]);
+          const frac = ScoringModule.quizAnswerFraction(c.q, eff[c.q.id], eff["#" + c.q.id]);
           const ok = frac === 1, part = frac > 0 && frac < 1;
           if (ok) correctCount[i]++;
           c.td.className = ok ? "qz-ok" : "qz-bad";
@@ -1018,7 +1053,7 @@
     const rows = [["Student", "School ID", "Attempt", ...qs.map((x, i) => `Q${i + 1} (${x.q.points} pt)`), "Total", "Max score", "Counts toward score"]];
     subs.forEach((s) => {
       const eff = ScoringModule.quizEffectiveAnswers(s);
-      rows.push([s.name || "", s.sid, s.attempt, ...qs.map((x) => ScoringModule.gradeQuizQuestion(x.q, eff[x.q.id])), totals.get(s), ScoringModule.quizTotal(quiz), counts.has(s) ? "Yes" : ""]);
+      rows.push([s.name || "", s.sid, s.attempt, ...qs.map((x) => ScoringModule.gradeQuizQuestion(x.q, eff[x.q.id], eff["#" + x.q.id])), totals.get(s), ScoringModule.quizTotal(quiz), counts.has(s) ? "Yes" : ""]);
     });
     downloadCsv(safeName(test.name, "scores"), rows);
   }
@@ -1349,7 +1384,7 @@
       score.style.cssText = "font-weight:700;white-space:nowrap;";
       tr.appendChild(score);
       qs.forEach((q, i) => {
-        const ok = ScoringModule.quizAnswerCorrect(q, eff[q.id]);
+        const ok = ScoringModule.quizAnswerFraction(q, eff[q.id], eff["#" + q.id]) === 1;
         if (ok) correctCount[i]++;
         const td = h("td", "qz-mark " + (ok ? "qz-yes" : "qz-no"), ok ? "●" : "✕");
         td.title = answerText(q, eff[q.id]);
