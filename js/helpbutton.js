@@ -12,7 +12,8 @@
 <ol>
 <li>Click <b>⚙ Settings</b> (top right) → <b>Account</b> and sign in, or create an account.</li>
 <li>Back on the <b>Your courses</b> page, type a course name and click <b>+ Add Course</b>.</li>
-<li>Click the course name to open it. A row of tabs appears: <b>Roster</b>, <b>Seating Chart</b>, <b>Attendance</b>, <b>Scoring</b>, <b>Report Card</b>, <b>Journal</b>, <b>QTS Bank</b>.</li>
+<li>Click the course name to open it. A row of tabs appears: <b>Roster</b>, <b>Seating Chart</b>, <b>Attendance</b>, <b>Scoring</b>, <b>Report Card</b>, <b>Journal</b>, <b>Quiz Library</b>.</li>
+<li><b>Quiz Library</b>: each quiz's questions are stored once. A course <i>uses</i> a Library item and keeps its own students' answers, scores and QR code. Change the questions (in a course, or Library menu → Edit questions…) and every course using it follows; a course that already has student answers shows <b>Update available</b> and an <b>Update (re-grade)</b> button. <b>Make my own copy</b> detaches a course's quiz for good. <b>Add to courses…</b> puts a quiz in the Library and in the courses you tick. “Own copy” = belongs to one course only.</li>
 <li>Start with the <b>Roster</b> (add or upload your students). The other tabs all use that list.</li>
 </ol>
 <h4>Saving</h4>

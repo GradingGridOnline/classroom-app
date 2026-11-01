@@ -463,10 +463,8 @@
     /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
     snapshot(test, courseName) {
       const quiz = test.quiz ? ScoringModule.normalizeQuiz(test) : null;
-      if (quiz && !test.fam) test.fam = newId("fam"); // a family id lets the QTS Bank find and sync this quiz's copies
       return {
         id: newId("shared"),
-        fam: quiz ? test.fam : undefined,
         name: test.name,
         maxPoints: quiz ? ScoringModule.quizTotal(quiz) : Number(test.maxPoints) || 0,
         quiz: quiz ? JSON.parse(JSON.stringify({ kind: quiz.kind, settings: quiz.settings, sections: quiz.sections })) : null,
@@ -503,7 +501,6 @@
         sourceFile: item.quiz ? "Quiz editor" : "Shared test",
         rows: [], scores: {}, unmatched: [],
       };
-      if (item.fam && item.quiz) test.fam = item.fam;
       if (item.quiz) {
         test.quiz = { ...JSON.parse(JSON.stringify(item.quiz)), token: null, submissions: [] };
         ScoringModule.normalizeQuiz(test);
@@ -610,6 +607,7 @@
     const regrade = () => ScoringModule.regradeQuiz(tool.id, testId);
 
     container.appendChild(editorHeader(tool, container, test, quiz, "build"));
+    { const used = window.QTSBank && QTSBank.usedInNote ? QTSBank.usedInNote(test) : null; if (used) container.appendChild(used); }
 
     // ----- quiz settings -----
     {
@@ -1671,17 +1669,14 @@
       const tr = mains[i];
       if (!tr) return;
       const courseId = RosterModule.currentCourseId;
-      const shareBtn = button("Copy to other courses…", "btn btn-ghost btn-small qz-act-share", guard(async () => {
-        const msg = await QTSBank.copyToCourses(courseId, tool.id, t);
+      const shareBtn = button("Add to courses…", "btn btn-ghost btn-small qz-act-share", guard(async () => {
+        const msg = await QTSBank.addToCourses(courseId, tool.id, t);
         if (msg) { say(msg); rerender(); }
       }));
-      const tiesBtn = (t.fam && window.QTSBank)
-        ? button(QTSBank.tiesOpen.has(t.id) ? "Hide Family Ties" : "Family Ties", "btn btn-ghost btn-small", () => { if (QTSBank.tiesOpen.has(t.id)) QTSBank.tiesOpen.delete(t.id); else QTSBank.tiesOpen.add(t.id); rerender(); })
-        : (t.famLeft && window.QTSBank) ? button("Rejoin family…", "btn btn-ghost btn-small", guard(async () => { const msg = await QTSBank.rejoin(courseId, tool.id, t); if (msg) { say(msg); rerender(); } })) : null;
+      const statusBtns = window.QTSBank && t.quiz ? QTSBank.statusButtons(courseId, tool.id, t, say, rerender) : [];
       if (!t.quiz) {
         const only = h("div", "qz-actions");
         only.appendChild(shareBtn);
-        if (tiesBtn) only.appendChild(tiesBtn);
         tr.children[5].insertBefore(only, tr.children[5].firstChild);
         return;
       }
@@ -1757,7 +1752,7 @@
       group.appendChild(button("Print", "btn btn-ghost btn-small qz-menu-btn", () => window.QuizPrint && QuizPrint.open(quiz, t.name)));
       group.appendChild(menuButton("Export CSV", "#4a5568", exportItems(t, quiz)));
       group.appendChild(shareBtn);
-      if (tiesBtn) group.appendChild(tiesBtn);
+      statusBtns.forEach((b) => group.appendChild(b));
       // Keep the bank's own Delete button (same behavior); drop Details / Re-match for quizzes.
       const actions = tr.children[5];
       Array.from(actions.querySelectorAll("button")).forEach((b) => {
@@ -1784,16 +1779,6 @@
         if (td.colSpan === 6) td.colSpan = 7;
       });
     }
-    // Family Ties grid, directly under an item whose ties are open.
-    if (window.QTSBank && QTSBank.tiesOpen) {
-      mains.forEach((tr, i) => {
-        const t = tests[i];
-        if (!tr || !t || !t.fam || !QTSBank.tiesOpen.has(t.id)) return;
-        const dr = h("tr"); const dt = h("td"); dt.colSpan = tr.children.length;
-        dt.appendChild(QTSBank.buildTies(RosterModule.currentCourseId, tool.id, t, (m) => { say(m || ""); rerender(); }));
-        dr.appendChild(dt); tr.after(dr);
-      });
-    }
   }
 
   // ---------- hook into the Test & Quiz Bank view ----------
@@ -1809,7 +1794,7 @@
     ScoringModule.testBankTests(tool.id).forEach((t) => { if (t.quiz) ScoringModule.normalizeQuiz(t); });
     original(tool, container);
     mergeBankView(tool, container);
-    // The QTS Bank (js/qtsbank.js) replaces the old Shared list here: it holds every course's tests plus the Independent list.
+    // The Quiz Library (js/qtsbank.js) replaces the old Shared list here: it holds every course's tests plus the Independent list.
     if (window.QTSBank && QTSBank.buildSection) { SharedTests.scope = "mine"; container.appendChild(QTSBank.buildSection(tool, container)); }
     else container.appendChild(buildSharedSection(tool, container));
   };
