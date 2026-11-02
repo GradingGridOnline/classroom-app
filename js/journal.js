@@ -1,6 +1,7 @@
 // ===== Journal module (data) =====
 // One file per course: journal-<courseId>.json
-//  - entries: [{ id, date "YYYY-MM-DD", subject, text, students:[studentId], tags:[string], createdAt, updatedAt }]
+//  - entries: [{ id, date "YYYY-MM-DD", subject, text, rich, students:[studentId], tags:[string], mode "entry"|"list", done, sharedWith:[courseId], syncedTo:[courseId], createdAt, updatedAt }]
+//    An entry shared with other courses has the same id in each course's file; syncShared() copies it (students stay per course).
 //  - settings: { tags:[string] (the quick-pick tag list), snapshots:boolean (show attendance/score beside entries) }
 // The screen lives in journalui.js. Loaded BEFORE app.js so Autosave can include it.
 const JournalModule = {
@@ -28,22 +29,61 @@ const JournalModule = {
 
   newId() { return `jr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; },
 
-  addEntry({ date, subject, text, rich, students, tags }) {
+  addEntry({ date, subject, text, rich, students, tags, mode, done, sharedWith }) {
     const now = new Date().toISOString();
-    const e = { id: this.newId(), date, subject: (subject || "").trim(), text: (text || "").trim(), rich: this.cleanRich(rich), students: [...(students || [])], tags: this.cleanTags(tags), createdAt: now, updatedAt: now };
+    const e = { id: this.newId(), date, subject: (subject || "").trim(), text: (text || "").trim(), rich: this.cleanRich(rich), students: [...(students || [])], tags: this.cleanTags(tags), mode: mode === "list" ? "list" : "entry", done: mode === "list" && !!done, sharedWith: this.cleanIds(sharedWith), syncedTo: [], createdAt: now, updatedAt: now };
     this.entries.push(e);
     return e;
   },
 
-  updateEntry(id, { date, subject, text, rich, students, tags }) {
+  updateEntry(id, { date, subject, text, rich, students, tags, mode, done, sharedWith }) {
     const e = this.entries.find((x) => x.id === id);
     if (!e) return null;
     e.date = date; e.subject = (subject || "").trim(); e.text = (text || "").trim(); e.rich = this.cleanRich(rich); e.students = [...(students || [])]; e.tags = this.cleanTags(tags);
+    e.mode = mode === "list" ? "list" : "entry"; e.done = e.mode === "list" && !!done; e.sharedWith = this.cleanIds(sharedWith);
     e.updatedAt = new Date().toISOString();
     return e;
   },
 
   removeEntry(id) { this.entries = this.entries.filter((e) => e.id !== id); },
+
+  cleanIds(ids) { return [...new Set((ids || []).filter((x) => x && x !== this.currentCourseId))]; },
+
+  /** Copies a shared entry into the other courses it is shared with (and removes it from courses it was taken out of). Returns the course ids that failed. */
+  async syncShared(e) {
+    const here = this.currentCourseId, targets = this.cleanIds(e.sharedWith);
+    const removed = (e.syncedTo || []).filter((id) => !targets.includes(id));
+    const members = [here, ...targets], failed = [];
+    for (const id of removed) {
+      try {
+        const d = await storage.loadFile(this.fileName(id));
+        if (d && Array.isArray(d.entries)) { d.entries = d.entries.filter((x) => x.id !== e.id); await storage.saveFile(this.fileName(id), d); }
+      } catch (err) { failed.push(id); }
+    }
+    for (const id of targets) {
+      try {
+        const d = (await storage.loadFile(this.fileName(id))) || {};
+        const entries = Array.isArray(d.entries) ? d.entries : [];
+        const copy = JSON.parse(JSON.stringify(e));
+        copy.sharedWith = members.filter((x) => x !== id); copy.syncedTo = copy.sharedWith.slice(); copy.students = [];
+        const i = entries.findIndex((x) => x.id === e.id);
+        if (i >= 0) { copy.students = entries[i].students || []; entries[i] = copy; } else entries.push(copy);
+        await storage.saveFile(this.fileName(id), { entries, settings: d.settings || { tags: [], snapshots: true } });
+      } catch (err) { failed.push(id); }
+    }
+    e.syncedTo = targets.filter((id) => !failed.includes(id));
+    return failed;
+  },
+
+  /** Removes a shared entry from the other courses too. */
+  async removeShared(e) {
+    for (const id of e.sharedWith || []) {
+      try {
+        const d = await storage.loadFile(this.fileName(id));
+        if (d && Array.isArray(d.entries)) { d.entries = d.entries.filter((x) => x.id !== e.id); await storage.saveFile(this.fileName(id), d); }
+      } catch (err) { /* that course keeps its copy */ }
+    }
+  },
 
   cleanTags(tags) {
     const seen = new Set(); const out = [];

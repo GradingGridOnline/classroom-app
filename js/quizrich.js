@@ -18,6 +18,7 @@
         const tag = n.tagName.toLowerCase();
         let inner = walk(n);
         if (tag === "br") { out += "<br>"; return; }
+        if (tag === "span" && n.hasAttribute("data-ck")) { out += `<span data-ck="${n.getAttribute("data-ck") === "1" ? 1 : 0}"></span>`; return; } // a checklist box (journal)
         if (tag === "div" || tag === "p") { out += (out && !/<br>$/.test(out) ? "<br>" : "") + inner; return; }
         if (tag === "script" || tag === "style") return;
         const st = n.style || {};
@@ -44,7 +45,7 @@
 
   /** Plain text of an html string (line breaks kept). */
   function plain(html) {
-    const doc = new DOMParser().parseFromString("<body>" + String(html || "").replace(/<br\s*\/?>/gi, "\n") + "</body>", "text/html");
+    const doc = new DOMParser().parseFromString("<body>" + String(html || "").replace(/<span data-ck="1"><\/span>/g, "☑ ").replace(/<span data-ck="0"><\/span>/g, "☐ ").replace(/<br\s*\/?>/gi, "\n") + "</body>", "text/html");
     return doc.body.textContent || "";
   }
 
@@ -69,7 +70,7 @@
     if (!document.getElementById("qrich-style")) {
       const st = document.createElement("style");
       st.id = "qrich-style";
-      st.textContent = '[contenteditable][data-placeholder]:empty::before{content:attr(data-placeholder);opacity:.5}.qrich-btn{padding:1px 8px !important;min-width:2em}';
+      st.textContent = '[contenteditable][data-placeholder]:empty::before{content:attr(data-placeholder);opacity:.5}.qrich-btn{padding:1px 8px !important;min-width:2em}span[data-ck]{display:inline-block;width:1.05em;height:1.05em;border:2px solid currentColor;border-radius:999px;vertical-align:-.15em;margin-right:.4em;cursor:pointer;box-sizing:border-box;opacity:.85}span[data-ck="1"]{background:#3ddc84;border-color:#3ddc84;opacity:1;box-shadow:0 0 8px 2px rgba(61,220,132,.75)}';
       document.head.appendChild(st);
     }
     const emit = () => {
@@ -131,6 +132,78 @@
       emit();
     });
     bar.appendChild(color);
+    if (opts.lists) {
+      const fixCk = () => box.querySelectorAll("span[data-ck]").forEach((c) => { c.contentEditable = "false"; });
+      fixCk();
+      const idx = (n) => Array.prototype.indexOf.call(n.parentNode.childNodes, n);
+      /** Where the caret's line starts (after the last line break before the caret) and whether it begins with a bullet / check box. */
+      const caretLine = () => {
+        const s = selInside(); if (!s) return null;
+        const r = s.getRangeAt(0).cloneRange(); r.collapse(true);
+        let start = { node: box, off: 0 };
+        const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+        let n;
+        while ((n = tw.nextNode())) {
+          if (n.nodeType === 1) {
+            if (n.tagName === "BR") { if (r.comparePoint(n.parentNode, idx(n) + 1) <= 0) start = { node: n.parentNode, off: idx(n) + 1 }; else break; }
+            continue;
+          }
+          const upto = n === r.startContainer ? r.startOffset : (r.comparePoint(n, n.data.length) <= 0 ? n.data.length : -1);
+          if (upto < 0) break;
+          const k = upto > 0 ? n.data.lastIndexOf("\n", upto - 1) : -1;
+          if (k >= 0) start = { node: n, off: k + 1 };
+          if (n === r.startContainer) break;
+        }
+        let target = null, toff = 0;
+        const descend = (c) => { while (c && c.nodeType === 1 && c.tagName !== "BR" && !c.hasAttribute("data-ck")) c = c.firstChild; return c && !(c.nodeType === 1 && c.tagName === "BR") ? c : null; };
+        if (start.node.nodeType === 3) {
+          if (start.off < start.node.data.length) { target = start.node; toff = start.off; }
+          else { let x = start.node; while (x && x !== box && !x.nextSibling) x = x.parentNode; target = x && x !== box ? descend(x.nextSibling) : null; }
+        } else target = descend(start.node.childNodes[start.off]);
+        let kind = "", el = null;
+        if (target && target.nodeType === 1) { kind = "c"; el = target; }
+        else if (target && target.nodeType === 3 && target.data.startsWith("• ", toff)) kind = "b";
+        const rs = document.createRange(); rs.setStart(start.node, start.off); rs.setEnd(r.startContainer, r.startOffset);
+        return { start, kind, el, target, toff, atStart: rs.toString() === "" && !rs.cloneContents().querySelector("span[data-ck]") };
+      };
+      const place = (L, kind) => {
+        const frag = document.createDocumentFragment();
+        let lastNode;
+        if (kind === "b") { lastNode = document.createTextNode("• "); frag.appendChild(lastNode); }
+        else { const c = document.createElement("span"); c.dataset.ck = "0"; c.contentEditable = "false"; lastNode = document.createTextNode(" "); frag.append(c, lastNode); }
+        const rg = document.createRange();
+        rg.setStart(L.start.node, L.start.off); rg.collapse(true); rg.insertNode(frag);
+        if (L.atStart) { const sel = getSelection(); const nr = document.createRange(); nr.setStartAfter(lastNode); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr); }
+      };
+      const unmark = (L) => { if (L.kind === "b") L.target.deleteData(L.toff, 2); else if (L.kind === "c") L.el.remove(); };
+      const lineText = (L) => {
+        const rr = document.createRange(); rr.setStart(L.start.node, L.start.off); rr.setEnd(box, box.childNodes.length);
+        const w = document.createTreeWalker(rr.cloneContents(), 5); let t = "", x;
+        while ((x = w.nextNode())) { if (x.nodeType === 3) t += x.data; else if (x.tagName === "BR") t += "\n"; }
+        return t.split("\n")[0].replace(/^• /, "").trim();
+      };
+      const toggleLine = (kind) => {
+        box.focus(); let L = caretLine(); if (!L) return;
+        if (L.kind === kind) { unmark(L); return; }
+        if (L.kind) { unmark(L); L = caretLine(); }
+        place(L, kind);
+      };
+      mk("• List", "Bullet point on this line (click again to remove)", () => toggleLine("b"));
+      mk("☐ Item", "Check-list box on this line (click again to remove)", () => toggleLine("c"));
+      box.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" || e.shiftKey) return;
+        e.preventDefault();
+        const L = caretLine(); const k = L ? L.kind : "";
+        if (k && lineText(L) === "") { unmark(L); emit(); return; }
+        document.execCommand("insertLineBreak");
+        if (k) { const L2 = caretLine(); if (L2) place(L2, k); }
+        emit();
+      });
+      box.addEventListener("click", (e) => {
+        const c = e.target.closest && e.target.closest("span[data-ck]");
+        if (c && box.contains(c)) { c.dataset.ck = c.dataset.ck === "1" ? "0" : "1"; emit(); }
+      });
+    }
     box.addEventListener("input", emit);
     box.addEventListener("paste", (e) => { // paste as plain text
       e.preventDefault();
@@ -250,5 +323,21 @@
     return move(t, w, dir);
   }
 
-  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove };
+  /** Flips the idx-th check-list box of a stored rich string. */
+  function toggleCheck(rich, idx) {
+    const doc = new DOMParser().parseFromString("<body>" + String(rich || "") + "</body>", "text/html");
+    const c = doc.body.querySelectorAll("span[data-ck]")[idx];
+    if (!c) return rich;
+    c.setAttribute("data-ck", c.getAttribute("data-ck") === "1" ? "0" : "1");
+    return clean(doc.body.innerHTML);
+  }
+  /** Makes the check-list boxes shown inside `el` clickable. getRich() = the stored string; onChange(newRich). */
+  function bindChecks(el, getRich, onChange) {
+    el.addEventListener("click", (ev) => {
+      const c = ev.target.closest && ev.target.closest("span[data-ck]");
+      if (!c || !el.contains(c)) return;
+      onChange(toggleCheck(getRich(), Array.prototype.indexOf.call(el.querySelectorAll("span[data-ck]"), c)));
+    });
+  }
+  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, toggleCheck, bindChecks };
 })();

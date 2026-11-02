@@ -97,6 +97,18 @@
 #journal-modal .jr-modal-title { font-family:var(--font-heading); font-size:1.4rem; margin:0 0 4px; color:var(--green-dark,#222); }
 #journal-modal .jr-modal-text { white-space:pre-wrap; margin:10px 0; line-height:1.5; font-size:1rem; }
 #journal-modal .jr-modal-row { margin:6px 0; }
+#journal-panel .jr-cpill, #journal-modal .jr-cpill { cursor:pointer; font:inherit; font-size:.85rem; padding:2px 12px; margin:2px 4px 2px 0; border-radius:6px; border:2px solid #7dffb2; background:#14201b; color:#7dffb2; }
+#journal-panel .jr-cpill.on, #journal-modal .jr-cpill.on { background:#7dffb2; color:#14201b; font-weight:700; }
+:is(#journal-panel, #journal-modal) .jr-switch { display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
+:is(#journal-panel, #journal-modal) .jr-switch input { position:absolute; opacity:0; width:0; height:0; }
+:is(#journal-panel, #journal-modal) .jr-switch .jr-track { width:42px; height:22px; border-radius:11px; background:#777; position:relative; transition:background .15s; }
+:is(#journal-panel, #journal-modal) .jr-switch .jr-track::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .15s; }
+:is(#journal-panel, #journal-modal) .jr-switch input:checked + .jr-track { background:#2e9e5b; }
+:is(#journal-panel, #journal-modal) .jr-switch input:checked + .jr-track::after { left:22px; }
+:is(#journal-panel, #journal-modal) .jr-switch input:focus-visible + .jr-track { outline:2px solid currentColor; }
+:is(#journal-panel, #journal-modal) .jr-donepill { cursor:pointer; font:inherit; font-weight:700; font-size:1rem; padding:6px 22px; border-radius:999px; border:2px solid currentColor; background:transparent; color:inherit; margin:4px 0; }
+:is(#journal-panel, #journal-modal) .jr-donepill.on { background:#3ddc84; border-color:#3ddc84; color:#06240f; box-shadow:0 0 12px 3px rgba(61,220,132,.8); }
+:is(#journal-panel, #journal-modal) .jr-entry.jr-isdone .jr-subject { text-decoration:line-through; opacity:.7; }
 `;
   document.head.appendChild(css);
 
@@ -110,6 +122,13 @@
 
   const students = () => RosterModule.students.slice().sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
   const sName = (id) => { const s = RosterModule.students.find((x) => x.id === id); return s ? `#${s.classNumber || "—"} ${s.name || "(unnamed)"}` : "(removed student)"; };
+  const courseName = (id) => { const c = window.CoursesModule && CoursesModule.find ? CoursesModule.find(id) : null; return c && c.name ? c.name : "(another course)"; };
+  const otherCourses = () => (window.CoursesModule ? CoursesModule.activeCourses() : []).filter((c) => c.id !== J.currentCourseId);
+  const warnFail = (failed) => { if (failed && failed.length) alert(`Couldn't update the shared entry in: ${failed.map(courseName).join(", ")}.`); };
+  /** Marks / unmarks a whole entry as done (check-list mode). */
+  const setDone = (e, v) => { e.done = v; e.updatedAt = new Date().toISOString(); J.syncShared(e).then(warnFail); render(); };
+  const donePill = (e, onFlip) => { const b = mk("button", `jr-donepill${e.done ? " on" : ""}`, e.done ? "✔ Done" : "○ To do"); b.type = "button"; b.setAttribute("aria-pressed", String(!!e.done)); b.addEventListener("click", () => onFlip(!e.done)); return b; };
+  const bindBoxes = (el, e, after) => QuizRich.bindChecks(el, () => e.rich || "", (nr) => { e.rich = nr; e.text = QuizRich.plain(nr); e.updatedAt = new Date().toISOString(); J.syncShared(e).then(warnFail); after(); });
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const attOk = () => AttendanceModule.currentCourseId === J.currentCourseId;
   const scoreOk = () => ScoringModule.currentCourseId === J.currentCourseId;
@@ -143,7 +162,7 @@
   // ---------- the entry form ----------
   function buildForm(entry, onDone, onCancel) {
     const f = mk("div", "jr-form");
-    const st = { date: entry ? entry.date : today(), subject: entry ? entry.subject || "" : "", students: new Set(entry ? entry.students : []), tags: new Set(entry ? entry.tags : []) };
+    const st = { date: entry ? entry.date : today(), subject: entry ? entry.subject || "" : "", students: new Set(entry ? entry.students : []), tags: new Set(entry ? entry.tags : []), mode: entry && entry.mode === "list" ? "list" : "entry", done: !!(entry && entry.done), courses: new Set(entry ? entry.sharedWith || [] : []) };
     const row = mk("div", "jr-row");
     const date = mk("input"); date.type = "date"; date.value = st.date; date.addEventListener("input", () => { st.date = date.value; });
     const dl = mk("label", "", "Date "); dl.appendChild(date); row.appendChild(dl);
@@ -160,10 +179,31 @@
     det.appendChild(list); upd(); row.appendChild(det);
     f.appendChild(row);
 
+    // entry / check list switch, and the "also show in" course pills
+    const mrow = mk("div", "jr-row");
+    const sw = mk("label", "jr-switch"); const swc = mk("input"); swc.type = "checkbox"; swc.checked = st.mode === "list";
+    const dp = mk("span"); const drawDone = () => { dp.textContent = ""; if (st.mode === "list") { const b = mk("button", `jr-donepill${st.done ? " on" : ""}`, st.done ? "✔ Done" : "○ To do"); b.type = "button"; b.addEventListener("click", () => { st.done = !st.done; drawDone(); }); dp.appendChild(b); } };
+    swc.addEventListener("change", () => { st.mode = swc.checked ? "list" : "entry"; drawDone(); });
+    sw.append(swc, mk("span", "jr-track"), mk("span", "", "Check list (this whole entry is a task to complete)"));
+    mrow.append(sw, dp); drawDone(); f.appendChild(mrow);
+    const others = otherCourses();
+    if (others.length) {
+      const cd = mk("details", "jr-pick"); const cs = mk("summary"); cd.appendChild(cs);
+      const cl = mk("div", "jr-pick-list");
+      const updC = () => { cs.textContent = st.courses.size ? `Also shown in: ${[...st.courses].map(courseName).join(", ").slice(0, 80)}` : "Also show this entry in other courses…"; };
+      others.forEach((c) => {
+        const b = mk("button", `jr-cpill${st.courses.has(c.id) ? " on" : ""}`, c.name); b.type = "button"; b.setAttribute("aria-pressed", String(st.courses.has(c.id)));
+        b.addEventListener("click", () => { if (st.courses.has(c.id)) st.courses.delete(c.id); else st.courses.add(c.id); b.classList.toggle("on", st.courses.has(c.id)); b.setAttribute("aria-pressed", String(st.courses.has(c.id))); updC(); });
+        cl.appendChild(b);
+      });
+      cl.appendChild(mk("div", "jr-meta", "The entry appears in each ticked course's journal and can be edited there too. Its students stay with each course."));
+      cd.appendChild(cl); updC(); f.appendChild(cd);
+    }
+
     const subj = mk("input"); subj.placeholder = "Subject"; subj.value = st.subject; subj.style.width = "100%"; subj.addEventListener("input", () => { st.subject = subj.value; });
     f.appendChild(subj);
     const body = { text: entry ? entry.text : "", rich: entry ? entry.rich || "" : "" };
-    const text = QuizRich.editor({ text: body.text, rich: body.rich, placeholder: "Journal entry…", onChange: (t, r) => { body.text = t; body.rich = r; } });
+    const text = QuizRich.editor({ text: body.text, rich: body.rich, placeholder: "Journal entry…", lists: true, onChange: (t, r) => { body.text = t; body.rich = r; } });
     text.style.width = "100%"; text.style.boxSizing = "border-box";
     text.querySelector("[contenteditable]").style.minHeight = "110px";
     f.appendChild(text);
@@ -191,8 +231,10 @@
     acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => {
       if (!st.date) { alert("Choose a date."); return; }
       if (!body.text.trim() && !st.subject.trim() && !st.tags.size) { alert("Write something first."); return; }
-      const data = { date: st.date, subject: st.subject, text: body.text, rich: body.rich, students: [...st.students], tags: [...st.tags] };
-      if (entry) J.updateEntry(entry.id, data); else { J.addEntry(data); spread = null; }
+      const data = { date: st.date, subject: st.subject, text: body.text, rich: body.rich, students: [...st.students], tags: [...st.tags], mode: st.mode, done: st.done, sharedWith: [...st.courses] };
+      let saved;
+      if (entry) saved = J.updateEntry(entry.id, data); else { saved = J.addEntry(data); spread = null; }
+      if (saved && (saved.sharedWith.length || (saved.syncedTo || []).length)) J.syncShared(saved).then(warnFail);
       editingId = null; creating = false; render();
       if (onDone) onDone();
     }));
@@ -201,17 +243,20 @@
     return f;
   }
 
+  const delMsg = (e) => ((e.sharedWith || []).length ? `Delete this entry here and in: ${e.sharedWith.map(courseName).join(", ")}?` : "Delete this entry?");
   function entryCard(e) {
     if (editingId === e.id) return buildForm(e);
-    const c = mk("div", "jr-entry");
+    const c = mk("div", `jr-entry${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
+    if (e.mode === "list") c.appendChild(donePill(e, (v) => setDone(e, v)));
     c.appendChild(mk("div", "jr-subject", e.subject || "(no subject)"));
+    if ((e.sharedWith || []).length) c.appendChild(mk("div", "jr-meta", `Also in: ${e.sharedWith.map(courseName).join(", ")}`));
     c.appendChild(mk("div", "jr-meta", e.date));
     if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); c.appendChild(t); }
     if (e.students.length) {
       const d = mk("details"); d.appendChild(mk("summary", "", `Students (${e.students.length})`));
       d.appendChild(mk("div", "jr-meta", e.students.map(sName).join(", "))); c.appendChild(d);
     } else c.appendChild(mk("div", "jr-meta", "Whole class"));
-    const tx = mk("div", "jr-text"); tx.innerHTML = QuizRich.show(e); c.appendChild(tx);
+    const tx = mk("div", "jr-text"); tx.innerHTML = QuizRich.show(e); bindBoxes(tx, e, render); c.appendChild(tx);
     c.appendChild(btn("Show full entry", "btn btn-ghost btn-small", () => openEntry(e.id)));
     if (J.settings.snapshots) {
       const sn = snapParts(e);
@@ -219,7 +264,7 @@
     }
     const a = mk("div", "jr-row");
     a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; render(); }));
-    a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm("Delete this entry?")) { J.removeEntry(e.id); render(); } }));
+    a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { J.removeShared(e); J.removeEntry(e.id); render(); } }));
     c.appendChild(a);
     return c;
   }
@@ -237,15 +282,16 @@
       const e = J.entries.find((x) => x.id === id); if (!e) { close(); return; }
       box.innerHTML = "";
       const head = mk("div", "jr-modal-head");
-      const hl = mk("div"); hl.appendChild(mk("h3", "jr-modal-title", e.subject || "(no subject)")); hl.appendChild(mk("div", "jr-meta", e.date));
+      const hl = mk("div"); hl.appendChild(mk("h3", "jr-modal-title", e.subject || "(no subject)")); hl.appendChild(mk("div", "jr-meta", e.date + ((e.sharedWith || []).length ? ` · also in: ${e.sharedWith.map(courseName).join(", ")}` : "")));
+      if (e.mode === "list") hl.appendChild(donePill(e, (v) => { e.done = v; e.updatedAt = new Date().toISOString(); J.syncShared(e).then(warnFail); show(); render(); }));
       head.appendChild(hl); head.appendChild(btn("✕ Close", "btn btn-ghost btn-small", close)); box.appendChild(head);
       if (e.tags.length) { const t = mk("div", "jr-modal-row"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); box.appendChild(t); }
       box.appendChild(mk("div", "jr-meta jr-modal-row", e.students.length ? `Students (${e.students.length}): ${e.students.map(sName).join(", ")}` : "Whole class"));
-      { const mt = mk("div", "jr-modal-text"); mt.innerHTML = QuizRich.show(e); box.appendChild(mt); }
+      { const mt = mk("div", "jr-modal-text"); mt.innerHTML = QuizRich.show(e); bindBoxes(mt, e, () => { show(); render(); }); box.appendChild(mt); }
       if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); box.appendChild(d); } }
       const a = mk("div", "jr-row jr-modal-row");
       a.appendChild(btn("Edit", "btn btn-primary btn-small", () => { box.innerHTML = ""; box.appendChild(buildForm(e, show, show)); }));
-      a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm("Delete this entry?")) { J.removeEntry(e.id); close(); render(); } }));
+      a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { J.removeShared(e); J.removeEntry(e.id); close(); render(); } }));
       box.appendChild(a);
     }
     show();
