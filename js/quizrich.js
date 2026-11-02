@@ -116,9 +116,9 @@
     mk("<b>B</b>", "Bold (Ctrl+B)", () => document.execCommand("bold"));
     mk("<i>I</i>", "Italic (Ctrl+I)", () => document.execCommand("italic"));
     mk("<u>U</u>", "Underline (Ctrl+U)", () => document.execCommand("underline"));
-    mk("AA", "ALL CAPS (Alt+Shift+A)", () => wrapSel("text-transform:uppercase"));
-    mk('<span style="font-variant:small-caps">Aa</span>', "Small caps (Alt+Shift+S)", () => wrapSel("font-variant:small-caps"));
-    mk("Normal", "Clear formatting from the selected text (Alt+Shift+N)", normal);
+    mk("AA", "ALL CAPS (Ctrl/Cmd+Shift+A)", () => wrapSel("text-transform:uppercase"));
+    mk('<span style="font-variant:small-caps">Aa</span>', "Small caps (Ctrl/Cmd+Shift+K)", () => wrapSel("font-variant:small-caps"));
+    mk("Normal", "Clear formatting from the selected text (Ctrl/Cmd+Space or \\)", normal);
     const color = document.createElement("input");
     color.type = "color"; color.value = "#c0392b"; color.title = "Text colour (select text first)";
     color.style.cssText = "width:2.2em;height:1.9em;padding:0;border:1px solid var(--line,#aaa);background:none;cursor:pointer;";
@@ -190,8 +190,8 @@
         place(L, kind);
       };
       lineToggle = toggleLine;
-      mk("• List", "Bullet point on this line (Alt+Shift+L; again to remove)", () => toggleLine("b"));
-      mk("☐ Item", "Check-list box on this line (Alt+Shift+K; again to remove)", () => toggleLine("c"));
+      mk("• List", "Bullet point on this line (Ctrl/Cmd+Shift+L; again to remove)", () => toggleLine("b"));
+      mk("☐ Item", "Check-list box on this line (Ctrl/Cmd+Shift+9; again to remove)", () => toggleLine("c"));
       box.addEventListener("keydown", (e) => {
         if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
         e.preventDefault();
@@ -206,13 +206,20 @@
         if (c && box.contains(c)) { c.dataset.ck = c.dataset.ck === "1" ? "0" : "1"; emit(); }
       });
     }
-    // keyboard shortcuts: Ctrl/Cmd+B / I / U, Alt+Shift+A caps, S small caps, N normal, L bullet, K check box; Ctrl/Cmd+Enter = opts.onSubmit
+    // keyboard shortcuts (Word / Google Docs style; Alt+Shift+A/S/N/L/K also work): Ctrl/Cmd+Enter = opts.onSubmit
     box.addEventListener("keydown", (e) => {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && !e.shiftKey && !e.altKey && ["b", "i", "u"].includes(e.key.toLowerCase())) {
         e.preventDefault(); document.execCommand({ b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()]); emit(); return;
       }
       if (mod && e.key === "Enter" && opts.onSubmit) { e.preventDefault(); emit(); opts.onSubmit(); return; }
+      // Word / Google Docs style, Ctrl on Windows & Linux, Cmd on Mac
+      if (mod && !e.altKey) {
+        const w = e.shiftKey
+          ? { KeyA: () => wrapSel("text-transform:uppercase"), KeyK: () => wrapSel("font-variant:small-caps"), KeyL: () => lineToggle && lineToggle("b"), Digit9: () => lineToggle && lineToggle("c") }[e.code]
+          : (e.code === "Space" ? normal : (e.key === "\\" ? normal : null));
+        if (w) { e.preventDefault(); w(); emit(); return; }
+      }
       if (e.altKey && e.shiftKey && !mod) {
         const k = { KeyA: () => wrapSel("text-transform:uppercase"), KeyS: () => wrapSel("font-variant:small-caps"), KeyN: normal, KeyL: () => lineToggle && lineToggle("b"), KeyK: () => lineToggle && lineToggle("c") }[e.code];
         if (k) { e.preventDefault(); k(); emit(); }
