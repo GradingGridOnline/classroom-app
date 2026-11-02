@@ -607,6 +607,23 @@
     head.addEventListener("click", (e) => { if (e.target.closest("button, input, select, a, label")) return; if (collapsedSecs.has(key)) collapsedSecs.delete(key); else collapsedSecs.add(key); apply(); });
     apply();
   }
+  /** A ▾/▸ button at the start of a row: collapsing hides the text editor (a one-line preview shows instead) and `rest` (the details below). */
+  function foldable(row, editorEl, rest, key, previewText) {
+    const tg = h("button", "btn btn-ghost btn-small", "▾"); tg.type = "button"; tg.title = "Collapse or expand";
+    tg.style.cssText = "padding:1px 7px;min-width:1.8em;";
+    const pv = h("span", "hint"); pv.style.cssText = "flex:1;min-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;";
+    row.insertBefore(tg, row.firstChild);
+    if (editorEl) row.insertBefore(pv, editorEl);
+    const apply = () => {
+      const c = collapsedSecs.has(key);
+      tg.textContent = c ? "▸" : "▾";
+      if (editorEl) { editorEl.style.display = c ? "none" : ""; pv.style.display = c ? "" : "none"; if (c) pv.textContent = (previewText() || "").replace(/\s+/g, " ").trim() || "(empty)"; }
+      rest.forEach((e) => { e.style.display = c ? "none" : ""; });
+    };
+    const flip = () => { if (collapsedSecs.has(key)) collapsedSecs.delete(key); else collapsedSecs.add(key); apply(); };
+    tg.addEventListener("click", flip); pv.addEventListener("click", flip);
+    apply();
+  }
   function renderEditor(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
@@ -745,7 +762,9 @@
         nb.style.cssText = `margin-bottom:14px;border-left:5px solid ${look[1]};`;
         const nr = h("div", "category-manage-top-row");
         nr.appendChild(h("span", "qz-pill", look[0]));
-        nr.appendChild(QuizRich.editor({ text: note.text, rich: note.rich, placeholder: look[2], onChange: (t, r) => { note.text = t; note.rich = r; } }));
+        const ned = QuizRich.editor({ text: note.text, rich: note.rich, placeholder: look[2], onChange: (t, r) => { note.text = t; note.rich = r; } });
+        ned.style.minWidth = "24em";
+        nr.appendChild(ned);
         if (note.kind === "instructions") {
           const sl = h("label", "hint"); const sc = h("input"); sc.type = "checkbox"; sc.checked = !note.hide;
           sc.addEventListener("change", () => { note.hide = !sc.checked; });
@@ -762,6 +781,7 @@
           sec.notes = sec.notes.filter((x) => x !== note); rerender();
         }));
         nb.appendChild(nr);
+        foldable(nr, ned, [], `${testId}:n:${note.id}`, () => note.text);
         cur.appendChild(nb);
       };
       const grouped = new Set(sec.questions.map((x) => x.group).filter(Boolean));
@@ -803,16 +823,22 @@
         })).concat([{ label: "Add instructions above (new unit)", onClick: () => addUnit(false) }, { label: "Add instructions below (new unit)", onClick: () => addUnit(true) }]));
         pill.className = "qz-pill qz-pill-btn"; pill.style.cssText = "background:transparent;cursor:pointer;"; pill.title = "Click to change the question type";
         row.appendChild(pill);
+        let qEd = null;
         if (answersOnly) {
           const spacer = h("span");
           spacer.style.flex = "1";
           row.appendChild(spacer);
         } else {
-          row.appendChild(QuizRich.editor({ text: q.text, rich: q.rich, placeholder: "Question text", onChange: (t, r) => { q.text = t; q.rich = r; } }));
+          qEd = QuizRich.editor({ text: q.text, rich: q.rich, placeholder: "Question text", onChange: (t, r) => { q.text = t; q.rich = r; } });
+          qEd.style.cssText += "flex:3;min-width:26em;";
+          qEd.querySelector("[contenteditable]").style.minHeight = "3.6em";
+          row.appendChild(qEd);
         }
         if (!isSurvey) {
           row.appendChild(h("span", "hint", "pts"));
-          row.appendChild(textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input"));
+          const ptsIn = textInput(String(q.points), "", (v) => { q.points = Math.max(0, Number(v) || 0); regrade(); rerender(); }, "point-value-input");
+          ptsIn.style.cssText += "width:3.4em;min-width:0;flex:0 0 auto;padding:2px 4px;";
+          row.appendChild(ptsIn);
         }
         const insertQ = (type, below) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } const nq = sec.questions.pop(); if (q.group) nq.group = q.group; sec.questions.splice(qi + (below ? 1 : 0), 0, nq); regrade(); rerender(); };
         const kinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]];
@@ -896,6 +922,7 @@
           box.appendChild(button("+ Add alternate answer", "btn btn-ghost btn-small", () => { q.accepted.push(""); rerender(); }));
           box.appendChild(h("p", "hint", "Case, spacing and full-width/half-width forms are ignored; numbers match as numbers (42 = 042)."));
         }
+        foldable(row, qEd, Array.from(box.children).filter((c) => c !== row), `${testId}:q:${q.id}`, () => q.text);
         cur.appendChild(box);
         sec.notes.filter((x) => placedHere(x) && x.at === "after" && x.q === q.id).forEach(noteBox);
       });
