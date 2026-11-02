@@ -596,6 +596,17 @@
   }
 
   // ---------- the question editor ----------
+  // Quiz editor sections (settings, each question section) collapse by clicking their heading; the choice survives redraws.
+  const collapsedSecs = new Set();
+  function collapsible(section, body, key) {
+    const head = section.querySelector(".pres-section-head");
+    if (!head) return;
+    const base = head.textContent;
+    head.style.cursor = "pointer"; head.title = "Click to collapse or expand";
+    const apply = () => { const c = collapsedSecs.has(key); body.style.display = c ? "none" : ""; head.textContent = `${c ? "▸" : "▾"} ${base}`; };
+    head.addEventListener("click", (e) => { if (e.target.closest("button, input, select, a, label")) return; if (collapsedSecs.has(key)) collapsedSecs.delete(key); else collapsedSecs.add(key); apply(); });
+    apply();
+  }
   function renderEditor(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
@@ -648,6 +659,7 @@
         addRow("Show students their attempt number and attempts left", sa);
       }
       body.appendChild(h("p", "hint", "The timer starts when a student enters their School ID, is shown on their screen, and their answers are submitted automatically when it runs out (late answers are refused). If the QR code is already open, click Get Responses (in the Tests & Quizzes list) to publish changed settings."));
+      collapsible(section, body, `${testId}:settings`);
       container.appendChild(section);
     }
 
@@ -658,18 +670,20 @@
       const top = h("div", "panel-toolbar");
       top.appendChild(textInput(sec.title, "Section title", (v) => { sec.title = v; rerender(); }));
       const tb = h("div", "panel-toolbar-buttons");
-      tb.appendChild(button("+ Multiple choice", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); return; } rerender(); }));
-      tb.appendChild(button("+ Multiple select", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "multi"); } catch (e) { alert(e.message); return; } rerender(); }));
-      tb.appendChild(button("+ Fill in the blank", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "blank"); } catch (e) { alert(e.message); return; } rerender(); }));
-      tb.appendChild(button("+ Long answer", "btn btn-ghost btn-small", () => { try { ScoringModule.addQuizQuestion(quiz, sec, "para"); } catch (e) { alert(e.message); return; } rerender(); }));
-      tb.appendChild(button("+ Paragraph", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", kind: "passage", at: "end", q: "" }); rerender(); }));
-      tb.appendChild(button("+ Text box", "btn btn-ghost btn-small", () => { sec.notes.push({ id: newId("n"), text: "", kind: "text", at: "end", q: "" }); rerender(); }));
-      tb.appendChild(button("+ Instructions (new unit)", "btn btn-ghost btn-small", () => {
-        const last = sec.questions[sec.questions.length - 1];
-        sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: last ? "after" : "start", q: last ? last.id : "" });
-        try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); }
-        rerender();
-      }));
+      const addEnd = (type) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } rerender(); };
+      tb.appendChild(menuButton("+ Add", "#1f6fd1", [
+        { label: "Multiple choice", onClick: () => addEnd("mc") },
+        { label: "Multiple select", onClick: () => addEnd("multi") },
+        { label: "Fill in the blank", onClick: () => addEnd("blank") },
+        { label: "Long answer", onClick: () => addEnd("para") },
+        { label: "Paragraph", onClick: () => { sec.notes.push({ id: newId("n"), text: "", kind: "passage", at: "end", q: "" }); rerender(); } },
+        { label: "Text box", onClick: () => { sec.notes.push({ id: newId("n"), text: "", kind: "text", at: "end", q: "" }); rerender(); } },
+        { label: "Instructions (new unit)", onClick: () => {
+          const last = sec.questions[sec.questions.length - 1];
+          sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: last ? "after" : "start", q: last ? last.id : "" });
+          rerender();
+        } },
+      ]));
       if (quiz.sections.length > 1) {
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
           if (!confirm(`Delete "${sec.title}" and its ${sec.questions.length} question(s)?`)) return;
@@ -696,14 +710,37 @@
         text: ["Text box", "#6b7280", "Text for students: an explanation, a heading… (no question number)"],
         passage: ["Paragraph", "#7c3aed", "Paragraph for students to read (no question number); the questions attached below belong to it"],
       };
-      let cur = body; // where the next box goes: the section, or the Paragraph unit being drawn
+      let cur = body; // where the next box goes: the current instructions unit (or the section), or the Paragraph unit being drawn
+      let iu = null, iuCount = 0; // the instructions unit being drawn, and how many questions it holds so far
       const units = new Map();
+      const unitKinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]];
+      const closeUnit = () => { // an instructions unit with no questions yet shows an empty slot waiting for one
+        if (iu && iuCount === 0) {
+          const ph = h("div", "hint"); ph.style.cssText = "border:2px dashed #b8860b;border-radius:8px;padding:14px;margin:0 0 14px 18px;text-align:center;";
+          ph.textContent = "No questions in this unit yet — use “Add question” in the instructions box above.";
+          iu.appendChild(ph);
+        }
+        iu = null; iuCount = 0;
+      };
+      const addToUnit = (note, type) => { // a new question goes at the end of the instructions box's unit
+        try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; }
+        const nq = sec.questions.pop();
+        if (note.at === "end") { const lastQ = sec.questions[sec.questions.length - 1]; if (lastQ) { note.at = "after"; note.q = lastQ.id; } else { note.at = "start"; note.q = ""; } }
+        const items = QuizRich.flow(sec); const k = items.findIndex((it) => it.note === note);
+        let last = null;
+        for (let i = k + 1; i < items.length; i++) { const it = items[i]; if (it.note && it.note.kind === "instructions") break; if (it.q) last = it.q; }
+        let at;
+        if (last) at = sec.questions.indexOf(last) + 1;
+        else { let prev = null; for (let i = k - 1; i >= 0; i--) if (items[i].q) { prev = items[i].q; break; } at = prev ? sec.questions.indexOf(prev) + 1 : 0; }
+        sec.questions.splice(at, 0, nq); regrade(); rerender();
+      };
       const moveBtns = (what) => [
         button("↑", "btn btn-ghost btn-small", () => { if (QuizRich.move(sec, what, -1)) { regrade(); rerender(); } }),
         button("↓", "btn btn-ghost btn-small", () => { if (QuizRich.move(sec, what, 1)) { regrade(); rerender(); } }),
       ].map((b, i) => { b.title = i ? "Move down" : "Move up"; b.disabled = !QuizRich.canMove(sec, what, i ? 1 : -1); return b; });
       const noteBox = (note) => {
         const look = NOTE_LOOK[note.kind] || NOTE_LOOK.instructions;
+        if (note.kind === "instructions") { closeUnit(); iu = h("div", "qz-iunit"); iu.style.cssText = "border:2px solid #b8860b;border-radius:10px;padding:8px 8px 0;margin-bottom:16px;background:rgba(184,134,11,.06);"; body.appendChild(iu); iuCount = 0; cur = iu; }
         const nb = h("div", "category-manage-item qz-q");
         nb.style.cssText = `margin-bottom:14px;border-left:5px solid ${look[1]};`;
         const nr = h("div", "category-manage-top-row");
@@ -715,6 +752,7 @@
           sl.append(sc, document.createTextNode(" Show words")); sl.title = "Untick to hide the words from students and printouts (the unit and its dividing line stay)";
           nr.appendChild(sl);
         }
+        if (note.kind === "instructions") nr.appendChild(menuButton("Add question", look[1], unitKinds.map(([id, lab]) => ({ label: lab, onClick: () => addToUnit(note, id) }))));
         if (note.kind === "passage") {
           nr.appendChild(menuButton("Add question", look[1], [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].map(([id, lab]) => ({ label: lab, onClick: () => attach(note, id) }))));
         }
@@ -735,24 +773,25 @@
       const divs = QuizRich.dividers(sec);
       sec.questions.forEach((q, qi) => {
         n++;
-        cur = body;
+        cur = iu || body;
         if (q.group) {
           if (!units.has(q.group)) {
             const unit = h("div", "qz-unit"); unit.style.cssText = "border:2px solid #7c3aed;border-radius:10px;padding:8px 8px 0;margin-bottom:16px;background:rgba(124,58,237,.05);";
-            body.appendChild(unit); units.set(q.group, unit); cur = unit;
+            (iu || body).appendChild(unit); units.set(q.group, unit); cur = unit;
             const pn = sec.notes.find((x) => x.id === q.group && x.kind === "passage"); if (pn) noteBox(pn);
           }
           cur = units.get(q.group);
         }
         sec.notes.filter((x) => placedHere(x) && x.at === "before" && x.q === q.id).forEach(noteBox);
+        if (!q.group) cur = iu || body; // a new instructions box above this question just started a unit
+        iuCount++;
         const box = h("div", "category-manage-item qz-q " + (isChoiceQ(q) ? "qz-q-mc" : "qz-q-blank"));
         box.style.marginBottom = "14px";
-        if (q.group) box.style.marginLeft = "18px"; // attached to the Paragraph above
+        if (q.group || iu) box.style.marginLeft = "18px"; // attached to the Paragraph / instructions above
         const row = h("div", "category-manage-top-row");
         row.appendChild(h("span", "qz-qnum", `Q${n}`));
         const addUnit = (below) => { // a new instructions box starts a new unit; if no question follows it, it comes with a blank one
           sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: below ? "after" : "before", q: q.id });
-          if (below && qi === sec.questions.length - 1) { try { ScoringModule.addQuizQuestion(quiz, sec, "mc"); } catch (e) { alert(e.message); } }
           rerender();
         };
         const pill = menuButton(typeName(q), "#1f6fd1", [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].filter(([id]) => id !== q.type).map(([id, label]) => ({
@@ -794,7 +833,6 @@
         row.appendChild(button("Duplicate", "btn btn-ghost btn-small", () => { try { ScoringModule.duplicateQuizQuestion(quiz, sec, qi); } catch (e) { alert(e.message); return; } regrade(); rerender(); }));
         row.appendChild(button("×", "btn btn-ghost btn-small", () => { sec.questions.splice(qi, 1); regrade(); rerender(); }));
         box.appendChild(row);
-        if (divs.has(q.id)) { box.style.borderBottom = "1px solid var(--ink, #555)"; box.style.paddingBottom = "10px"; } // a thin line ends a unit
 
         if (isChoiceQ(q)) {
           const cnt = h("div", "mapping-row");
@@ -861,9 +899,11 @@
         cur.appendChild(box);
         sec.notes.filter((x) => placedHere(x) && x.at === "after" && x.q === q.id).forEach(noteBox);
       });
-      cur = body;
+      cur = iu || body;
       sec.notes.filter((x) => placedHere(x) && (x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q)))).forEach(noteBox);
-      if (sec.questions.length === 0 && sec.notes.length === 0) body.appendChild(h("p", "hint", "No questions yet — use the buttons above."));
+      closeUnit();
+      if (sec.questions.length === 0 && sec.notes.length === 0) body.appendChild(h("p", "hint", "No questions yet — use “+ Add” above."));
+      collapsible(section, body, `${testId}:${sec.id}`);
       container.appendChild(section);
     });
     container.appendChild(button("+ Add Section", "btn btn-ghost", () => { ScoringModule.addQuizSection(quiz); rerender(); }));
