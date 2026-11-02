@@ -252,6 +252,19 @@
     return out;
   }
 
+  /** Ids of the questions that END a unit (an instructions box starts the next unit, which has questions): a thin line is drawn below them. */
+  function dividers(sec) {
+    const items = flow(sec), out = new Set();
+    let lastQ = -1;
+    items.forEach((it, i) => { if (it.q) lastQ = i; });
+    let prev = null;
+    items.forEach((it, i) => {
+      if (it.q) prev = it.q;
+      else if (it.note && it.note.kind === "instructions" && prev && i < lastQ) out.add(prev.id);
+    });
+    return out;
+  }
+
   /** Top-level reading order with each Paragraph and its questions as ONE item: [{ note } | { q } | { group: passageNote, items: [...] }]. */
   function topItems(sec) {
     const items = flow(sec), out = [];
@@ -360,5 +373,5 @@
       onChange(toggleCheck(getRich(), Array.prototype.indexOf.call(el.querySelectorAll("span[data-ck]"), c)));
     });
   }
-  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, toggleCheck, bindChecks };
+  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, dividers, toggleCheck, bindChecks };
 })();
