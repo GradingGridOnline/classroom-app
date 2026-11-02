@@ -47,6 +47,8 @@ const JournalModule = {
 
   removeEntry(id) { this.entries = this.entries.filter((e) => e.id !== id); },
 
+  setPinned(id, v) { const e = this.entries.find((x) => x.id === id); if (e) { e.pinned = !!v; e.updatedAt = new Date().toISOString(); } return e; },
+
   cleanIds(ids) { return [...new Set((ids || []).filter((x) => x && x !== this.currentCourseId))]; },
 
   /** Copies a shared entry into the other courses it is shared with (and removes it from courses it was taken out of). Returns the course ids that failed. */
@@ -65,9 +67,9 @@ const JournalModule = {
         const d = (await storage.loadFile(this.fileName(id))) || {};
         const entries = Array.isArray(d.entries) ? d.entries : [];
         const copy = JSON.parse(JSON.stringify(e));
-        copy.sharedWith = members.filter((x) => x !== id); copy.syncedTo = copy.sharedWith.slice(); copy.students = [];
+        copy.sharedWith = members.filter((x) => x !== id); copy.syncedTo = copy.sharedWith.slice(); copy.students = []; copy.pinned = false;
         const i = entries.findIndex((x) => x.id === e.id);
-        if (i >= 0) { copy.students = entries[i].students || []; entries[i] = copy; } else entries.push(copy);
+        if (i >= 0) { copy.students = entries[i].students || []; copy.pinned = !!entries[i].pinned; entries[i] = copy; } else entries.push(copy);
         await storage.saveFile(this.fileName(id), { entries, settings: d.settings || { tags: [], snapshots: true } });
       } catch (err) { failed.push(id); }
     }

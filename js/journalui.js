@@ -109,6 +109,9 @@
 :is(#journal-panel, #journal-modal) .jr-donepill { cursor:pointer; font:inherit; font-weight:700; font-size:1rem; padding:6px 22px; border-radius:999px; border:2px solid currentColor; background:transparent; color:inherit; margin:4px 0; }
 :is(#journal-panel, #journal-modal) .jr-donepill.on { background:#3ddc84; border-color:#3ddc84; color:#06240f; box-shadow:0 0 12px 3px rgba(61,220,132,.8); }
 :is(#journal-panel, #journal-modal) .jr-entry.jr-isdone .jr-subject { text-decoration:line-through; opacity:.7; }
+:is(#journal-panel, #journal-modal) .jr-margin { border-top:3px double var(--line,#999); background:var(--jr-page,#fffdf6); color:var(--ink,#222); border-radius:0 0 8px 8px; padding:8px 14px 10px; margin:0 0 16px; }
+:is(#journal-panel, #journal-modal) .jr-margin-title { font-weight:700; margin:0 0 6px; }
+:is(#journal-panel, #journal-modal) .jr-margin .jr-entry .jr-text { -webkit-line-clamp:6; line-clamp:6; }
 `;
   document.head.appendChild(css);
 
@@ -204,7 +207,7 @@
     const subj = mk("input"); subj.placeholder = "Subject"; subj.value = st.subject; subj.style.width = "100%"; subj.addEventListener("input", () => { st.subject = subj.value; });
     f.appendChild(subj);
     const body = { text: entry ? entry.text : "", rich: entry ? entry.rich || "" : "" };
-    const text = QuizRich.editor({ text: body.text, rich: body.rich, placeholder: "Journal entry…", lists: true, onChange: (t, r) => { body.text = t; body.rich = r; } });
+    const text = QuizRich.editor({ text: body.text, rich: body.rich, placeholder: "Journal entry…", lists: true, onSubmit: () => { if (formSubmit) formSubmit(false); }, onChange: (t, r) => { body.text = t; body.rich = r; } });
     text.style.width = "100%"; text.style.boxSizing = "border-box";
     text.querySelector("[contenteditable]").style.minHeight = "110px";
     f.appendChild(text);
@@ -230,6 +233,7 @@
 
     const acts = mk("div", "jr-row");
     // Saves the form into the journal. quiet = called by Save Journal / leaving the tab: an empty form is just dropped.
+    let formSubmit = null;
     const submit = (quiet) => {
       if (!body.text.trim() && !st.subject.trim() && !st.tags.size) { if (!quiet) alert("Write something first."); return false; }
       if (!st.date) { if (!quiet) alert("Choose a date."); return false; }
@@ -241,7 +245,7 @@
       if (!quiet) { render(); if (onDone) onDone(); }
       return true;
     };
-    openForm = { submit };
+    openForm = { submit }; formSubmit = submit;
     acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => submit(false)));
     acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; openForm = null; if (onCancel) onCancel(); else render(); }));
     f.appendChild(acts);
@@ -269,6 +273,7 @@
     }
     const a = mk("div", "jr-row");
     a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; render(); }));
+    a.appendChild(btn(e.pinned ? "Unpin" : "📌 Pin to margin", "btn btn-ghost btn-small", () => { J.setPinned(e.id, !e.pinned); render(); }));
     a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); render(); } }));
     c.appendChild(a);
     return c;
@@ -296,6 +301,7 @@
       if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); box.appendChild(d); } }
       const a = mk("div", "jr-row jr-modal-row");
       a.appendChild(btn("Edit", "btn btn-primary btn-small", () => { box.innerHTML = ""; box.appendChild(buildForm(e, show, show)); }));
+      a.appendChild(btn(e.pinned ? "Unpin" : "📌 Pin to margin", "btn btn-ghost btn-small", () => { J.setPinned(e.id, !e.pinned); show(); render(); }));
       a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); close(); render(); } }));
       box.appendChild(a);
     }
@@ -470,9 +476,15 @@
       fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = new Set(); spread = null; render(); })); panel.appendChild(fb);
     }
     const want = [...tagFilter].map((t) => t.toLowerCase());
-    const sorted = J.entries.filter((e) => !want.length || e.tags.some((t) => want.includes(t.toLowerCase()))).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
-    if (!sorted.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
+    const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
+    const sorted = J.entries.filter((e) => !e.pinned && (!want.length || e.tags.some((t) => want.includes(t.toLowerCase())))).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
+    if (!sorted.length && !pinned.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
     if (sorted.length) panel.appendChild(buildBook(sorted));
+    if (pinned.length) {
+      const m = mk("div", "jr-margin"); m.appendChild(mk("div", "jr-margin-title", `📌 Margin — pinned entries (${pinned.length})`));
+      pinned.forEach((e) => m.appendChild(entryCard(e)));
+      panel.appendChild(m);
+    }
 
     [["journal-counts", countsSection()], ["journal-search", searchSection()], ["journal-settings", settingsSection()]].forEach(([id, sec]) => {
       panel.appendChild(sec);

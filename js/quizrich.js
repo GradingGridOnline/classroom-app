@@ -113,12 +113,12 @@
       bar.appendChild(b);
       return b;
     };
-    mk("<b>B</b>", "Bold", () => document.execCommand("bold"));
-    mk("<i>I</i>", "Italic", () => document.execCommand("italic"));
-    mk("<u>U</u>", "Underline", () => document.execCommand("underline"));
-    mk("AA", "ALL CAPS", () => wrapSel("text-transform:uppercase"));
-    mk('<span style="font-variant:small-caps">Aa</span>', "Small caps", () => wrapSel("font-variant:small-caps"));
-    mk("Normal", "Clear formatting from the selected text", normal);
+    mk("<b>B</b>", "Bold (Ctrl+B)", () => document.execCommand("bold"));
+    mk("<i>I</i>", "Italic (Ctrl+I)", () => document.execCommand("italic"));
+    mk("<u>U</u>", "Underline (Ctrl+U)", () => document.execCommand("underline"));
+    mk("AA", "ALL CAPS (Alt+Shift+A)", () => wrapSel("text-transform:uppercase"));
+    mk('<span style="font-variant:small-caps">Aa</span>', "Small caps (Alt+Shift+S)", () => wrapSel("font-variant:small-caps"));
+    mk("Normal", "Clear formatting from the selected text (Alt+Shift+N)", normal);
     const color = document.createElement("input");
     color.type = "color"; color.value = "#c0392b"; color.title = "Text colour (select text first)";
     color.style.cssText = "width:2.2em;height:1.9em;padding:0;border:1px solid var(--line,#aaa);background:none;cursor:pointer;";
@@ -132,6 +132,7 @@
       emit();
     });
     bar.appendChild(color);
+    let lineToggle = null;
     if (opts.lists) {
       const fixCk = () => box.querySelectorAll("span[data-ck]").forEach((c) => { c.contentEditable = "false"; });
       fixCk();
@@ -188,10 +189,11 @@
         if (L.kind) { unmark(L); L = caretLine(); }
         place(L, kind);
       };
-      mk("• List", "Bullet point on this line (click again to remove)", () => toggleLine("b"));
-      mk("☐ Item", "Check-list box on this line (click again to remove)", () => toggleLine("c"));
+      lineToggle = toggleLine;
+      mk("• List", "Bullet point on this line (Alt+Shift+L; again to remove)", () => toggleLine("b"));
+      mk("☐ Item", "Check-list box on this line (Alt+Shift+K; again to remove)", () => toggleLine("c"));
       box.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter" || e.shiftKey) return;
+        if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
         e.preventDefault();
         const L = caretLine(); const k = L ? L.kind : "";
         if (k && lineText(L) === "") { unmark(L); emit(); return; }
@@ -204,6 +206,18 @@
         if (c && box.contains(c)) { c.dataset.ck = c.dataset.ck === "1" ? "0" : "1"; emit(); }
       });
     }
+    // keyboard shortcuts: Ctrl/Cmd+B / I / U, Alt+Shift+A caps, S small caps, N normal, L bullet, K check box; Ctrl/Cmd+Enter = opts.onSubmit
+    box.addEventListener("keydown", (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.shiftKey && !e.altKey && ["b", "i", "u"].includes(e.key.toLowerCase())) {
+        e.preventDefault(); document.execCommand({ b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()]); emit(); return;
+      }
+      if (mod && e.key === "Enter" && opts.onSubmit) { e.preventDefault(); emit(); opts.onSubmit(); return; }
+      if (e.altKey && e.shiftKey && !mod) {
+        const k = { KeyA: () => wrapSel("text-transform:uppercase"), KeyS: () => wrapSel("font-variant:small-caps"), KeyN: normal, KeyL: () => lineToggle && lineToggle("b"), KeyK: () => lineToggle && lineToggle("c") }[e.code];
+        if (k) { e.preventDefault(); k(); emit(); }
+      }
+    });
     box.addEventListener("input", emit);
     box.addEventListener("paste", (e) => { // paste as plain text
       e.preventDefault();
