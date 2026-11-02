@@ -109,7 +109,11 @@
 :is(#journal-panel, #journal-modal) .jr-donepill { cursor:pointer; font:inherit; font-weight:700; font-size:1rem; padding:6px 22px; border-radius:999px; border:2px solid currentColor; background:transparent; color:inherit; margin:4px 0; }
 :is(#journal-panel, #journal-modal) .jr-donepill.on { background:#3ddc84; border-color:#3ddc84; color:#06240f; box-shadow:0 0 12px 3px rgba(61,220,132,.8); }
 :is(#journal-panel, #journal-modal) .jr-entry.jr-isdone .jr-subject { text-decoration:line-through; opacity:.7; }
-:is(#journal-panel, #journal-modal) .jr-margin { border-top:3px double var(--line,#999); background:var(--jr-page,#fffdf6); color:var(--ink,#222); border-radius:0 0 8px 8px; padding:8px 14px 10px; margin:0 0 16px; }
+:is(#journal-panel, #journal-modal) .jr-pinpill { cursor:pointer; font:inherit; font-size:.8rem; padding:1px 12px; margin:2px 6px; border-radius:999px; border:2px solid currentColor; background:transparent; color:inherit; }
+:is(#journal-panel, #journal-modal) .jr-pinpill.on { background:var(--ink,#222); color:var(--card,#fff); border-color:var(--ink,#222); }
+:is(#journal-panel, #journal-modal) .jr-mentry { border-bottom:1px dashed var(--line,#999); padding:3px 0; }
+:is(#journal-panel, #journal-modal) .jr-mentry > summary { cursor:pointer; display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+:is(#journal-panel, #journal-modal) .jr-margin { border-top:3px double var(--line,#999); background:var(--card,#fff); color:var(--ink,#222); border-radius:0 0 8px 8px; padding:8px 14px 10px; margin:0 0 16px; }
 :is(#journal-panel, #journal-modal) .jr-margin-title { font-weight:700; margin:0 0 6px; }
 :is(#journal-panel, #journal-modal) .jr-margin .jr-entry .jr-text { -webkit-line-clamp:6; line-clamp:6; }
 `;
@@ -252,6 +256,7 @@
     return f;
   }
 
+  const pinPill = (e, fn) => { const b = mk("button", `jr-pinpill${e.pinned ? " on" : ""}`, e.pinned ? "Pinned ✓ (click to unpin)" : "Pin to margin"); b.type = "button"; b.setAttribute("aria-pressed", String(!!e.pinned)); b.addEventListener("click", fn); return b; };
   const delMsg = (e) => ((e.sharedWith || []).length ? `Delete this entry here and in: ${e.sharedWith.map(courseName).join(", ")}?` : "Delete this entry?");
   function entryCard(e) {
     if (editingId === e.id) return buildForm(e);
@@ -273,7 +278,7 @@
     }
     const a = mk("div", "jr-row");
     a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; render(); }));
-    a.appendChild(btn(e.pinned ? "Unpin" : "📌 Pin to margin", "btn btn-ghost btn-small", () => { J.setPinned(e.id, !e.pinned); render(); }));
+    a.appendChild(pinPill(e, () => { J.setPinned(e.id, !e.pinned); render(); }));
     a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); render(); } }));
     c.appendChild(a);
     return c;
@@ -301,7 +306,7 @@
       if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); box.appendChild(d); } }
       const a = mk("div", "jr-row jr-modal-row");
       a.appendChild(btn("Edit", "btn btn-primary btn-small", () => { box.innerHTML = ""; box.appendChild(buildForm(e, show, show)); }));
-      a.appendChild(btn(e.pinned ? "Unpin" : "📌 Pin to margin", "btn btn-ghost btn-small", () => { J.setPinned(e.id, !e.pinned); show(); render(); }));
+      a.appendChild(pinPill(e, () => { J.setPinned(e.id, !e.pinned); show(); render(); }));
       a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); close(); render(); } }));
       box.appendChild(a);
     }
@@ -482,7 +487,13 @@
     if (sorted.length) panel.appendChild(buildBook(sorted));
     if (pinned.length) {
       const m = mk("div", "jr-margin"); m.appendChild(mk("div", "jr-margin-title", `📌 Margin — pinned entries (${pinned.length})`));
-      pinned.forEach((e) => m.appendChild(entryCard(e)));
+      pinned.forEach((e) => {
+        const d = mk("details", "jr-mentry"); if (editingId === e.id) d.open = true;
+        const sm = mk("summary"); sm.appendChild(mk("b", "", e.subject || "(no subject)")); sm.appendChild(mk("span", "jr-meta", `  ${e.date}${e.mode === "list" ? (e.done ? " · ✔ done" : " · to do") : ""}${e.tags.length ? " · " + e.tags.map((t) => "#" + t).join(" ") : ""}`));
+        sm.appendChild(pinPill(e, () => { J.setPinned(e.id, false); render(); }));
+        sm.querySelector(".jr-pinpill").addEventListener("click", (ev) => ev.stopPropagation());
+        d.append(sm, entryCard(e)); m.appendChild(d);
+      });
       panel.appendChild(m);
     }
 
