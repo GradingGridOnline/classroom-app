@@ -611,11 +611,13 @@
     if (!head) return;
     const base = head.textContent;
     head.style.cursor = "pointer"; head.title = "Click to collapse or expand";
-    const apply = () => { const c = collapsedSecs.has(key); body.style.display = c ? "none" : ""; head.textContent = `${c ? "▸" : "▾"} ${base}`; };
+    const apply = () => { const c = collapsedSecs.has(key); hideEl(body, c); head.textContent = `${c ? "▸" : "▾"} ${base}`; };
     head.addEventListener("click", (e) => { if (e.target.closest("button, input, select, a, label")) return; if (collapsedSecs.has(key)) collapsedSecs.delete(key); else collapsedSecs.add(key); apply(); });
     apply();
   }
   /** A ▾/▸ button at the start of a row: collapsing hides the text editor (a one-line preview shows instead) and `rest` (the details below). */
+  // .category-manage-item has display:flex !important, so hide with !important too
+  function hideEl(e, hide) { if (hide) e.style.setProperty("display", "none", "important"); else e.style.removeProperty("display"); }
   function foldable(row, editorEl, rest, key, previewText) {
     const tg = h("button", "btn btn-ghost btn-small", "▾"); tg.type = "button"; tg.title = "Collapse or expand";
     tg.style.cssText = "padding:1px 7px;min-width:1.8em;";
@@ -625,8 +627,8 @@
     const apply = () => {
       const c = collapsedSecs.has(key);
       tg.textContent = c ? "▸" : "▾";
-      if (editorEl) { editorEl.style.display = c ? "none" : ""; pv.style.display = c ? "" : "none"; if (c) pv.textContent = (previewText() || "").replace(/\s+/g, " ").trim() || "(empty)"; }
-      (typeof rest === "function" ? rest() : rest).forEach((e) => { e.style.display = c ? "none" : ""; });
+      if (editorEl) { hideEl(editorEl, c); pv.style.display = c ? "" : "none"; if (c) pv.textContent = (previewText() || "").replace(/\s+/g, " ").trim() || "(empty)"; }
+      (typeof rest === "function" ? rest() : rest).forEach((e) => { hideEl(e, c); });
     };
     const flip = () => { if (collapsedSecs.has(key)) collapsedSecs.delete(key); else collapsedSecs.add(key); apply(); };
     tg.addEventListener("click", flip); pv.addEventListener("click", flip);
