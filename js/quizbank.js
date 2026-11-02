@@ -534,6 +534,14 @@
     i.value = value;
     if (placeholder) i.placeholder = placeholder;
     i.addEventListener("change", () => onChange(i.value));
+    i.addEventListener("keydown", (e) => { // Enter moves to the next box down (not while an IME is composing)
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      const root = i.closest(".tab-panel") || document;
+      const fields = Array.from(root.querySelectorAll("input[type=text], input:not([type]), textarea, [contenteditable=true]")).filter((x) => x.offsetParent !== null);
+      const k = fields.indexOf(i);
+      if (k >= 0 && fields[k + 1]) fields[k + 1].focus();
+    });
     return i;
   }
   const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : isSurveyKind(quiz.kind) ? "Research Survey" : quiz.kind === "formative" ? "Formative Survey" : "Quiz");
@@ -618,11 +626,12 @@
       const c = collapsedSecs.has(key);
       tg.textContent = c ? "▸" : "▾";
       if (editorEl) { editorEl.style.display = c ? "none" : ""; pv.style.display = c ? "" : "none"; if (c) pv.textContent = (previewText() || "").replace(/\s+/g, " ").trim() || "(empty)"; }
-      rest.forEach((e) => { e.style.display = c ? "none" : ""; });
+      (typeof rest === "function" ? rest() : rest).forEach((e) => { e.style.display = c ? "none" : ""; });
     };
     const flip = () => { if (collapsedSecs.has(key)) collapsedSecs.delete(key); else collapsedSecs.add(key); apply(); };
     tg.addEventListener("click", flip); pv.addEventListener("click", flip);
     apply();
+    return apply;
   }
   function renderEditor(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
@@ -728,6 +737,7 @@
         passage: ["Paragraph", "#7c3aed", "Paragraph for students to read (no question number); the questions attached below belong to it"],
       };
       let cur = body; // where the next box goes: the current instructions unit (or the section), or the Paragraph unit being drawn
+      const lateFold = []; // fold functions to re-run once the whole unit has been drawn
       let iu = null, iuCount = 0; // the instructions unit being drawn, and how many questions it holds so far
       const units = new Map();
       const unitKinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]];
@@ -737,6 +747,7 @@
           ph.textContent = "No questions in this unit yet — use “Add question” in the instructions box above.";
           iu.appendChild(ph);
         }
+        else if (iu) { const ln = h("div"); ln.style.cssText = "border-top:1px solid var(--ink, #555);margin:0 0 10px 18px;"; iu.appendChild(ln); } // a thin line closes the unit
         iu = null; iuCount = 0;
       };
       const addToUnit = (note, type) => { // a new question goes at the end of the instructions box's unit
@@ -777,11 +788,21 @@
         }
         moveBtns({ note }).forEach((b) => nr.appendChild(b));
         nr.appendChild(button("×", "btn btn-ghost btn-small", () => {
+          if (note.kind === "instructions") { // the box is the unit: its questions go with it
+            const items = QuizRich.flow(sec); const k = items.findIndex((it) => it.note === note);
+            const gone = [];
+            for (let i = k + 1; i < items.length; i++) { const it = items[i]; if (it.note && it.note.kind === "instructions") break; if (it.q) gone.push(it.q); }
+            if (gone.length && !confirm(`Delete this instructions box and its ${gone.length} question${gone.length === 1 ? "" : "s"}?`)) return;
+            const ids = new Set(gone.map((x) => x.id));
+            sec.questions = sec.questions.filter((x) => !ids.has(x.id));
+            sec.notes = sec.notes.filter((x) => x !== note && !(x.q && ids.has(x.q)) && !(x.kind === "passage" && gone.some((g) => g.group === x.id)));
+            regrade(); rerender(); return;
+          }
           if (note.kind === "passage" && sec.questions.some((x) => x.group === note.id) && !confirm("Delete this paragraph? Its attached questions are kept as ordinary questions.")) return;
           sec.notes = sec.notes.filter((x) => x !== note); rerender();
         }));
         nb.appendChild(nr);
-        foldable(nr, ned, [], `${testId}:n:${note.id}`, () => note.text);
+        { const hostEl = cur; if (note.kind === "instructions" || note.kind === "passage") lateFold.push(foldable(nr, ned, () => Array.from(hostEl.children).filter((c) => c !== nb), `${testId}:n:${note.id}`, () => note.text)); else foldable(nr, ned, [], `${testId}:n:${note.id}`, () => note.text); }
         cur.appendChild(nb);
       };
       const grouped = new Set(sec.questions.map((x) => x.group).filter(Boolean));
@@ -865,11 +886,15 @@
           cnt.appendChild(h("label", "", "Number of options"));
           cnt.appendChild(textInput(String(q.choices.length), "", (v) => { ScoringModule.setQuizChoiceCount(q, v); regrade(); rerender(); }, "point-value-input"));
           box.appendChild(cnt);
+          let keySel = null; // the correct-answer drop-down: its labels follow the option text without redrawing (so Enter / Tab keep their place)
           if (!answersOnly) {
             q.choices.forEach((c, ci) => {
               const crow = h("div", "mapping-row qz-opt-row");
               crow.appendChild(h("label", "", optionLabel(style, ci)));
-              const inp = textInput(c, "Option text", (v) => { q.choices[ci] = v.trim(); rerender(); });
+              const inp = textInput(c, "Option text", (v) => {
+                q.choices[ci] = v.trim();
+                if (keySel && keySel.options[ci]) keySel.options[ci].textContent = q.choices[ci] ? `${optionLabel(style, ci)}: ${q.choices[ci]}` : optionLabel(style, ci);
+              });
               inp.style.flex = "1";
               crow.appendChild(inp);
               box.appendChild(crow);
@@ -889,7 +914,7 @@
             }
           } else {
           keyRow.appendChild(h("label", "", "✔ Correct answer"));
-          const sel = h("select");
+          const sel = h("select"); keySel = sel;
           q.choices.forEach((c, ci) => {
             const o = h("option", "", answersOnly || !c ? optionLabel(style, ci) : `${optionLabel(style, ci)}: ${c}`);
             o.value = String(ci);
@@ -929,6 +954,7 @@
       cur = iu || body;
       sec.notes.filter((x) => placedHere(x) && (x.at === "end" || ((x.at === "before" || x.at === "after") && !ids.has(x.q)))).forEach(noteBox);
       closeUnit();
+      lateFold.forEach((f) => f());
       if (sec.questions.length === 0 && sec.notes.length === 0) body.appendChild(h("p", "hint", "No questions yet — use “+ Add” above."));
       collapsible(section, body, `${testId}:${sec.id}`);
       container.appendChild(section);
