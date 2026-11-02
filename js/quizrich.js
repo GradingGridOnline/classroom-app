@@ -265,6 +265,18 @@
     return out;
   }
 
+  /** Questions cannot stand alone: any questions that come before the section's first Instructions box get an (empty) one. Returns true if it added it. */
+  function ensureUnits(sec) {
+    const items = flow(sec);
+    const firstQ = items.findIndex((it) => it.q);
+    if (firstQ < 0) return false;
+    const firstInstr = items.findIndex((it) => it.note && it.note.kind === "instructions");
+    if (firstInstr >= 0 && firstInstr < firstQ) return false;
+    sec.notes = sec.notes || [];
+    sec.notes.unshift({ id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, text: "", kind: "instructions", at: "start", q: "" });
+    return true;
+  }
+
   /** Top-level reading order with each Paragraph and its questions as ONE item: [{ note } | { q } | { group: passageNote, items: [...] }]. */
   function topItems(sec) {
     const items = flow(sec), out = [];
@@ -373,5 +385,5 @@
       onChange(toggleCheck(getRich(), Array.prototype.indexOf.call(el.querySelectorAll("span[data-ck]"), c)));
     });
   }
-  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, dividers, toggleCheck, bindChecks };
+  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, dividers, ensureUnits, toggleCheck, bindChecks };
 })();

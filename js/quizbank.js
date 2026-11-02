@@ -690,6 +690,7 @@
     }
 
     let n = 0;
+    quiz.sections.forEach((sec) => { sec.notes = sec.notes || []; QuizRich.ensureUnits(sec); });
     quiz.sections.forEach((sec, si) => {
       const { section, body } = makePresSection(`Section ${si + 1}: ${sec.title || "(untitled)"}`);
       section.classList.add("qz-sec-q" + (si % 4));
@@ -697,19 +698,11 @@
       top.appendChild(textInput(sec.title, "Section title", (v) => { sec.title = v; rerender(); }));
       const tb = h("div", "panel-toolbar-buttons");
       const addEnd = (type) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } rerender(); };
-      tb.appendChild(menuButton("+ Add", "#1f6fd1", [
-        { label: "Multiple choice", onClick: () => addEnd("mc") },
-        { label: "Multiple select", onClick: () => addEnd("multi") },
-        { label: "Fill in the blank", onClick: () => addEnd("blank") },
-        { label: "Long answer", onClick: () => addEnd("para") },
-        { label: "Paragraph", onClick: () => { sec.notes.push({ id: newId("n"), text: "", kind: "passage", at: "end", q: "" }); rerender(); } },
-        { label: "Text box", onClick: () => { sec.notes.push({ id: newId("n"), text: "", kind: "text", at: "end", q: "" }); rerender(); } },
-        { label: "Instructions (new unit)", onClick: () => {
-          const last = sec.questions[sec.questions.length - 1];
-          sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: last ? "after" : "start", q: last ? last.id : "" });
-          rerender();
-        } },
-      ]));
+      tb.appendChild(button("+ Instructions", "btn btn-ghost btn-small", () => { // a unit: the instructions box holds its questions
+        const last = sec.questions[sec.questions.length - 1];
+        sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: last ? "after" : "start", q: last ? last.id : "" });
+        rerender();
+      }));
       if (quiz.sections.length > 1) {
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
           if (!confirm(`Delete "${sec.title}" and its ${sec.questions.length} question(s)?`)) return;
@@ -750,6 +743,15 @@
         else if (iu) { const ln = h("div"); ln.style.cssText = "border-top:1px solid var(--ink, #555);margin:0 0 10px 18px;"; iu.appendChild(ln); } // a thin line closes the unit
         iu = null; iuCount = 0;
       };
+      const addNoteToUnit = (note, kind) => { // a Paragraph / text box goes at the end of the instructions box's unit
+        if (note.at === "end") { const lastQ = sec.questions[sec.questions.length - 1]; if (lastQ) { note.at = "after"; note.q = lastQ.id; } else { note.at = "start"; note.q = ""; } }
+        const items = QuizRich.flow(sec); const k = items.findIndex((it) => it.note === note);
+        let last = null;
+        for (let i = k + 1; i < items.length; i++) { const it = items[i]; if (it.note && it.note.kind === "instructions") break; if (it.q) last = it.q; }
+        const anchor = last ? { at: "after", q: last.id } : { at: note.at, q: note.q };
+        sec.notes.push({ id: newId("n"), text: "", kind, at: anchor.at, q: anchor.q });
+        rerender();
+      };
       const addToUnit = (note, type) => { // a new question goes at the end of the instructions box's unit
         try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; }
         const nq = sec.questions.pop();
@@ -782,7 +784,7 @@
           sl.append(sc, document.createTextNode(" Show words")); sl.title = "Untick to hide the words from students and printouts (the unit and its dividing line stay)";
           nr.appendChild(sl);
         }
-        if (note.kind === "instructions") nr.appendChild(menuButton("Add question", look[1], unitKinds.map(([id, lab]) => ({ label: lab, onClick: () => addToUnit(note, id) }))));
+        if (note.kind === "instructions") nr.appendChild(menuButton("Add question", look[1], [...unitKinds.map(([id, lab]) => ({ label: lab, onClick: () => addToUnit(note, id) })), { label: "Paragraph", onClick: () => addNoteToUnit(note, "passage") }, { label: "Text box", onClick: () => addNoteToUnit(note, "text") }]));
         if (note.kind === "passage") {
           nr.appendChild(menuButton("Add question", look[1], [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]].map(([id, lab]) => ({ label: lab, onClick: () => attach(note, id) }))));
         }
@@ -798,7 +800,14 @@
             sec.notes = sec.notes.filter((x) => x !== note && !(x.q && ids.has(x.q)) && !(x.kind === "passage" && gone.some((g) => g.group === x.id)));
             regrade(); rerender(); return;
           }
-          if (note.kind === "passage" && sec.questions.some((x) => x.group === note.id) && !confirm("Delete this paragraph? Its attached questions are kept as ordinary questions.")) return;
+          if (note.kind === "passage") {
+            const gone = sec.questions.filter((x) => x.group === note.id);
+            if (gone.length && !confirm(`Delete this paragraph and its ${gone.length} question${gone.length === 1 ? "" : "s"}?`)) return;
+            const ids = new Set(gone.map((x) => x.id));
+            sec.questions = sec.questions.filter((x) => !ids.has(x.id));
+            sec.notes = sec.notes.filter((x) => x !== note && !(x.q && ids.has(x.q)));
+            regrade(); rerender(); return;
+          }
           sec.notes = sec.notes.filter((x) => x !== note); rerender();
         }));
         nb.appendChild(nr);
