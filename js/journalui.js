@@ -112,6 +112,7 @@
 `;
   document.head.appendChild(css);
 
+  let openForm = null;    // the form on screen: { submit(quiet) }
   let editingId = null;   // entry being edited
   let creating = false;   // new-entry form open
   let spread = null;    // which two-page spread is showing (null = open at the latest entry)
@@ -228,17 +229,21 @@
     drawTags(); f.appendChild(tagBox);
 
     const acts = mk("div", "jr-row");
-    acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => {
-      if (!st.date) { alert("Choose a date."); return; }
-      if (!body.text.trim() && !st.subject.trim() && !st.tags.size) { alert("Write something first."); return; }
+    // Saves the form into the journal. quiet = called by Save Journal / leaving the tab: an empty form is just dropped.
+    const submit = (quiet) => {
+      if (!body.text.trim() && !st.subject.trim() && !st.tags.size) { if (!quiet) alert("Write something first."); return false; }
+      if (!st.date) { if (!quiet) alert("Choose a date."); return false; }
       const data = { date: st.date, subject: st.subject, text: body.text, rich: body.rich, students: [...st.students], tags: [...st.tags], mode: st.mode, done: st.done, sharedWith: [...st.courses] };
       let saved;
       if (entry) saved = J.updateEntry(entry.id, data); else { saved = J.addEntry(data); spread = null; }
       if (saved && J.syncShared && ((saved.sharedWith || []).length || (saved.syncedTo || []).length)) J.syncShared(saved).then(warnFail);
-      editingId = null; creating = false; render();
-      if (onDone) onDone();
-    }));
-    acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; if (onCancel) onCancel(); else render(); }));
+      editingId = null; creating = false; openForm = null;
+      if (!quiet) { render(); if (onDone) onDone(); }
+      return true;
+    };
+    openForm = { submit };
+    acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => submit(false)));
+    acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; openForm = null; if (onCancel) onCancel(); else render(); }));
     f.appendChild(acts);
     return f;
   }
@@ -455,7 +460,7 @@
     bar.appendChild(left);
     const right = mk("div", "panel-toolbar-buttons"); right.appendChild(status);
     right.appendChild(btn("Save Journal", "btn btn-primary", async () => {
-      try { status.textContent = "Saving…"; await J.save(); status.textContent = "Saved ✓"; } catch (e) { status.textContent = `Couldn't save: ${e.message}`; }
+      try { status.textContent = "Saving…"; if (openForm && openForm.submit(true)) render(); await J.save(); status.textContent = "Saved ✓"; } catch (e) { status.textContent = `Couldn't save: ${e.message}`; }
     }));
     bar.appendChild(right); panel.appendChild(bar);
 
@@ -486,6 +491,7 @@
 
   const origShowTab = window.showTab;
   window.showTab = function (tab) {
+    if (tab !== "journal" && !panel.hidden && openForm && openForm.submit(true)) { try { render(); } catch (e) {} }
     origShowTab.apply(this, arguments);
     const on = tab === "journal";
     panel.hidden = !on;
