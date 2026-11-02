@@ -126,9 +126,9 @@
   const otherCourses = () => (window.CoursesModule ? CoursesModule.activeCourses() : []).filter((c) => c.id !== J.currentCourseId);
   const warnFail = (failed) => { if (failed && failed.length) alert(`Couldn't update the shared entry in: ${failed.map(courseName).join(", ")}.`); };
   /** Marks / unmarks a whole entry as done (check-list mode). */
-  const setDone = (e, v) => { e.done = v; e.updatedAt = new Date().toISOString(); J.syncShared(e).then(warnFail); render(); };
+  const setDone = (e, v) => { e.done = v; e.updatedAt = new Date().toISOString(); (J.syncShared ? J.syncShared(e).then(warnFail) : null); render(); };
   const donePill = (e, onFlip) => { const b = mk("button", `jr-donepill${e.done ? " on" : ""}`, e.done ? "✔ Done" : "○ To do"); b.type = "button"; b.setAttribute("aria-pressed", String(!!e.done)); b.addEventListener("click", () => onFlip(!e.done)); return b; };
-  const bindBoxes = (el, e, after) => QuizRich.bindChecks(el, () => e.rich || "", (nr) => { e.rich = nr; e.text = QuizRich.plain(nr); e.updatedAt = new Date().toISOString(); J.syncShared(e).then(warnFail); after(); });
+  const bindBoxes = (el, e, after) => QuizRich.bindChecks && QuizRich.bindChecks(el, () => e.rich || "", (nr) => { e.rich = nr; e.text = QuizRich.plain(nr); e.updatedAt = new Date().toISOString(); (J.syncShared ? J.syncShared(e).then(warnFail) : null); after(); });
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const attOk = () => AttendanceModule.currentCourseId === J.currentCourseId;
   const scoreOk = () => ScoringModule.currentCourseId === J.currentCourseId;
@@ -234,7 +234,7 @@
       const data = { date: st.date, subject: st.subject, text: body.text, rich: body.rich, students: [...st.students], tags: [...st.tags], mode: st.mode, done: st.done, sharedWith: [...st.courses] };
       let saved;
       if (entry) saved = J.updateEntry(entry.id, data); else { saved = J.addEntry(data); spread = null; }
-      if (saved && (saved.sharedWith.length || (saved.syncedTo || []).length)) J.syncShared(saved).then(warnFail);
+      if (saved && J.syncShared && ((saved.sharedWith || []).length || (saved.syncedTo || []).length)) J.syncShared(saved).then(warnFail);
       editingId = null; creating = false; render();
       if (onDone) onDone();
     }));
@@ -264,7 +264,7 @@
     }
     const a = mk("div", "jr-row");
     a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; render(); }));
-    a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { J.removeShared(e); J.removeEntry(e.id); render(); } }));
+    a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); render(); } }));
     c.appendChild(a);
     return c;
   }
@@ -283,7 +283,7 @@
       box.innerHTML = "";
       const head = mk("div", "jr-modal-head");
       const hl = mk("div"); hl.appendChild(mk("h3", "jr-modal-title", e.subject || "(no subject)")); hl.appendChild(mk("div", "jr-meta", e.date + ((e.sharedWith || []).length ? ` · also in: ${e.sharedWith.map(courseName).join(", ")}` : "")));
-      if (e.mode === "list") hl.appendChild(donePill(e, (v) => { e.done = v; e.updatedAt = new Date().toISOString(); J.syncShared(e).then(warnFail); show(); render(); }));
+      if (e.mode === "list") hl.appendChild(donePill(e, (v) => { e.done = v; e.updatedAt = new Date().toISOString(); (J.syncShared ? J.syncShared(e).then(warnFail) : null); show(); render(); }));
       head.appendChild(hl); head.appendChild(btn("✕ Close", "btn btn-ghost btn-small", close)); box.appendChild(head);
       if (e.tags.length) { const t = mk("div", "jr-modal-row"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); box.appendChild(t); }
       box.appendChild(mk("div", "jr-meta jr-modal-row", e.students.length ? `Students (${e.students.length}): ${e.students.map(sName).join(", ")}` : "Whole class"));
@@ -291,7 +291,7 @@
       if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); box.appendChild(d); } }
       const a = mk("div", "jr-row jr-modal-row");
       a.appendChild(btn("Edit", "btn btn-primary btn-small", () => { box.innerHTML = ""; box.appendChild(buildForm(e, show, show)); }));
-      a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { J.removeShared(e); J.removeEntry(e.id); close(); render(); } }));
+      a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); close(); render(); } }));
       box.appendChild(a);
     }
     show();
