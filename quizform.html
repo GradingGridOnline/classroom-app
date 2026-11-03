@@ -25,6 +25,8 @@
     .block h2 { margin:0 0 12px; font:700 1.1rem Georgia,serif; color:var(--dark); }
     .note { white-space:pre-wrap; font-style:italic; margin:0 0 14px; padding:6px 10px; border-left:4px solid var(--line); }
     .note.text { font-style:normal; border-left:0; padding:0; }
+    span[data-bl] { display:inline-block; min-width:1.5em; text-align:right; font-weight:600; }
+    span[data-qref] { font-weight:700; white-space:nowrap; }
     .note.text.bordered { border:1.5px solid var(--ink,#333); border-radius:4px; padding:8px 10px; }
     .note.passage { font-style:normal; background:var(--chip,#eef3ee); border:1.5px solid var(--line); border-left-width:4px; border-radius:8px; padding:10px 12px; }
     hr.qdiv { border:0; border-top:2px solid var(--line); margin:4px 0 18px; }
@@ -129,6 +131,7 @@
 
       function render() {
         const box = $("questions"); box.textContent = ""; box.classList.remove("locked"); let num = 0;
+        if (window.QuizRich && QuizRich.refsFromQuiz) QuizRich.refsFromQuiz(form.config);
         const style = form.config.labelStyle || "upper";
         const answersOnly = form.config.kind === "answers";
         form.config.sections.forEach((sec) => {

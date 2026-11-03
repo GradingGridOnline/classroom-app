@@ -642,6 +642,7 @@
     const isSurvey = isSurveyKind(quiz.kind);
     const style = quiz.settings.labelStyle;
     container.innerHTML = "";
+    if (window.QuizRich && QuizRich.refsFromQuiz) QuizRich.refsFromQuiz(quiz);
     const rerender = () => renderScoringToolView(tool, container);
     const regrade = () => ScoringModule.regradeQuiz(tool.id, testId);
 
@@ -776,7 +777,7 @@
         nb.style.cssText = `margin-bottom:14px;border-left:5px solid ${look[1]};`;
         const nr = h("div", "category-manage-top-row");
         nr.appendChild(h("span", "qz-pill", look[0]));
-        const ned = QuizRich.editor({ text: note.text, rich: note.rich, placeholder: look[2], onChange: (t, r) => { note.text = t; note.rich = r; } });
+        const ned = QuizRich.editor({ text: note.text, rich: note.rich, placeholder: look[2], bullets: true, onChange: (t, r) => { note.text = t; note.rich = r; } });
         ned.style.minWidth = "24em";
         nr.appendChild(ned);
         if (note.kind === "instructions") {
@@ -847,7 +848,9 @@
         box.style.marginBottom = "14px";
         if (q.group || iu) box.style.marginLeft = "18px"; // attached to the Paragraph / instructions above
         const row = h("div", "category-manage-top-row");
-        row.appendChild(h("span", "qz-qnum", `Q${n}`));
+        { const qp = h("span", "qz-qnum", `Q${n}`); qp.draggable = true; qp.style.cursor = "grab"; qp.title = "Drag this into a text box to refer to this question; the reference follows the question's number";
+          qp.addEventListener("dragstart", (e) => { e.dataTransfer.setData("application/x-qref", q.id); e.dataTransfer.setData("text/plain", `(Q${n})`); e.dataTransfer.effectAllowed = "copy"; });
+          row.appendChild(qp); }
         const addUnit = (below) => { // a new instructions box starts a new unit; if no question follows it, it comes with a blank one
           sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: below ? "after" : "before", q: q.id });
           rerender();
@@ -867,7 +870,7 @@
           spacer.style.flex = "1";
           row.appendChild(spacer);
         } else {
-          qEd = QuizRich.editor({ text: q.text, rich: q.rich, placeholder: "Question text", onChange: (t, r) => { q.text = t; q.rich = r; } });
+          qEd = QuizRich.editor({ text: q.text, rich: q.rich, placeholder: "Question text", bullets: true, onChange: (t, r) => { q.text = t; q.rich = r; } });
           qEd.style.cssText += "flex:3;min-width:26em;";
           qEd.querySelector("[contenteditable]").style.minHeight = "3.6em";
           row.appendChild(qEd);

@@ -25,6 +25,7 @@
 
   function flatten(quiz) {
     const out = []; let n = 0;
+    if (window.QuizRich && QuizRich.refsFromQuiz) QuizRich.refsFromQuiz(quiz);
     (quiz.sections || []).forEach((sec, si) => {
       out.push({ section: sec, si });
       const dv = window.QuizRich && QuizRich.dividers ? QuizRich.dividers(sec) : new Set();
@@ -161,7 +162,7 @@ ol.opts.cols{display:grid;grid-template-columns:1fr 1fr;gap:${o.optGap}px 1.4em}
 .lab{font-weight:600;margin-right:.2em}.bx{display:inline-block;width:.8em;height:.8em;border:1.2px solid #000;margin-right:.35em;vertical-align:-1px}
 .bb{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border:1.2px solid #000;border-radius:50%;font-size:.85em;padding:0 .25em}.bb.sq{border-radius:3px}
 .ans{margin:8px 0 0 2.3em}.blanklines{margin:6px 0 0 2.3em}.wl{border-bottom:1px solid #000;height:1.9em}
-.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}.note.bordered{border:1.2px solid #000;padding:2mm 3mm}.udiv{border-top:1px solid #000;margin:8px 0 6px}.note.instructions{font-style:normal;text-align:left;border:1px solid #000;padding:5px 10px}.note.instructions .itl{font-weight:700;font-style:italic;text-align:left;margin-bottom:2px}.note.text{font-style:normal;border-left:0;padding:0}.note.passage{font-style:normal;border:1px solid #000;border-left-width:3px;padding:6px 10px}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msbox{flex:1;border:1.2px solid #000;border-radius:3px}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
+.mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600}span[data-qref]{font-weight:700}.note.bordered{border:1.2px solid #000;padding:2mm 3mm}.udiv{border-top:1px solid #000;margin:8px 0 6px}.note.instructions{font-style:normal;text-align:left;border:1px solid #000;padding:5px 10px}.note.instructions .itl{font-weight:700;font-style:italic;text-align:left;margin-bottom:2px}.note.text{font-style:normal;border-left:0;padding:0}.note.passage{font-style:normal;border:1px solid #000;border-left-width:3px;padding:6px 10px}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msbox{flex:1;border:1.2px solid #000;border-radius:3px}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
 .pn{text-align:center;font-size:.85em;margin-top:auto;padding-top:8px}
 ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 @media screen{body{background:#cfcfcf;padding:10px}.sheet{background:#fff;width:${W}mm;min-height:${H}mm;margin:0 auto 12px;padding:${o.margin}mm;box-shadow:0 1px 6px rgba(0,0,0,.4);display:flex;flex-direction:column}${o.pageBorder ? ".sheet{padding:calc(" + o.margin + "mm + 6mm) !important}" : ""}}

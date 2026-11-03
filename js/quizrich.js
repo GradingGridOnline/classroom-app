@@ -6,6 +6,39 @@
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const COLOR = /^(#[0-9a-f]{3,8}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/i;
 
+  // ----- list markers (dots, numbers, roman numerals, triangles, letters) and question references -----
+  const BL = { dot: 1, tri: 1, num: 1, romU: 1, romL: 1, letU: 1, letL: 1 };
+  const BL_MENU = [["dot", "•  Dots"], ["num", "1.  Numbers"], ["romU", "I.  Roman numerals (capital)"], ["romL", "i.  Roman numerals (small)"], ["tri", "▸  Triangles"], ["letU", "A.  Letters (capital)"], ["letL", "a.  Letters (small)"]];
+  const romanOf = (n) => { let r = ""; [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]].forEach(([v, t]) => { while (n >= v) { r += t; n -= v; } }); return r; };
+  const lettersOf = (n) => { let r = ""; while (n > 0) { n--; r = String.fromCharCode(97 + (n % 26)) + r; n = Math.floor(n / 26); } return r; };
+  const markLabel = (k, n) => k === "dot" ? "•" : k === "tri" ? "▸" : k === "num" ? n + "." : k === "romU" ? romanOf(n) + "." : k === "romL" ? romanOf(n).toLowerCase() + "." : k === "letU" ? lettersOf(n).toUpperCase() + "." : lettersOf(n) + ".";
+  let REFS = {};
+  /** Question numbers by question id for what is about to be shown ("Q42"); a reference to a question shows its current number. */
+  function refsFromQuiz(quiz) {
+    const m = {}; let n = 0;
+    ((quiz && quiz.sections) || []).forEach((sec) => flow(sec).forEach((it) => { if (it.q) { n++; m[it.q.id] = "Q" + n; } }));
+    REFS = m; return m;
+  }
+  /** Writes the numbers/letters of list markers (consecutive marked lines of one kind count up) and the question numbers of references. */
+  function decorate(root) {
+    const doc = root.ownerDocument || document;
+    const w = doc.createTreeWalker(root, 5);
+    let last = null, brs = 0, n = 0, x;
+    while ((x = w.nextNode())) {
+      if (x.nodeType === 3) { if (!(x.parentNode && x.parentNode.closest && x.parentNode.closest("span[data-bl],span[data-qref]"))) brs += (x.data.match(/\n/g) || []).length; continue; }
+      if (x.tagName === "BR") { brs++; continue; }
+      if (x.hasAttribute("data-bl")) {
+        const k = x.getAttribute("data-bl");
+        n = last === k && brs === 1 ? n + 1 : 1; last = k; brs = 0;
+        x.textContent = markLabel(k, n);
+      } else if (x.hasAttribute("data-qref")) {
+        const r = REFS[x.getAttribute("data-qref")];
+        x.textContent = `(${r || "Q?"})`;
+      }
+    }
+  }
+  const labelize = (html) => { if (!/data-(bl|qref)=/.test(html)) return html; const d = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html"); decorate(d.body); return d.body.innerHTML; };
+
   /** Turns any HTML into the safe subset: <b> <i> <u> <br> and <span style="color/text-transform/font-variant">. */
   function clean(html) {
     if (!html) return "";
@@ -19,6 +52,8 @@
         let inner = walk(n);
         if (tag === "br") { out += "<br>"; return; }
         if (tag === "span" && n.hasAttribute("data-ck")) { out += `<span data-ck="${n.getAttribute("data-ck") === "1" ? 1 : 0}"></span>`; return; } // a checklist box (journal)
+        if (tag === "span" && n.hasAttribute("data-bl")) { const k = n.getAttribute("data-bl"); if (BL[k]) out += `<span data-bl="${k}"></span>`; return; } // a list marker
+        if (tag === "span" && n.hasAttribute("data-qref")) { const id = (n.getAttribute("data-qref") || "").replace(/[^\w-]/g, ""); if (id) out += `<span data-qref="${id}"></span>`; return; } // a question reference
         if (tag === "div" || tag === "p") { out += (out && !/<br>$/.test(out) ? "<br>" : "") + inner; return; }
         if (tag === "script" || tag === "style") return;
         const st = n.style || {};
@@ -46,13 +81,14 @@
   /** Plain text of an html string (line breaks kept). */
   function plain(html) {
     const doc = new DOMParser().parseFromString("<body>" + String(html || "").replace(/<span data-ck="1"><\/span>/g, "☑ ").replace(/<span data-ck="0"><\/span>/g, "☐ ").replace(/<br\s*\/?>/gi, "\n") + "</body>", "text/html");
+    decorate(doc.body);
     return doc.body.textContent || "";
   }
 
   /** The html to show for something with { text, rich }: the cleaned rich version if present, otherwise the escaped text. */
   function show(item) {
     const r = item && item.rich ? clean(item.rich) : "";
-    return r || esc((item && item.text) || "").replace(/\n/g, "<br>");
+    return r ? labelize(r) : esc((item && item.text) || "").replace(/\n/g, "<br>");
   }
 
   /** A small editor: toolbar + editable box. onChange(plainText, richHtmlOrEmpty). */
@@ -67,6 +103,13 @@
     box.dataset.placeholder = opts.placeholder || "";
     box.style.cssText = "min-height:2.2em;padding:6px 8px;border:1px solid var(--line,#aaa);border-radius:6px;background:var(--card,#fff);color:var(--ink,#111);white-space:pre-wrap;overflow-wrap:anywhere;";
     box.innerHTML = opts.rich ? clean(opts.rich) : esc(opts.text || "").replace(/\n/g, "<br>");
+    if (!document.getElementById("qrich-style2")) {
+      const st2 = document.createElement("style"); st2.id = "qrich-style2";
+      st2.textContent = "span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600;user-select:none}span[data-qref]{display:inline-block;padding:0 6px;border:1px solid var(--line,#999);border-radius:10px;background:var(--chip,rgba(120,150,255,.18));font-size:.92em;font-weight:600;white-space:nowrap;user-select:none}";
+      document.head.appendChild(st2);
+    }
+    const fixMarks = () => { decorate(box); box.querySelectorAll("span[data-bl],span[data-qref]").forEach((c) => { c.contentEditable = "false"; }); };
+    fixMarks();
     if (!document.getElementById("qrich-style")) {
       const st = document.createElement("style");
       st.id = "qrich-style";
@@ -74,6 +117,7 @@
       document.head.appendChild(st);
     }
     const emit = () => {
+      fixMarks();
       const c = clean(box.innerHTML);
       const p = plain(c);
       const formatted = /<(b|i|u|span)[ >]/.test(c);
@@ -133,7 +177,7 @@
     });
     bar.appendChild(color);
     let lineToggle = null;
-    if (opts.lists) {
+    if (opts.lists || opts.bullets) {
       const fixCk = () => box.querySelectorAll("span[data-ck]").forEach((c) => { c.contentEditable = "false"; });
       fixCk();
       const idx = (n) => Array.prototype.indexOf.call(n.parentNode.childNodes, n);
@@ -156,31 +200,36 @@
           if (n === r.startContainer) break;
         }
         let target = null, toff = 0;
-        const descend = (c) => { while (c && c.nodeType === 1 && c.tagName !== "BR" && !c.hasAttribute("data-ck")) c = c.firstChild; return c && !(c.nodeType === 1 && c.tagName === "BR") ? c : null; };
+        const descend = (c) => { while (c && c.nodeType === 1 && c.tagName !== "BR" && !c.hasAttribute("data-ck") && !c.hasAttribute("data-bl")) c = c.firstChild; return c && !(c.nodeType === 1 && c.tagName === "BR") ? c : null; };
         if (start.node.nodeType === 3) {
           if (start.off < start.node.data.length) { target = start.node; toff = start.off; }
           else { let x = start.node; while (x && x !== box && !x.nextSibling) x = x.parentNode; target = x && x !== box ? descend(x.nextSibling) : null; }
         } else target = descend(start.node.childNodes[start.off]);
         let kind = "", el = null;
-        if (target && target.nodeType === 1) { kind = "c"; el = target; }
+        if (target && target.nodeType === 1) { kind = target.hasAttribute("data-bl") ? "m" : "c"; el = target; }
         else if (target && target.nodeType === 3 && target.data.startsWith("• ", toff)) kind = "b";
         const rs = document.createRange(); rs.setStart(start.node, start.off); rs.setEnd(r.startContainer, r.startOffset);
         return { start, kind, el, target, toff, atStart: rs.toString() === "" && !rs.cloneContents().querySelector("span[data-ck]") };
       };
-      const place = (L, kind) => {
+      const place = (L, kind, style) => {
         const frag = document.createDocumentFragment();
         let lastNode;
-        if (kind === "b") { lastNode = document.createTextNode("• "); frag.appendChild(lastNode); }
+        if (kind === "m") { const m = document.createElement("span"); m.setAttribute("data-bl", style); m.contentEditable = "false"; lastNode = document.createTextNode(" "); frag.append(m, lastNode); }
+        else if (kind === "b") { lastNode = document.createTextNode("• "); frag.appendChild(lastNode); }
         else { const c = document.createElement("span"); c.dataset.ck = "0"; c.contentEditable = "false"; lastNode = document.createTextNode(" "); frag.append(c, lastNode); }
         const rg = document.createRange();
         rg.setStart(L.start.node, L.start.off); rg.collapse(true); rg.insertNode(frag);
         if (L.atStart) { const sel = getSelection(); const nr = document.createRange(); nr.setStartAfter(lastNode); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr); }
       };
-      const unmark = (L) => { if (L.kind === "b") L.target.deleteData(L.toff, 2); else if (L.kind === "c") L.el.remove(); };
+      const unmark = (L) => {
+        if (L.kind === "b") L.target.deleteData(L.toff, 2);
+        else if (L.kind === "c") L.el.remove();
+        else if (L.kind === "m") { const nx = L.el.nextSibling; if (nx && nx.nodeType === 3 && nx.data.startsWith(" ")) nx.deleteData(0, 1); L.el.remove(); }
+      };
       const lineText = (L) => {
         const rr = document.createRange(); rr.setStart(L.start.node, L.start.off); rr.setEnd(box, box.childNodes.length);
         const w = document.createTreeWalker(rr.cloneContents(), 5); let t = "", x;
-        while ((x = w.nextNode())) { if (x.nodeType === 3) t += x.data; else if (x.tagName === "BR") t += "\n"; }
+        while ((x = w.nextNode())) { if (x.nodeType === 3) { const pe = x.parentNode; if (!(pe && pe.nodeType === 1 && (pe.hasAttribute("data-bl") || pe.hasAttribute("data-ck")))) t += x.data; } else if (x.tagName === "BR") t += "\n"; }
         return t.split("\n")[0].replace(/^• /, "").trim();
       };
       const toggleLine = (kind) => {
@@ -190,15 +239,41 @@
         place(L, kind);
       };
       lineToggle = toggleLine;
-      mk("• List", "Bullet point on this line (Ctrl/Cmd+Shift+L; again to remove)", () => toggleLine("b"));
-      mk("☐ Item", "Check-list box on this line (Ctrl/Cmd+Shift+9; again to remove)", () => toggleLine("c"));
+      const setBullet = (style) => {
+        box.focus(); let L = caretLine(); if (!L) return;
+        if (L.kind === "m" && L.el.getAttribute("data-bl") === style) { unmark(L); return; }
+        if (L.kind) { unmark(L); L = caretLine(); }
+        place(L, "m", style);
+      };
+      if (opts.lists) {
+        mk("• List", "Bullet point on this line (Ctrl/Cmd+Shift+L; again to remove)", () => toggleLine("b"));
+        mk("☐ Item", "Check-list box on this line (Ctrl/Cmd+Shift+9; again to remove)", () => toggleLine("c"));
+      } else {
+        const lb = mk("List ▾", "Put a list marker on this line: dots, numbers, roman numerals, triangles or letters (choose the same one again to remove it)", () => {
+          const old = document.getElementById("qrich-listmenu"); if (old) { old.remove(); return; }
+          const pop = document.createElement("div"); pop.id = "qrich-listmenu";
+          pop.style.cssText = "position:fixed;z-index:9500;display:flex;flex-direction:column;gap:3px;padding:6px;background:var(--card,#fff);color:var(--ink,#111);border:1px solid var(--line,#999);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.35);white-space:pre;";
+          BL_MENU.forEach(([k, lab]) => {
+            const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-ghost btn-small"; b.style.textAlign = "left"; b.textContent = lab;
+            b.addEventListener("mousedown", (e) => e.preventDefault());
+            b.addEventListener("click", () => { pop.remove(); setBullet(k); emit(); });
+            pop.appendChild(b);
+          });
+          document.body.appendChild(pop);
+          const r = lb.getBoundingClientRect();
+          pop.style.left = Math.max(4, Math.min(innerWidth - pop.offsetWidth - 4, r.left)) + "px";
+          pop.style.top = Math.min(innerHeight - pop.offsetHeight - 4, r.bottom + 4) + "px";
+          const off = (e) => { if (!pop.contains(e.target) && e.target !== lb) { pop.remove(); document.removeEventListener("mousedown", off, true); } };
+          document.addEventListener("mousedown", off, true);
+        });
+      }
       box.addEventListener("keydown", (e) => {
         if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
         e.preventDefault();
-        const L = caretLine(); const k = L ? L.kind : "";
+        const L = caretLine(); const k = L ? L.kind : ""; const mst = k === "m" ? L.el.getAttribute("data-bl") : "";
         if (k && lineText(L) === "") { unmark(L); emit(); return; }
         document.execCommand("insertLineBreak");
-        if (k) { const L2 = caretLine(); if (L2) place(L2, k); }
+        if (k) { const L2 = caretLine(); if (L2) place(L2, k, mst); }
         emit();
       });
       box.addEventListener("click", (e) => {
@@ -206,6 +281,26 @@
         if (c && box.contains(c)) { c.dataset.ck = c.dataset.ck === "1" ? "0" : "1"; emit(); }
       });
     }
+    // drag a question's Q-pill into the box: a reference that follows that question's number
+    const refAt = (e) => {
+      let r = null;
+      if (document.caretRangeFromPoint) r = document.caretRangeFromPoint(e.clientX, e.clientY);
+      else if (document.caretPositionFromPoint) { const cp = document.caretPositionFromPoint(e.clientX, e.clientY); if (cp) { r = document.createRange(); r.setStart(cp.offsetNode, cp.offset); r.collapse(true); } }
+      return r && box.contains(r.startContainer) ? r : null;
+    };
+    box.addEventListener("dragover", (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("application/x-qref")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+    box.addEventListener("drop", (e) => {
+      const id = e.dataTransfer && e.dataTransfer.getData("application/x-qref"); if (!id) return;
+      e.preventDefault();
+      let r = refAt(e); if (!r) { r = document.createRange(); r.selectNodeContents(box); r.collapse(false); }
+      const host = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentNode;
+      const inMark = host && host.closest && host.closest("span[data-bl],span[data-qref]");
+      if (inMark) { r.setStartAfter(inMark); r.collapse(true); }
+      const sp = document.createElement("span"); sp.setAttribute("data-qref", String(id).replace(/[^\w-]/g, "")); sp.contentEditable = "false";
+      r.insertNode(sp);
+      const sel = getSelection(); const nr = document.createRange(); nr.setStartAfter(sp); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr);
+      emit();
+    });
     // keyboard shortcuts (Word / Google Docs style; Alt+Shift+A/S/N/L/K also work): Ctrl/Cmd+Enter = opts.onSubmit
     box.addEventListener("keydown", (e) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -379,5 +474,5 @@
       onChange(toggleCheck(getRich(), Array.prototype.indexOf.call(el.querySelectorAll("span[data-ck]"), c)));
     });
   }
-  window.QuizRich = { clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, dividers, ensureUnits, toggleCheck, bindChecks };
+  window.QuizRich = { refsFromQuiz, labelize, clean, plain, show, editor, esc, flow, topItems, regroup, move, canMove, dividers, ensureUnits, toggleCheck, bindChecks };
 })();
