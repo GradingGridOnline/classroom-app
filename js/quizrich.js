@@ -252,16 +252,10 @@
     return out;
   }
 
-  /** Ids of the questions that END a unit (an instructions box starts the next unit, which has questions): a thin line is drawn below them. */
+  /** Ids of the questions the teacher gave a thin line below (off by default). */
   function dividers(sec) {
-    const items = flow(sec), out = new Set();
-    let lastQ = -1;
-    items.forEach((it, i) => { if (it.q) lastQ = i; });
-    let prev = null;
-    items.forEach((it, i) => {
-      if (it.q) prev = it.q;
-      else if (it.note && it.note.kind === "instructions" && prev && i < lastQ) out.add(prev.id);
-    });
+    const out = new Set();
+    (sec.questions || []).forEach((q) => { if (q.dividerAfter) out.add(q.id); });
     return out;
   }
 

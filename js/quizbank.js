@@ -742,7 +742,6 @@
           ph.textContent = "No questions in this unit yet — use “Add question” in the instructions box above.";
           iu.appendChild(ph);
         }
-        else if (iu) { const ln = h("div"); ln.style.cssText = "border-top:1px solid var(--ink, #555);margin:0 0 10px 18px;"; iu.appendChild(ln); } // a thin line closes the unit
         iu = null; iuCount = 0;
       };
       const addNoteToUnit = (note, kind) => { // a Paragraph / text box goes at the end of the instructions box's unit
@@ -872,6 +871,8 @@
           ptsIn.style.cssText += "width:3.4em;min-width:0;flex:0 0 auto;padding:2px 4px;";
           row.appendChild(ptsIn);
         }
+        row.appendChild(button(q.dividerAfter ? "Line below ✓" : "Line below", "btn btn-ghost btn-small", () => { q.dividerAfter = !q.dividerAfter; rerender(); }));
+        if (q.dividerAfter) box.style.borderBottom = "3px solid var(--ink, #555)";
         const insertQ = (type, below) => { try { ScoringModule.addQuizQuestion(quiz, sec, type); } catch (e) { alert(e.message); return; } const nq = sec.questions.pop(); if (q.group) nq.group = q.group; sec.questions.splice(qi + (below ? 1 : 0), 0, nq); regrade(); rerender(); };
         const kinds = [["mc", "Multiple choice"], ["multi", "Multiple select"], ["blank", "Fill in the blank"], ["para", "Long answer"]];
         const side = (below) => {
