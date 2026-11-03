@@ -281,6 +281,23 @@
         if (c && box.contains(c)) { c.dataset.ck = c.dataset.ck === "1" ? "0" : "1"; emit(); }
       });
     }
+    // typing #42# turns into a reference to question 42 (same as dragging its Q-pill)
+    const tryRef = () => {
+      const sel = getSelection(); if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+      const nd = sel.getRangeAt(0).startContainer; if (nd.nodeType !== 3 || !box.contains(nd)) return;
+      const off = sel.getRangeAt(0).startOffset; const upto = nd.data.slice(0, off);
+      const m = /[#＃]([0-9０-９]{1,3})[#＃]$/.exec(upto); if (!m) return; // also full-width ＃４２＃ (Japanese input)
+      const num = Number(m[1].normalize("NFKC"));
+      const id = Object.keys(REFS).find((k) => REFS[k] === "Q" + num); if (!id) return; // no such question: leave the text alone
+      const rest = nd.splitText(off); const hit = nd.splitText(off - m[0].length); // nd = before, hit = "#42#", rest = after
+      const sp = document.createElement("span"); sp.setAttribute("data-qref", id); sp.contentEditable = "false";
+      hit.parentNode.replaceChild(sp, hit);
+      const nr = document.createRange(); nr.setStart(rest, 0); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr);
+      emit();
+    };
+    box.addEventListener("input", (e) => { if (!e.isComposing) tryRef(); });
+    box.addEventListener("compositionend", () => setTimeout(tryRef, 0));
+    box.addEventListener("keyup", () => tryRef()); // a safety net for browsers that skip the input event
     // drag a question's Q-pill into the box: a reference that follows that question's number
     const refAt = (e) => {
       let r = null;
