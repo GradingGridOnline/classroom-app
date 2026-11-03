@@ -809,6 +809,19 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const rb = mk("button", "btn btn-ghost btn-small", "Rebuild index"); rb.type = "button";
       rb.title = "Re-reads every course once. Use it if the list looks out of date (for example after changes made on another device).";
       rb.addEventListener("click", () => { if (confirm("Re-read every course to rebuild the Library's list of where quizzes are used? This reads all your courses' scoring data once.")) refresh("", true, true); });
+      if (!inTool) [["standard", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]].forEach(([kind, label]) => {
+        const nb = mk("button", "btn btn-ghost btn-small", `+ New ${label}`); nb.type = "button";
+        nb.addEventListener("click", run(async () => { // a new item made right in the Library (no course needed); opens in the editor
+          const name = prompt(`${label} name:`, `${label} ${model.items.length + 1}`); if (name === null || !name.trim()) return "";
+          await libLoad(true);
+          if (lib.items.length >= MAX_LIB) throw new Error(`The Library is at its limit of ${MAX_LIB} items.`);
+          const item = newItem({ name: name.trim(), quiz: { kind, settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1, attemptRule: "best" }, sections: [{ id: rid("sec"), title: "Section 1", questions: [], notes: [] }] } }, name.trim());
+          lib.items.push(item); await libSave(); invalidate();
+          await openTplEditor({ id: item.id });
+          return "";
+        }));
+        head.appendChild(nb);
+      });
       head.append(re, rb);
       host.appendChild(head);
       statusEl = mk("p", "result", msg || ""); host.appendChild(statusEl);
@@ -852,7 +865,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       hr.appendChild(mk("th", "nosort", "Control"));
       const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
       const body = mk("tbody"); tb.appendChild(body);
-      if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", gridRows().length ? "Nothing matches these filters." : "Nothing here yet. Open a quiz's menu → “Add to courses…” to put it in the Library."); td.colSpan = COLS.length + 1; tr.appendChild(td); body.appendChild(tr); }
+      if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", gridRows().length ? "Nothing matches these filters." : "Nothing here yet. Use “+ New Quiz” above, or open a quiz's controls → “Add to courses…” to put it in the Library."); td.colSpan = COLS.length + 1; tr.appendChild(td); body.appendChild(tr); }
       rows.forEach((g) => {
         const tr = mk("tr");
         const num = (v) => mk("td", "qts-n", v == null || v === "" ? "—" : String(v));
