@@ -1827,7 +1827,7 @@
       maxCell.appendChild(maxText);
 
       const group = h("div", "qz-actions");
-      group.appendChild(button("Edit Questions", "btn btn-primary btn-small", go("build")));
+      group.appendChild(button(t.libId ? "Edit Questions" : "Edit this Quiz's Questions", "btn btn-primary btn-small", go("build")));
       const qrItems = !quiz.token
         ? [{
           label: "Launch QR Code",
