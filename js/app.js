@@ -555,17 +555,20 @@ function makeCourseMenu(actions, extraEl) {
     e.stopPropagation();
     if (pop) { close(); return; }
     pop = document.createElement("div");
-    pop.style.cssText = "position:absolute;right:0;top:100%;margin-top:4px;z-index:50;min-width:13em;display:flex;flex-direction:column;gap:4px;padding:8px;background:var(--card, #fff);border:1px solid var(--line, #999);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.35);";
+    pop.style.cssText = "position:fixed;z-index:9000;width:15em;box-sizing:border-box;display:flex;flex-direction:column;gap:4px;padding:8px;background:var(--card, #fff);border:1px solid var(--line, #999);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.35);";
     actions.forEach((a) => {
       const b = document.createElement("button");
-      b.type = "button"; b.className = "btn btn-ghost btn-small"; b.style.textAlign = "left"; b.textContent = a.label;
+      b.type = "button"; b.className = "btn btn-ghost btn-small"; b.style.cssText += "text-align:center;justify-content:center;width:100%;box-sizing:border-box;"; b.textContent = a.label;
       if (a.title) b.title = a.title;
       b.disabled = !!a.disabled;
       b.addEventListener("click", (ev) => { ev.stopPropagation(); close(); a.run(); });
       pop.appendChild(b);
     });
-    if (extraEl) { const lab = document.createElement("div"); lab.className = "hint"; lab.textContent = "Template"; pop.append(lab, extraEl); }
-    wrap.appendChild(pop);
+    if (extraEl) { const lab = document.createElement("div"); lab.className = "hint"; lab.style.cssText = "margin:4px 0 0;text-align:center;"; lab.textContent = "Template"; extraEl.style.cssText += "margin:0;width:100%;max-width:100%;box-sizing:border-box;"; pop.append(lab, extraEl); }
+    document.body.appendChild(pop); // on the page itself, so the list's edges never clip it
+    const r = btn.getBoundingClientRect();
+    pop.style.left = Math.max(4, Math.min(window.innerWidth - pop.offsetWidth - 4, r.right - pop.offsetWidth)) + "px";
+    pop.style.top = Math.max(4, Math.min(window.innerHeight - pop.offsetHeight - 4, r.bottom + 4)) + "px";
     document.addEventListener("mousedown", outside, true);
   });
   wrap.appendChild(btn);
