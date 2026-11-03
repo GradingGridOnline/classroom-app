@@ -36,7 +36,7 @@
 <ul>
 <li><b>Day &amp; period</b> button — shows e.g. <i>Monday-Period 2</i>; click it to choose the day of the week and the class period (from Settings → Periods). They print on seating charts, QR windows and (optionally) quiz printouts, and "Order: by period" sorts by day, then time.</li>
 <li><b>↑ / ↓</b> — change the order (when <b>Order</b> is set to manual). The <b>Order</b> menu can also sort by name.</li>
-<li>Each course row shows its name, its day &amp; period, and a <b>Menu ▾</b> button holding these actions (plus the template link): <b>Day &amp; period…</b> (change it), <b>Rename</b>, <b>Duplicate</b> (copies the course and everything saved in it), <b>Delete</b>.</li>
+<li>Each course row shows its name, its day &amp; period, a window showing the template it follows (empty if none), and a <b>Menu ▾</b> button holding these actions (plus the template link): <b>Day &amp; period…</b> (change it), <b>Rename</b>, <b>Duplicate</b> (copies the course and everything saved in it), <b>Delete</b>.</li>
 <li><b>Archive</b> — moves a finished course to <b>Archived courses</b> (open that section below the list to <b>Restore</b> it).</li>
 <li><b>Save as Template</b> — see Templates.</li>
 </ul>

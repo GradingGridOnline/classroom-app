@@ -530,6 +530,18 @@ async function showCourses() {
   }
 }
 
+/** Shrinks a fixed-width label's text until it fits (down to a minimum; anything longer then just runs out of the window). */
+function fitLabelText(elx) {
+  const base = 13; // px; the window is 11em wide at this size, so it does not depend on the list being visible
+  const avail = base * 11 - 18;
+  const ctx = (fitLabelText.cv || (fitLabelText.cv = document.createElement("canvas"))).getContext("2d");
+  ctx.font = `${base}px sans-serif`;
+  const w = ctx.measureText(elx.textContent || "").width;
+  let size = w > avail ? base * (avail / w) : base;
+  size = Math.max(size, base * 0.6); // longer than that just runs out of the window
+  elx.style.fontSize = size + "px";
+}
+
 /** A "Menu ▾" button that opens a small popup of course actions (keeps the course row short so names fit on one line). */
 function makeCourseMenu(actions, extraEl) {
   const wrap = document.createElement("span");
@@ -625,6 +637,12 @@ function renderCourseList() {
     scheduleBtn.className = "course-schedule-label hint";
     scheduleBtn.textContent = CoursesModule.scheduleName(course) || "No day & period";
     li.appendChild(scheduleBtn);
+    const tpl = course.templateId ? TemplatesModule.templates.find((t) => t.id === course.templateId) : null;
+    const tplLabel = document.createElement("span"); // which template this course follows (empty window if none)
+    tplLabel.className = "course-schedule-label course-template-label hint";
+    tplLabel.textContent = tpl ? tpl.name : "";
+    if (tpl) tplLabel.title = `Following template: ${tpl.name}`;
+    li.appendChild(tplLabel);
 
     const acts = [];
     if (manual) {
@@ -653,6 +671,7 @@ function renderCourseList() {
     li.appendChild(makeCourseMenu(acts, buildCourseTemplateSelect(course)));
 
     el.courseList.appendChild(li);
+    [scheduleBtn, tplLabel].forEach(fitLabelText);
   });
 
   // ----- Archived courses -----
