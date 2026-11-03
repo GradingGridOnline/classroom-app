@@ -132,7 +132,7 @@
       q.sections.forEach((s) => {
         if (!Array.isArray(s.questions)) s.questions = [];
         if (!Array.isArray(s.notes)) s.notes = [];
-        s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), rich: window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "", kind: ["text", "passage"].includes(x.kind) ? x.kind : "instructions", at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "" }));
+        s.notes = s.notes.filter((x) => x && typeof x === "object").map((x) => ({ id: x.id || newId("n"), text: String(x.text || ""), rich: window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "", kind: ["text", "passage"].includes(x.kind) ? x.kind : "instructions", at: ["start", "end", "before", "after"].includes(x.at) ? x.at : "end", q: x.q || "", ...(x.hide ? { hide: true } : {}), ...(x.border ? { border: true } : {}) }));
         s.questions.forEach((x) => {
           if (x.group && !s.notes.some((nn) => nn.id === x.group && nn.kind === "passage")) delete x.group; // its Paragraph box was removed
           x.rich = window.QuizRich && x.rich ? QuizRich.clean(x.rich) : "";
@@ -361,7 +361,7 @@
         showAttempts: quiz.settings.showAttempts && quiz.settings.attemptsAllowed !== 1,
         sections: quiz.sections.map((s) => ({
           title: s.title,
-          notes: (s.notes || []).filter((x) => x.text.trim() && !x.hide).map((x) => ({ id: x.id, text: x.text, rich: x.rich || undefined, kind: x.kind, at: x.at, q: x.q })),
+          notes: (s.notes || []).filter((x) => x.text.trim() && !x.hide).map((x) => ({ id: x.id, text: x.text, rich: x.rich || undefined, kind: x.kind, at: x.at, q: x.q, border: x.border ? true : undefined })),
           questions: s.questions.map((x) => ({
             id: x.id, type: x.type, text: answersOnly ? "" : x.text, rich: answersOnly ? undefined : x.rich || undefined, points: isSurveyKind(quiz.kind) ? 0 : x.points,
             choices: isChoiceQ(x) ? (answersOnly ? x.choices.map(() => "") : x.choices) : undefined,
@@ -784,6 +784,13 @@
           sc.addEventListener("change", () => { note.hide = !sc.checked; });
           sl.append(sc, document.createTextNode(" Show words")); sl.title = "Untick to hide the words from students and printouts (the unit and its dividing line stay)";
           nr.appendChild(sl);
+        }
+        if (note.kind === "text") {
+          const bl = h("label", "hint"); const bc = h("input"); bc.type = "checkbox"; bc.checked = !!note.border;
+          bc.addEventListener("change", () => { note.border = bc.checked; ned.style.outline = bc.checked ? "2px solid var(--ink, #555)" : ""; });
+          if (note.border) ned.style.outline = "2px solid var(--ink, #555)";
+          bl.append(bc, document.createTextNode(" Border")); bl.title = "Draw a border around this text box (student form and printouts)";
+          nr.appendChild(bl);
         }
         if (note.kind === "instructions") nr.appendChild(menuButton("Add question", look[1], [...unitKinds.map(([id, lab]) => ({ label: lab, onClick: () => addToUnit(note, id) })), { label: "Paragraph", onClick: () => addNoteToUnit(note, "passage") }, { label: "Text box", onClick: () => addNoteToUnit(note, "text") }]));
         if (note.kind === "passage") {

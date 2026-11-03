@@ -40,6 +40,8 @@ table.qts-grid th { border:1px solid #000; background:#e6e6e6; color:#000; paddi
 table.qts-grid th.nosort { cursor:default; }
 table.qts-grid td { padding:0 6px; vertical-align:middle; }
 table.qts-grid td.qts-n { text-align:center; white-space:nowrap; }
+table.qts-grid td.qts-ctl { display:table-cell; }
+table.qts-grid td.qts-ctl .btn { margin:2px 3px 2px 0; }
 table.qts-grid td.qts-name { min-width:9em; font-weight:600; }
 table.qts-grid .btn { padding:1px 8px; margin:1px 0; font-size:.8rem; }
 table.qts-grid tr.qts-me td { background:#fff6c8; }
@@ -90,11 +92,11 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (!test || !test.quiz) return null;
     const t = { quiz: { kind: test.quiz.kind, settings: clone(test.quiz.settings || {}), sections: clone(test.quiz.sections || []) } };
     const q = ScoringModule.normalizeQuiz(t);
-    return { kind: q.kind, settings: q.settings, sections: q.sections, max: isSurveyKind(q.kind) ? 0 : ScoringModule.quizTotal(q) };
+    return { kind: q.kind, settings: q.settings, sections: q.sections, style: test.quiz.style ? clone(test.quiz.style) : null, max: isSurveyKind(q.kind) ? 0 : ScoringModule.quizTotal(q) };
   }
   function hashOf(test) {
     const c = contentOf(test);
-    return c ? fingerprint(stable({ k: c.kind, s: c.settings, c: c.sections })) : "";
+    return c ? fingerprint(stable(c.style ? { k: c.kind, s: c.settings, c: c.sections, st: c.style } : { k: c.kind, s: c.settings, c: c.sections })) : "";
   }
 
 
@@ -130,10 +132,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   async function libSave() { await storage.saveFile(LIB_FILE, { migrated: !!lib.migrated, items: lib.items }); }
   const itemById = (id) => (lib ? lib.items.find((x) => x.id === id) : null) || null;
   /** A test-shaped copy of a Library item (for exports, the editor, and adding to courses). */
-  const itemTest = (item) => ({ id: item.id, name: item.name, maxPoints: item.max, sourceFile: "Quiz editor", rows: [], scores: {}, unmatched: [], quiz: { kind: item.kind, settings: clone(item.settings || {}), sections: clone(item.sections || []), token: null, submissions: [] } });
+  const itemTest = (item) => ({ id: item.id, name: item.name, maxPoints: item.max, sourceFile: "Quiz editor", rows: [], scores: {}, unmatched: [], quiz: { kind: item.kind, settings: clone(item.settings || {}), sections: clone(item.sections || []), style: item.style ? clone(item.style) : undefined, token: null, submissions: [] } });
   function newItem(test, name) {
     const c = contentOf(test);
-    return { id: rid("lib"), name: name || test.name || "Untitled", kind: c.kind, settings: c.settings, sections: c.sections, max: c.max, hash: hashOf(test), rev: 1, createdAt: nowIso(), updatedAt: nowIso() };
+    return { id: rid("lib"), name: name || test.name || "Untitled", kind: c.kind, settings: c.settings, sections: c.sections, style: c.style, max: c.max, hash: hashOf(test), rev: 1, createdAt: nowIso(), updatedAt: nowIso() };
   }
   /** A new course test that uses a Library item. */
   function useOf(item, name) {
@@ -349,7 +351,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       students = (r && r.students) || [];
     }
     await editCourseTest(ref, (t, isLive) => {
-      t.quiz = { ...(t.quiz || {}), kind: item.kind, settings: clone(item.settings || {}), sections: clone(item.sections || []) };
+      t.quiz = { ...(t.quiz || {}), kind: item.kind, settings: clone(item.settings || {}), sections: clone(item.sections || []), style: item.style ? clone(item.style) : undefined };
       if (!Array.isArray(t.quiz.submissions)) t.quiz.submissions = [];
       t.maxPoints = item.max; t.libId = item.id; t.libRev = item.rev;
       if (isLive) ScoringModule.regradeQuiz(ref.toolId, t.id);
@@ -395,7 +397,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if ((Number(t.libRev) || 0) < item.rev) return { msg: `“${t.name}” has changes of its own, but the Library item has a newer version. Update it, or choose “Make my own copy”.` };
     if (h !== item.hash) {
       const c = contentOf(t);
-      Object.assign(item, { kind: c.kind, settings: c.settings, sections: c.sections, max: c.max, hash: h, rev: item.rev + 1, updatedAt: nowIso() });
+      Object.assign(item, { kind: c.kind, settings: c.settings, sections: c.sections, style: c.style, max: c.max, hash: h, rev: item.rev + 1, updatedAt: nowIso() });
       await libSave();
     }
     await editCourseTest(ref, (x) => { x.libRev = item.rev; x.libHash = h; });
@@ -726,7 +728,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const items = [];
       if (inTool) items.push({ label: "Use in this course", onClick: run(() => useIn(ref, ScoringModule.currentCourseId, ctx.toolId)) });
       items.push({ label: "Add to courses…", onClick: run(() => addDialog(ref)) });
-      items.push({ label: "Edit questions…", onClick: run(() => openLibEditor(item.id)) });
+      items.push({ label: "Edit questions…", onClick: run(() => openTplEditor({ id: item.id })) });
       if (g.stale.length) items.push({ label: "Update all courses (re-grade)", onClick: run(() => updateAll(item, g.uses)) });
       items.push("-",
         { label: "Rename…", onClick: run(async () => {
@@ -847,7 +849,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         });
         hr.appendChild(th);
       });
-      hr.appendChild(mk("th", "nosort", ""));
+      hr.appendChild(mk("th", "nosort", "Control"));
       const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
       const body = mk("tbody"); tb.appendChild(body);
       if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", gridRows().length ? "Nothing matches these filters." : "Nothing here yet. Open a quiz's menu → “Add to courses…” to put it in the Library."); td.colSpan = COLS.length + 1; tr.appendChild(td); body.appendChild(tr); }
@@ -866,7 +868,26 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         } else used = mk("td", "qts-n", g.r.courseName);
         const st = mk("td", `qts-n${g.status === "Update available" ? " qts-stale" : ""}`, g.kind === "item" && g.stale.length > 1 ? `Update available (${g.stale.length})` : g.status);
         tr.append(mk("td", "qts-name", g.name || "(untitled)"), mk("td", "", KIND_LABEL[g.type] || "Quiz"), num(g.q), num(g.max), used, st);
-        const td = mk("td"); td.appendChild(menuButton("Menu", () => (g.kind === "item" ? itemMenu(g) : ownMenu(g)))); tr.appendChild(td);
+        const td = mk("td", "qts-ctl");
+        const all = g.kind === "item" ? itemMenu(g) : ownMenu(g);
+        const cut = all.lastIndexOf("-");
+        const exps = cut >= 0 ? all.slice(cut + 1) : [];
+        const expMenu = exps.length && exps.every((x) => /^(CSV|Excel)/.test(x.label)) ? exps : null;
+        (expMenu ? all.slice(0, cut) : all).forEach((it) => { // the controls sit side by side
+          if (it === "-") return;
+          const b = mk("button", "btn btn-ghost btn-small", it.label.replace(/…$/, "")); b.type = "button"; b.title = it.label;
+          b.addEventListener("click", (ev) => { ev.stopPropagation(); it.onClick(); }); td.appendChild(b);
+        });
+        if (g.kind === "item" && window.QRStyles && QRStyles.menuButton) {
+          const sb = QRStyles.menuButton(() => g.item.style || null, async (st) => {
+            await libLoad(true); const it = itemById(g.item.id); if (!it) return;
+            it.style = st || undefined; it.hash = hashOf(itemTest(it)); it.rev += 1; it.updatedAt = nowIso(); await libSave();
+            await syncPass(it.id); await refresh("");
+          }, say, "btn btn-ghost btn-small");
+          td.insertBefore(sb, td.children[3] || null);
+        }
+        if (expMenu) td.appendChild(menuButton("Export", () => expMenu));
+        tr.appendChild(td);
         body.appendChild(tr);
         if (g.kind === "item" && openUses.has(g.item.id) && g.uses.length) body.appendChild(usesTable(g, COLS.length + 1));
       });
@@ -926,7 +947,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const item = itemById(tedit.id);
       if (!item) throw new Error("the Library item no longer exists");
       const c = contentOf(t), h = hashOf(t);
-      if (h !== item.hash) Object.assign(item, { kind: c.kind, settings: c.settings, sections: c.sections, max: c.max, hash: h, rev: item.rev + 1, updatedAt: nowIso() });
+      if (h !== item.hash) Object.assign(item, { kind: c.kind, settings: c.settings, sections: c.sections, style: c.style, max: c.max, hash: h, rev: item.rev + 1, updatedAt: nowIso() });
       if (t.name) item.name = t.name;
       await libSave();
       const r = await syncPass(item.id);
