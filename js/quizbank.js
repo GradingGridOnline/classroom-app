@@ -571,6 +571,7 @@
     left.appendChild(h("label", "", `${kindName(quiz)} name:`));
     left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
     left.appendChild(button("Print", "btn btn-ghost btn-small", () => window.QuizPrint && QuizPrint.open(quiz, test.name)));
+    left.appendChild(button("Export quiz template", "btn btn-ghost btn-small", () => exportTemplate(test, quiz))).title = "A CSV of this quiz laid out for Excel (an empty quiz gives an example sheet showing what to type where). Fill it in and use “Upload quiz contents” to make a new quiz from it.";
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
     bar.appendChild(left);
     bar.appendChild(h("span", "count-badge", isSurveyKind(quiz.kind) ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
@@ -1308,6 +1309,172 @@
     downloadCsv(safeName(test.name, "questions"), rows);
   }
 
+  // ---------- quiz template: export a quiz's structure to CSV / Excel, or upload a filled-in sheet as a new quiz ----------
+  // One row per element, in reading order. Column "Kind": QUIZ, SETTING, SECTION, INSTRUCTIONS, PARAGRAPH, TEXT, QUESTION (NOTE rows are comments).
+  const SHEET_HEAD = ["Kind", "Text", "Type / value", "Points", "Correct answer", "Other accepted answers", "Number of options", "Lines", "Line below", "In paragraph", "Border", "Hide words"];
+  const KIND_NAME = { standard: "Quiz", answers: "Answer Collection", survey: "Research Survey", formative: "Formative Survey" };
+  const sheetNorm = (v) => String(v === undefined || v === null ? "" : v).trim();
+  const yes = (v) => /^(y|yes|true|1|x|○|はい)$/i.test(sheetNorm(v));
+  const sheetType = (s) => {
+    s = sheetNorm(s).toLowerCase().replace(/[^a-z]/g, "");
+    if (/^(mc|multiplechoice|choice|single)$/.test(s)) return "mc";
+    if (/^(multi|multiple|multipleselect|select|checkbox)$/.test(s)) return "multi";
+    if (/^(blank|fillintheblank|fill|shortanswer|text)$/.test(s)) return "blank";
+    if (/^(para|paragraph|longanswer|long|essay)$/.test(s)) return "para";
+    return "";
+  };
+  const sheetKind = (s) => { s = sheetNorm(s).toLowerCase(); return /formative/.test(s) ? "formative" : /answer/.test(s) ? "answers" : /survey|research/.test(s) ? "survey" : "standard"; };
+  const guideRows = (width) => [
+    "HOW THIS SHEET WORKS (delete these NOTE rows if you like; rows whose Kind is NOTE are ignored). One row per item, in the order they appear in the quiz.",
+    "Kind: QUIZ (Text = name, Type / value = Quiz, Answer Collection, Research Survey or Formative Survey) · SETTING (Text = Option labels / Time limit (minutes) / Attempts per student, Type / value = the setting) · SECTION (Text = section title) · INSTRUCTIONS (a box that holds the questions after it) · PARAGRAPH (a reading text; questions marked In paragraph = yes belong to it) · TEXT (a plain text box) · QUESTION.",
+    "Every question must sit under an INSTRUCTIONS row (leave its Text empty if you have no instructions); questions placed before any INSTRUCTIONS row get an empty one.",
+    "QUESTION rows: Type / value = mc (multiple choice), multi (multiple select), blank (fill in the blank) or para (long answer). Points = the point value (leave empty on surveys).",
+    "Correct answer: mc = the option's label (A, B, C… or 1, 2, 3) or its exact text; multi = several labels separated by commas (A, C); blank = the answer. Other accepted answers (blank only) = more accepted answers separated by |.",
+    "Option 1, Option 2… = the answer choices (mc and multi). For an Answer Collection leave them empty and set Number of options. Lines = writing lines for a para question. Line below / Border / Hide words / In paragraph: type yes.",
+  ].map((t) => { const r = ["NOTE", t]; while (r.length < width) r.push(""); return r; });
+  function sheetRows(quiz, name) {
+    const answers = quiz.kind === "answers", survey = isSurveyKind(quiz.kind);
+    const style = quiz.settings.labelStyle;
+    const empty = ScoringModule.quizQuestionCount(quiz) === 0;
+    let nOpt = 4;
+    if (!empty) quiz.sections.forEach((sec) => sec.questions.forEach((q) => { if (isChoiceQ(q)) nOpt = Math.max(nOpt, q.choices.length); }));
+    const head = [...SHEET_HEAD, ...Array.from({ length: nOpt }, (_, i) => `Option ${i + 1}`)];
+    const row = (...cells) => { const r = cells.map((c) => (c === undefined || c === null ? "" : c)); while (r.length < head.length) r.push(""); return r; };
+    const rows = [...guideRows(head.length), head];
+    const labelSample = (LABEL_STYLES.find(([id]) => id === style) || LABEL_STYLES[0])[1];
+    rows.push(row("QUIZ", name || (empty ? "My new quiz" : ""), KIND_NAME[quiz.kind] || "Quiz"));
+    rows.push(row("SETTING", "Option labels", labelSample), row("SETTING", "Time limit (minutes)", quiz.settings.timeLimit || 0), row("SETTING", "Attempts per student", quiz.settings.attemptsAllowed === undefined ? 1 : quiz.settings.attemptsAllowed));
+    if (empty) { // example contents showing what goes where
+      const pts = (v) => (survey ? "" : v);
+      const ex = (txt, type, p, ok, more, nopt, ...opts) => row("QUESTION", answers ? "" : txt, type, pts(p), survey ? "" : ok, more, nopt, "", "", "", "", "", ...(answers ? [] : opts));
+      rows.push(row("SECTION", "Section 1: Vocabulary"));
+      rows.push(row("INSTRUCTIONS", answers ? "" : "Choose the best answer for each question."));
+      rows.push(ex("Which word means “happy”?", "mc", 1, "B", "", 4, "sad", "glad", "angry", "tired"));
+      rows.push(ex("Which of these are fruits? (select all)", "multi", 2, "A, C", "", 4, "apple", "carrot", "banana", "bread"));
+      rows.push(row("INSTRUCTIONS", answers ? "" : "Write one word in each blank."));
+      rows.push(ex("The opposite of “hot” is ____.", "blank", 1, "cold", "cool | chilly", ""));
+      rows.push(row("QUESTION", answers ? "" : "Explain your answer in two or three sentences.", "para", survey ? "" : 5, "", "", "", 6, "yes", "", "", ""));
+      if (!answers) {
+        rows.push(row("SECTION", "Section 2: Reading"));
+        rows.push(row("INSTRUCTIONS", "Read the passage and answer the questions."));
+        rows.push(row("PARAGRAPH", "Paste the reading passage here."));
+        rows.push(row("QUESTION", "What is the passage about?", "mc", pts(2), survey ? "" : "A", "", 3, "", "", "yes", "", "", "the weather", "a trip", "a meal"));
+        rows.push(row("TEXT", "A plain text box (no question number). Type yes in Border to draw a box around it.", "", "", "", "", "", "", "", "", "yes"));
+      }
+      return rows;
+    }
+    quiz.sections.forEach((sec) => {
+      rows.push(row("SECTION", sec.title || ""));
+      QuizRich.flow(sec).forEach((it) => {
+        if (it.note) {
+          const nt = it.note;
+          rows.push(row({ instructions: "INSTRUCTIONS", passage: "PARAGRAPH", text: "TEXT" }[nt.kind] || "TEXT", nt.text || "", "", "", "", "", "", "", "", "", nt.border ? "yes" : "", nt.hide ? "yes" : ""));
+          return;
+        }
+        const q = it.q, choice = isChoiceQ(q);
+        const correct = survey ? "" : q.type === "multi" ? multiSet(q.correctSet).map((i) => optionLabel(style, i)).join(", ") : q.type === "mc" ? optionLabel(style, q.correct) : (q.accepted && q.accepted[0]) || "";
+        rows.push(row("QUESTION", answers ? "" : q.text || "", q.type, survey ? "" : q.points, correct, q.type === "blank" ? (q.accepted || []).slice(1).filter(Boolean).join(" | ") : "", choice ? q.choices.length : "", q.type === "para" ? q.lines || 6 : "", q.dividerAfter ? "yes" : "", q.group ? "yes" : "", "", "", ...(choice && !answers ? q.choices : [])));
+      });
+    });
+    return rows;
+  }
+  const choiceIndexes = (ref, choices, style, many) => {
+    const n = choices.length, out = [];
+    const one = (t) => {
+      t = sheetNorm(t); if (!t) return;
+      let i = -1;
+      for (let k = 0; k < n && i < 0; k++) if (optionLabel(style, k).toLowerCase() === t.toLowerCase()) i = k;
+      if (i < 0) i = choices.findIndex((c) => sheetNorm(c).toLowerCase() === t.toLowerCase());
+      if (i < 0 && /^[a-z]$/i.test(t)) i = t.toLowerCase().charCodeAt(0) - 97;
+      if (i < 0 && /^\d+$/.test(t)) i = Number(t) - 1;
+      if (i >= 0 && i < n && !out.includes(i)) out.push(i);
+    };
+    if (many) sheetNorm(ref).split(/[,;|、\n]+/).forEach(one); else one(ref);
+    return out.sort((a, b) => a - b);
+  };
+  /** Turns the rows of a filled-in sheet into { name, kind, settings, sections, warnings }. Throws a plain-English Error if it can't be read. */
+  function parseSheet(rows) {
+    const warnings = [];
+    const hi = rows.findIndex((r) => sheetNorm(r[0]).toLowerCase() === "kind");
+    if (hi < 0) throw new Error("couldn't find the header row (its first cell must say “Kind”). Use “Export quiz template” to get a sheet with the right layout.");
+    const head = rows[hi].map(sheetNorm), col = (re) => head.findIndex((x) => re.test(x));
+    const C = { text: col(/^text$/i), type: col(/^type/i), pts: col(/^points?$/i), ok: col(/^correct/i), more: col(/^other/i), nopt: col(/^number of options/i), lines: col(/^lines?$/i), line: col(/^line below/i), grp: col(/^in paragraph/i), border: col(/^border/i), hide: col(/^hide/i) };
+    const optCols = []; head.forEach((x, i) => { const m = /^option\s*(\d+)$/i.exec(x); if (m) optCols.push([Number(m[1]), i]); }); optCols.sort((a, b) => a[0] - b[0]);
+    const cell = (r, i) => (i >= 0 ? sheetNorm(r[i]) : "");
+    const out = { name: "", kind: "standard", settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1, attemptRule: "best" }, sections: [], warnings };
+    let sec = null, group = null, total = 0;
+    const needSection = () => { if (!sec) { sec = { id: newId("sec"), title: "Section 1", questions: [], notes: [] }; out.sections.push(sec); } return sec; };
+    for (let ri = hi + 1; ri < rows.length; ri++) {
+      const r = rows[ri], at = `Row ${ri + 1}`, kind = sheetNorm(r[0]).toUpperCase();
+      if (!kind || kind === "NOTE") continue;
+      const text = cell(r, C.text), tv = cell(r, C.type);
+      if (kind === "QUIZ") { out.name = text; if (tv) out.kind = sheetKind(tv); }
+      else if (kind === "SETTING") {
+        const k = text.toLowerCase();
+        if (/option label/.test(k)) { const hit = LABEL_STYLES.find(([id, lab]) => id === tv || lab.replace(/\s/g, "") === tv.replace(/\s/g, "") || lab.split(",")[0].trim() === tv.split(",")[0].trim()); if (hit) out.settings.labelStyle = hit[0]; else if (tv) warnings.push(`${at}: option labels “${tv}” not recognised (using A, B, C).`); }
+        else if (/time/.test(k)) out.settings.timeLimit = Math.max(0, Number(tv) || 0);
+        else if (/attempt/.test(k)) out.settings.attemptsAllowed = Math.max(0, Math.round(Number(tv) || 0));
+        else warnings.push(`${at}: unknown setting “${text}” ignored.`);
+      } else if (kind === "SECTION") { sec = { id: newId("sec"), title: text, questions: [], notes: [] }; out.sections.push(sec); group = null; }
+      else if (kind === "INSTRUCTIONS" || kind === "PARAGRAPH" || kind === "TEXT") {
+        const s = needSection(), last = s.questions[s.questions.length - 1];
+        const note = { id: newId("n"), text, rich: "", kind: kind === "INSTRUCTIONS" ? "instructions" : kind === "PARAGRAPH" ? "passage" : "text", at: last ? "after" : "start", q: last ? last.id : "" };
+        if (yes(r[C.hide])) note.hide = true;
+        if (note.kind === "text" && yes(r[C.border])) note.border = true;
+        s.notes.push(note); group = kind === "PARAGRAPH" ? note.id : null;
+      } else if (kind === "QUESTION") {
+        const type = sheetType(tv);
+        if (!type) { warnings.push(`${at}: question type “${tv}” not recognised (use mc, multi, blank or para) — row skipped.`); continue; }
+        if (++total > MAX_QUESTIONS) throw new Error(`a quiz can have at most ${MAX_QUESTIONS} questions.`);
+        const s = needSection(), answersKind = out.kind === "answers", survey = isSurveyKind(out.kind);
+        const q = { id: newId("q"), type, text: answersKind ? "" : text, points: survey ? 0 : (cell(r, C.pts) === "" ? 1 : Math.max(0, Number(cell(r, C.pts)) || 0)), choices: [], correct: 0, accepted: type === "blank" ? [""] : [] };
+        if (type === "mc" || type === "multi") {
+          let opts = optCols.map(([, i]) => cell(r, i)); while (opts.length && !opts[opts.length - 1]) opts.pop();
+          let n = opts.length; const want = Number(cell(r, C.nopt)); if (want >= 2 && want > n) n = want;
+          if (n < 2) n = Math.max(2, out.settings.defaultOptions);
+          if (n > MAX_OPTIONS) { warnings.push(`${at}: more than ${MAX_OPTIONS} options; extra ones dropped.`); n = MAX_OPTIONS; }
+          q.choices = Array.from({ length: n }, (_, i) => (answersKind ? "" : opts[i] || ""));
+          const ok = cell(r, C.ok), idx = choiceIndexes(ok, q.choices, out.settings.labelStyle, type === "multi");
+          if (type === "mc") q.correct = idx.length ? idx[0] : 0; else { q.correctSet = idx.length ? idx : [0]; q.partial = false; }
+          if (ok && !idx.length && !survey) warnings.push(`${at}: correct answer “${ok}” doesn't match an option (first option used).`);
+        } else if (type === "blank") q.accepted = [cell(r, C.ok), ...cell(r, C.more).split("|").map((x) => x.trim()).filter(Boolean)];
+        else q.lines = Math.max(1, Math.min(40, Math.round(Number(cell(r, C.lines))) || 6));
+        if (yes(r[C.line])) q.dividerAfter = true;
+        if (yes(r[C.grp])) { if (group) q.group = group; else warnings.push(`${at}: “In paragraph” but no PARAGRAPH row above — ignored.`); }
+        s.questions.push(q);
+      } else warnings.push(`${at}: unknown kind “${sheetNorm(r[0])}” ignored.`);
+    }
+    if (!total) throw new Error("the sheet has no QUESTION rows.");
+    out.sections.forEach((s) => { if (window.QuizRich && QuizRich.ensureUnits) QuizRich.ensureUnits(s); });
+    return out;
+  }
+  /** CSV (UTF-8 or Excel's Shift-JIS) or Excel file -> array of rows. */
+  async function readSheetFile(file) {
+    if (!window.XLSX) throw new Error("the spreadsheet reader isn't loaded.");
+    const buf = await file.arrayBuffer();
+    let wb;
+    if (/\.csv$/i.test(file.name)) {
+      let t; try { t = new TextDecoder("utf-8", { fatal: true }).decode(buf); } catch (e) { t = new TextDecoder("shift_jis").decode(buf); }
+      wb = XLSX.read(t.replace(/^﻿/, ""), { type: "string" });
+    } else wb = XLSX.read(buf, { type: "array" });
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+  }
+  function pickSheet(onRows) {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".csv,.xlsx,.xls"; inp.style.display = "none";
+    inp.addEventListener("change", async () => {
+      const f = inp.files[0]; inp.remove(); if (!f) return;
+      try { onRows(parseSheet(await readSheetFile(f)), f); } catch (e) { alert(`Couldn't read that file: ${e.message}`); }
+    });
+    document.body.appendChild(inp); inp.click();
+  }
+  const sheetSummary = (p) => `Created “${p.name}” with ${p.sections.reduce((a, s) => a + s.questions.length, 0)} question(s) in ${p.sections.length} section(s).` + (p.warnings.length ? `\n\nCheck these:\n• ${p.warnings.slice(0, 12).join("\n• ")}${p.warnings.length > 12 ? `\n• …and ${p.warnings.length - 12} more` : ""}` : "");
+  function exampleDownload(kind) {
+    const quiz = { kind, settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1 }, sections: [{ id: "s", title: "", questions: [], notes: [] }] };
+    rawCsv(`quiz template - ${KIND_NAME[kind] || "Quiz"}.csv`, sheetRows(quiz, ""));
+  }
+  window.QuizSheet = { rows: sheetRows, parse: parseSheet, pick: pickSheet, summary: sheetSummary, example: exampleDownload, download: (name, rows, fmt) => window.QuizExport.download(name, rows, fmt) };
+  function exportTemplate(test, quiz) { downloadCsv(safeName(test.name, "template"), sheetRows(quiz, test.name)); }
+
   /** Used by the QTS Bank: CSV / Excel menu entries for one item. isLib = a list item (no students' answers). */
   window.QuizExport = {
     download(name, rows, fmt) {
@@ -1324,7 +1491,7 @@
       const copy = JSON.parse(JSON.stringify(test));
       const quiz = ScoringModule.normalizeQuiz(copy);
       if (!quiz) return [];
-      const kinds = [["Questions & answer key", exportQuestions]];
+      const kinds = [["Questions & answer key", exportQuestions], ["Quiz template (to fill in and upload)", exportTemplate]];
       if (!isLib) {
         kinds.unshift(["Responses (one row per attempt)", exportResponses]);
         if (!isSurveyKind(quiz.kind)) kinds.push(["Scores per question", exportScores]);
@@ -1779,8 +1946,20 @@
       } catch (err) { alert(err.message); return; }
       rerender();
     };
+    const upload = () => QuizSheet.pick((p, f) => {
+      try {
+        const t = ScoringModule.addQuizTest(tool.id, p.name || f.name.replace(/\.[^.]+$/, ""), p.kind);
+        Object.assign(t.quiz.settings, p.settings); t.quiz.sections = p.sections;
+        ScoringModule.normalizeQuiz(t); ScoringModule.regradeQuiz(tool.id, t.id);
+        editing.set(tool.id, t.id); viewOf.set(tool.id, "build");
+        alert(QuizSheet.summary({ ...p, name: t.name }));
+      } catch (err) { alert(`Couldn't make the quiz: ${err.message}`); return; }
+      rerender();
+    });
     const btns = body.querySelector(".panel-toolbar-buttons");
     if (btns) {
+      { const ex = button("Export quiz template", "btn btn-ghost", () => QuizSheet.example("standard")); ex.title = "Downloads an example sheet (CSV) showing what to type where. Fill it in (in Excel too) and upload it."; btns.insertBefore(ex, btns.firstChild); }
+      { const up = button("Upload quiz contents", "btn btn-ghost", upload); up.title = "Make a new quiz from a filled-in CSV or Excel sheet (see “Export quiz template”)."; btns.insertBefore(up, btns.firstChild); }
       btns.insertBefore(button("+ New Formative Survey", "btn btn-ghost", create("formative", "Formative Survey")), btns.firstChild);
       btns.insertBefore(button("+ New Research Survey", "btn btn-ghost", create("survey", "Research Survey")), btns.firstChild);
       btns.insertBefore(button("+ New Answer Collection", "btn btn-ghost", create("answers", "Answer Collection")), btns.firstChild);

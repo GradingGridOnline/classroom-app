@@ -822,6 +822,23 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
         }));
         head.appendChild(nb);
       });
+      if (!inTool && window.QuizSheet) {
+        const up = mk("button", "btn btn-ghost btn-small", "Upload quiz contents"); up.type = "button"; up.title = "Make a new Library item from a filled-in CSV or Excel sheet (see “Export quiz template”).";
+        up.addEventListener("click", () => QuizSheet.pick(async (p, f) => {
+          try {
+            await libLoad(true);
+            if (lib.items.length >= MAX_LIB) throw new Error(`The Library is at its limit of ${MAX_LIB} items.`);
+            const name = p.name || f.name.replace(/\.[^.]+$/, "");
+            const item = newItem({ name, quiz: { kind: p.kind, settings: p.settings, sections: p.sections } }, name);
+            lib.items.push(item); await libSave(); invalidate();
+            alert(QuizSheet.summary({ ...p, name }));
+            await openTplEditor({ id: item.id });
+          } catch (e) { say(`Couldn't do that: ${e.message}`); }
+        }));
+        const ex = mk("button", "btn btn-ghost btn-small", "Export quiz template"); ex.type = "button"; ex.title = "Downloads an example sheet (CSV) showing what to type where. Fill it in (in Excel too) and upload it.";
+        ex.addEventListener("click", () => QuizSheet.example("standard"));
+        head.append(up, ex);
+      }
       head.append(re, rb);
       host.appendChild(head);
       statusEl = mk("p", "result", msg || ""); host.appendChild(statusEl);
