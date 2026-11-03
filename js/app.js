@@ -621,21 +621,17 @@ function renderCourseList() {
     nameSpan.addEventListener("click", () => openCourseDetail(course));
     li.appendChild(nameSpan);
 
-    const scheduleBtn = document.createElement("button");
-    scheduleBtn.type = "button";
-    scheduleBtn.className = "course-period-select course-schedule-btn";
-    scheduleBtn.textContent = CoursesModule.scheduleName(course) || "Set day & period";
-    scheduleBtn.title = "Click to choose the day of the week and period";
-    scheduleBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openSchedulePicker(scheduleBtn, course);
-    });
+    const scheduleBtn = document.createElement("span"); // shows the day & period; it is changed from the Menu
+    scheduleBtn.className = "course-schedule-label hint";
+    scheduleBtn.textContent = CoursesModule.scheduleName(course) || "No day & period";
     li.appendChild(scheduleBtn);
+
     const acts = [];
     if (manual) {
       acts.push({ label: "↑ Move up", disabled: index === 0, run: () => { CoursesModule.move(course.id, -1); renderCourseList(); } });
       acts.push({ label: "↓ Move down", disabled: index === active.length - 1, run: () => { CoursesModule.move(course.id, 1); renderCourseList(); } });
     }
+    acts.push({ label: "Day & period…", title: "Choose the day of the week and period", run: () => openSchedulePicker(scheduleBtn, course) });
     acts.push({ label: "Rename", run: () => {
       const newName = prompt("Rename course:", course.name);
       if (newName === null) return;
