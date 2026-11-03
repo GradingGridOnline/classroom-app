@@ -23,13 +23,15 @@
   function decorate(root) {
     const doc = root.ownerDocument || document;
     const w = doc.createTreeWalker(root, 5);
-    let last = null, brs = 0, n = 0, x;
+    let last = null, brs = 0, n = 0, run = 0, x;
     while ((x = w.nextNode())) {
       if (x.nodeType === 3) { if (!(x.parentNode && x.parentNode.closest && x.parentNode.closest("span[data-bl],span[data-qref]"))) brs += (x.data.match(/\n/g) || []).length; continue; }
       if (x.tagName === "BR") { brs++; continue; }
       if (x.hasAttribute("data-bl")) {
         const k = x.getAttribute("data-bl");
-        n = last === k && brs === 1 ? n + 1 : 1; last = k; brs = 0;
+        if (last === k && brs === 1) n++; else { n = 1; run++; }
+        last = k; brs = 0;
+        x.setAttribute("data-run", run);
         x.textContent = markLabel(k, n);
       } else if (x.hasAttribute("data-qref")) {
         const r = REFS[x.getAttribute("data-qref")];
@@ -37,7 +39,25 @@
       }
     }
   }
-  const labelize = (html) => { if (!/data-(bl|qref)=/.test(html)) return html; const d = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html"); decorate(d.body); return d.body.innerHTML; };
+  /** For display (student form, print): a line whose marker has a margin becomes a block that wraps under the first word. */
+  function hangLines(body) {
+    if (!body.querySelector("span[data-hang]")) return;
+    const doc = body.ownerDocument, kids = Array.from(body.childNodes), lines = [[]];
+    kids.forEach((k) => { if (k.nodeType === 1 && k.tagName === "BR") lines.push([]); else lines[lines.length - 1].push(k); });
+    body.textContent = "";
+    lines.forEach((ln, i) => {
+      const first = ln.find((k) => !(k.nodeType === 3 && !k.data.trim()));
+      if (first && first.nodeType === 1 && first.hasAttribute && first.hasAttribute("data-hang")) {
+        const d = doc.createElement("div"); d.setAttribute("style", "padding-left:1.8em;text-indent:-1.8em");
+        first.setAttribute("style", "display:inline-block;width:1.8em;min-width:0;text-align:left;text-indent:0;vertical-align:top;");
+        ln.forEach((k) => d.appendChild(k));
+        const nx = first.nextSibling; if (nx && nx.nodeType === 3 && nx.data.startsWith(" ")) nx.data = nx.data.slice(1);
+        body.appendChild(d);
+      } else { ln.forEach((k) => body.appendChild(k)); if (i < lines.length - 1) { const nextHang = lines[i + 1].find((k) => !(k.nodeType === 3 && !k.data.trim())); if (!(nextHang && nextHang.nodeType === 1 && nextHang.hasAttribute && nextHang.hasAttribute("data-hang"))) body.appendChild(doc.createElement("br")); } }
+      if (first && first.nodeType === 1 && first.hasAttribute && first.hasAttribute("data-hang") && i < lines.length - 1) { /* the block ends the line: no <br> */ }
+    });
+  }
+  const labelize = (html) => { if (!/data-(bl|qref)=/.test(html)) return html; const d = new DOMParser().parseFromString("<body>" + html + "</body>", "text/html"); decorate(d.body); hangLines(d.body); return d.body.innerHTML; };
 
   /** Turns any HTML into the safe subset: <b> <i> <u> <br> and <span style="color/text-transform/font-variant">. */
   function clean(html) {
@@ -52,7 +72,7 @@
         let inner = walk(n);
         if (tag === "br") { out += "<br>"; return; }
         if (tag === "span" && n.hasAttribute("data-ck")) { out += `<span data-ck="${n.getAttribute("data-ck") === "1" ? 1 : 0}"></span>`; return; } // a checklist box (journal)
-        if (tag === "span" && n.hasAttribute("data-bl")) { const k = n.getAttribute("data-bl"); if (BL[k]) out += `<span data-bl="${k}"></span>`; return; } // a list marker
+        if (tag === "span" && n.hasAttribute("data-bl")) { const k = n.getAttribute("data-bl"); if (BL[k]) out += `<span data-bl="${k}"${n.hasAttribute("data-hang") ? ' data-hang="1"' : ""}></span>`; return; } // a list marker (data-hang: text wraps under the first word)
         if (tag === "span" && n.hasAttribute("data-qref")) { const id = (n.getAttribute("data-qref") || "").replace(/[^\w-]/g, ""); if (id) out += `<span data-qref="${id}"></span>`; return; } // a question reference
         if (tag === "div" || tag === "p") { out += (out && !/<br>$/.test(out) ? "<br>" : "") + inner; return; }
         if (tag === "script" || tag === "style") return;
@@ -105,7 +125,7 @@
     box.innerHTML = opts.rich ? clean(opts.rich) : esc(opts.text || "").replace(/\n/g, "<br>");
     if (!document.getElementById("qrich-style2")) {
       const st2 = document.createElement("style"); st2.id = "qrich-style2";
-      st2.textContent = "span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600;user-select:none}span[data-qref]{display:inline-block;padding:0 6px;border:1px solid var(--line,#999);border-radius:10px;background:var(--chip,rgba(120,150,255,.18));font-size:.92em;font-weight:600;white-space:nowrap;user-select:none}";
+      st2.textContent = "span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600;user-select:none}span[data-bl][data-hang]{min-width:1.8em;text-align:left}span[data-qref]{display:inline-block;padding:0 6px;border:1px solid var(--line,#999);border-radius:10px;background:var(--chip,rgba(120,150,255,.18));font-size:.92em;font-weight:600;white-space:nowrap;user-select:none}";
       document.head.appendChild(st2);
     }
     const fixMarks = () => { decorate(box); box.querySelectorAll("span[data-bl],span[data-qref]").forEach((c) => { c.contentEditable = "false"; }); };
@@ -211,10 +231,10 @@
         const rs = document.createRange(); rs.setStart(start.node, start.off); rs.setEnd(r.startContainer, r.startOffset);
         return { start, kind, el, target, toff, atStart: rs.toString() === "" && !rs.cloneContents().querySelector("span[data-ck]") };
       };
-      const place = (L, kind, style) => {
+      const place = (L, kind, style, hang) => {
         const frag = document.createDocumentFragment();
         let lastNode;
-        if (kind === "m") { const m = document.createElement("span"); m.setAttribute("data-bl", style); m.contentEditable = "false"; lastNode = document.createTextNode(" "); frag.append(m, lastNode); }
+        if (kind === "m") { const m = document.createElement("span"); m.setAttribute("data-bl", style); if (hang) m.setAttribute("data-hang", "1"); m.contentEditable = "false"; lastNode = document.createTextNode(" "); frag.append(m, lastNode); }
         else if (kind === "b") { lastNode = document.createTextNode("• "); frag.appendChild(lastNode); }
         else { const c = document.createElement("span"); c.dataset.ck = "0"; c.contentEditable = "false"; lastNode = document.createTextNode(" "); frag.append(c, lastNode); }
         const rg = document.createRange();
@@ -243,7 +263,12 @@
         box.focus(); let L = caretLine(); if (!L) return;
         if (L.kind === "m" && L.el.getAttribute("data-bl") === style) { unmark(L); return; }
         if (L.kind) { unmark(L); L = caretLine(); }
-        place(L, "m", style);
+        place(L, "m", style, hangMode);
+      };
+      let hangMode = false; // new markers get a margin (text wraps under the first word) when on
+      const setHang = (on) => {
+        hangMode = on; box.focus(); const L = caretLine();
+        if (L && L.kind === "m") box.querySelectorAll(`span[data-bl][data-run="${L.el.getAttribute("data-run")}"]`).forEach((m) => { if (on) m.setAttribute("data-hang", "1"); else m.removeAttribute("data-hang"); });
       };
       if (opts.lists) {
         mk("• List", "Bullet point on this line (Ctrl/Cmd+Shift+L; again to remove)", () => toggleLine("b"));
@@ -259,6 +284,12 @@
             b.addEventListener("click", () => { pop.remove(); setBullet(k); emit(); });
             pop.appendChild(b);
           });
+          const hb = document.createElement("button"); hb.type = "button"; hb.className = "btn btn-ghost btn-small"; hb.style.textAlign = "left";
+          const curL = caretLine(); const curHang = curL && curL.kind === "m" ? curL.el.hasAttribute("data-hang") : hangMode;
+          hb.textContent = (curHang ? "☑" : "☐") + "  Margin (wrapped text lines up under the first word)";
+          hb.addEventListener("mousedown", (e) => e.preventDefault());
+          hb.addEventListener("click", () => { pop.remove(); setHang(!curHang); emit(); });
+          pop.append(document.createElement("hr"), hb);
           document.body.appendChild(pop);
           const r = lb.getBoundingClientRect();
           pop.style.left = Math.max(4, Math.min(innerWidth - pop.offsetWidth - 4, r.left)) + "px";
@@ -270,10 +301,10 @@
       box.addEventListener("keydown", (e) => {
         if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
         e.preventDefault();
-        const L = caretLine(); const k = L ? L.kind : ""; const mst = k === "m" ? L.el.getAttribute("data-bl") : "";
+        const L = caretLine(); const k = L ? L.kind : ""; const mst = k === "m" ? L.el.getAttribute("data-bl") : ""; const mh = k === "m" && L.el.hasAttribute("data-hang");
         if (k && lineText(L) === "") { unmark(L); emit(); return; }
         document.execCommand("insertLineBreak");
-        if (k) { const L2 = caretLine(); if (L2) place(L2, k, mst); }
+        if (k) { const L2 = caretLine(); if (L2) place(L2, k, mst, mh); }
         emit();
       });
       box.addEventListener("click", (e) => {
