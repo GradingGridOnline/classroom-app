@@ -23,10 +23,11 @@
   function decorate(root) {
     const doc = root.ownerDocument || document;
     const w = doc.createTreeWalker(root, 5);
-    let last = null, brs = 0, n = 0, run = 0, x;
+    let last = null, brs = 0, n = 0, run = 0, started = false, x;
     while ((x = w.nextNode())) {
       if (x.nodeType === 3) { if (!(x.parentNode && x.parentNode.closest && x.parentNode.closest("span[data-bl],span[data-qref]"))) brs += (x.data.match(/\n/g) || []).length; continue; }
-      if (x.tagName === "BR") { brs++; continue; }
+      if (x.tagName === "BR") { if (!(x.parentNode && x.parentNode.tagName === "DIV" && x.parentNode.lastChild === x)) brs++; continue; } // a <br> that only holds an empty line open is not a line break
+      if (x.tagName === "DIV") { if (started) brs++; started = true; continue; }
       if (x.hasAttribute("data-bl")) {
         const k = x.getAttribute("data-bl");
         if (last === k && brs === 1) n++; else { n = 1; run++; }
@@ -122,13 +123,48 @@
     box.setAttribute("role", "textbox");
     box.dataset.placeholder = opts.placeholder || "";
     box.style.cssText = "min-height:2.2em;padding:6px 8px;border:1px solid var(--line,#aaa);border-radius:6px;background:var(--card,#fff);color:var(--ink,#111);white-space:pre-wrap;overflow-wrap:anywhere;";
-    box.innerHTML = opts.rich ? clean(opts.rich) : esc(opts.text || "").replace(/\n/g, "<br>");
+    const lineMode = !!opts.bullets && !opts.lists; // one <div> per line, so a list item with a margin can wrap under its first word
+    const toLines = (html) => {
+      const t = document.createElement("div"); t.innerHTML = html; const lines = [[]];
+      Array.from(t.childNodes).forEach((k) => { if (k.nodeType === 1 && k.tagName === "BR") lines.push([]); else lines[lines.length - 1].push(k); });
+      if (lines.length === 1 && !lines[0].length) return "";
+      const out = document.createElement("div");
+      lines.forEach((ln) => { const d = document.createElement("div"); if (ln.length) ln.forEach((k) => d.appendChild(k)); else d.appendChild(document.createElement("br")); out.appendChild(d); });
+      return out.innerHTML;
+    };
+    const baseHtml = opts.rich ? clean(opts.rich) : esc(opts.text || "").replace(/\n/g, "<br>");
+    box.innerHTML = lineMode ? toLines(baseHtml) : baseHtml;
     if (!document.getElementById("qrich-style2")) {
       const st2 = document.createElement("style"); st2.id = "qrich-style2";
-      st2.textContent = "span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600;user-select:none}span[data-bl][data-hang]{min-width:1.8em;text-align:left}span[data-qref]{display:inline-block;padding:0 6px;border:1px solid var(--line,#999);border-radius:10px;background:var(--chip,rgba(120,150,255,.18));font-size:.92em;font-weight:600;white-space:nowrap;user-select:none}";
+      st2.textContent = "span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600;user-select:none}span[data-bl][data-hang]{width:1.8em;min-width:0;text-align:left;text-indent:0}span[data-qref]{display:inline-block;padding:0 6px;border:1px solid var(--line,#999);border-radius:10px;background:var(--chip,rgba(120,150,255,.18));font-size:.92em;font-weight:600;white-space:nowrap;user-select:none}";
       document.head.appendChild(st2);
     }
-    const fixMarks = () => { decorate(box); box.querySelectorAll("span[data-bl],span[data-qref]").forEach((c) => { c.contentEditable = "false"; }); };
+    /** Line mode: every top-level piece lives in a line <div> (loose text typed into the empty box is wrapped; the caret is kept). */
+    const ensureLines = (force) => {
+      if (!lineMode) return;
+      if (force && !box.firstChild) { const d = document.createElement("div"); d.appendChild(document.createElement("br")); box.appendChild(d); const sel = getSelection(), nr = document.createRange(); nr.setStart(d, 0); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr); return; }
+      const sel = getSelection(); const had = sel && sel.rangeCount && box.contains(sel.getRangeAt(0).startContainer);
+      const keep = had ? { n: sel.getRangeAt(0).startContainer, o: sel.getRangeAt(0).startOffset } : null;
+      let cur = null;
+      Array.from(box.childNodes).forEach((k) => {
+        if (k.nodeType === 1 && k.tagName === "DIV") { cur = null; return; }
+        if (!cur) { cur = document.createElement("div"); box.insertBefore(cur, k); }
+        cur.appendChild(k);
+      });
+      if (keep && cur) { try { const nr = document.createRange(); nr.setStart(keep.n, keep.o); nr.collapse(true); sel.removeAllRanges(); sel.addRange(nr); } catch (e) {} }
+    };
+    const hangStyle = () => {
+      if (!lineMode) return;
+      const cs = getComputedStyle(box); // wrapped lines start where the first word starts: marker width + the space after it
+      const cx = (hangStyle.cv || (hangStyle.cv = document.createElement("canvas"))).getContext("2d"); cx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const sp = cx.measureText(" ").width || 4, pad = `calc(1.8em + ${sp.toFixed(2)}px)`;
+      Array.from(box.children).forEach((ln) => {
+        const first = Array.from(ln.childNodes).find((k) => !(k.nodeType === 3 && !k.data.trim()));
+        if (first && first.nodeType === 1 && first.hasAttribute && first.hasAttribute("data-hang")) { ln.style.paddingLeft = pad; ln.style.textIndent = `calc(-1.8em - ${sp.toFixed(2)}px)`; }
+        else { ln.style.paddingLeft = ""; ln.style.textIndent = ""; }
+      });
+    };
+    const fixMarks = () => { ensureLines(); if (lineMode && !box.textContent && !box.querySelector("span")) box.innerHTML = ""; decorate(box); hangStyle(); box.querySelectorAll("span[data-bl],span[data-qref]").forEach((c) => { c.contentEditable = "false"; }); };
     fixMarks();
     if (!document.getElementById("qrich-style")) {
       const st = document.createElement("style");
@@ -203,12 +239,15 @@
       const idx = (n) => Array.prototype.indexOf.call(n.parentNode.childNodes, n);
       /** Where the caret's line starts (after the last line break before the caret) and whether it begins with a bullet / check box. */
       const caretLine = () => {
+        ensureLines(true);
         const s = selInside(); if (!s) return null;
         const r = s.getRangeAt(0).cloneRange(); r.collapse(true);
         let start = { node: box, off: 0 };
+        let lineEl = null;
+        if (lineMode) { lineEl = r.startContainer; while (lineEl && lineEl.parentNode !== box) lineEl = lineEl.parentNode; if (!lineEl) return null; start = { node: lineEl, off: 0 }; }
         const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
         let n;
-        while ((n = tw.nextNode())) {
+        while (!lineMode && (n = tw.nextNode())) {
           if (n.nodeType === 1) {
             if (n.tagName === "BR") { if (r.comparePoint(n.parentNode, idx(n) + 1) <= 0) start = { node: n.parentNode, off: idx(n) + 1 }; else break; }
             continue;
@@ -229,7 +268,7 @@
         if (target && target.nodeType === 1) { kind = target.hasAttribute("data-bl") ? "m" : "c"; el = target; }
         else if (target && target.nodeType === 3 && target.data.startsWith("• ", toff)) kind = "b";
         const rs = document.createRange(); rs.setStart(start.node, start.off); rs.setEnd(r.startContainer, r.startOffset);
-        return { start, kind, el, target, toff, atStart: rs.toString() === "" && !rs.cloneContents().querySelector("span[data-ck]") };
+        return { start, lineEl, kind, el, target, toff, atStart: rs.toString() === "" && !rs.cloneContents().querySelector("span[data-ck]") };
       };
       const place = (L, kind, style, hang) => {
         const frag = document.createDocumentFragment();
@@ -247,7 +286,7 @@
         else if (L.kind === "m") { const nx = L.el.nextSibling; if (nx && nx.nodeType === 3 && nx.data.startsWith(" ")) nx.deleteData(0, 1); L.el.remove(); }
       };
       const lineText = (L) => {
-        const rr = document.createRange(); rr.setStart(L.start.node, L.start.off); rr.setEnd(box, box.childNodes.length);
+        const rr = document.createRange(); rr.setStart(L.start.node, L.start.off); if (L.lineEl) rr.setEnd(L.lineEl, L.lineEl.childNodes.length); else rr.setEnd(box, box.childNodes.length);
         const w = document.createTreeWalker(rr.cloneContents(), 5); let t = "", x;
         while ((x = w.nextNode())) { if (x.nodeType === 3) { const pe = x.parentNode; if (!(pe && pe.nodeType === 1 && (pe.hasAttribute("data-bl") || pe.hasAttribute("data-ck")))) t += x.data; } else if (x.tagName === "BR") t += "\n"; }
         return t.split("\n")[0].replace(/^• /, "").trim();
@@ -299,11 +338,12 @@
         });
       }
       box.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey) return;
+        if (e.key !== "Enter" || (e.shiftKey && !lineMode) || e.ctrlKey || e.metaKey) return;
         e.preventDefault();
         const L = caretLine(); const k = L ? L.kind : ""; const mst = k === "m" ? L.el.getAttribute("data-bl") : ""; const mh = k === "m" && L.el.hasAttribute("data-hang");
         if (k && lineText(L) === "") { unmark(L); emit(); return; }
-        document.execCommand("insertLineBreak");
+        if (lineMode) { try { document.execCommand("defaultParagraphSeparator", false, "div"); } catch (er) {} document.execCommand("insertParagraph"); ensureLines(); }
+        else document.execCommand("insertLineBreak");
         if (k) { const L2 = caretLine(); if (L2) place(L2, k, mst, mh); }
         emit();
       });

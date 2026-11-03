@@ -18,6 +18,7 @@
     separator: "none", pageBorder: false, pageSize: "A4", orientation: "portrait", margin: 18,
     perPage: 0, sectionBreak: false, keepTogether: true, pageNumbers: true,
     doBooklet: true, doMarksheet: true, msColumns: 2, msRowGap: 9, msBlank: 40,
+    cover: false, coverTitle: true, coverCourse: true, coverName: true, coverDate: true, coverQs: true, coverPts: true, coverTime: true, coverPages: true, coverText: "Do not turn this page until you are told to.", coverBack: false,
   };
   const KEY = "ggo-quizprint";
   const load = () => { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { return Object.assign({}, DEFAULTS); } };
@@ -29,10 +30,14 @@
     (quiz.sections || []).forEach((sec, si) => {
       out.push({ section: sec, si });
       const dv = window.QuizRich && QuizRich.dividers ? QuizRich.dividers(sec) : new Set();
+      let inUnit = false, prev = null; // a unit = an Instructions box and the questions after it; its last question ends it (marksheet line)
       (window.quizSectionFlow ? quizSectionFlow(sec) : (sec.questions || []).map((q) => ({ q }))).forEach((it) => {
-        if (it.note) { if (!(it.note.kind === "instructions" && (it.note.hide || !String(it.note.text || "").trim()))) out.push({ note: it.note }); }
-        else out.push({ q: it.q, n: ++n, div: dv.has(it.q.id) });
+        if (it.note) {
+          if (it.note.kind === "instructions") { if (prev && inUnit) prev.ue = true; inUnit = true; }
+          if (!(it.note.kind === "instructions" && (it.note.hide || !String(it.note.text || "").trim()))) out.push({ note: it.note });
+        } else { prev = { q: it.q, n: ++n, div: dv.has(it.q.id) }; out.push(prev); }
       });
+      if (prev && inUnit) prev.ue = true;
     });
     return out;
   }
@@ -119,8 +124,8 @@
     h += `<div class="mscols">`;
     for (let c = 0; c < cols; c++) {
       h += `<div class="mscol">`;
-      items.slice(c * per, (c + 1) * per).forEach(({ q, n }) => {
-        h += `<div class="msrow"><span class="msn">${n}</span>`;
+      items.slice(c * per, (c + 1) * per).forEach(({ q, n, ue }) => {
+        h += `<div class="msrow${ue ? " ue" : ""}"><span class="msn">${n}</span>`;
         if (q.type === "mc" || q.type === "multi") {
           (q.choices || []).forEach((c2, i) => { h += `<span class="bb${q.type === "multi" ? " sq" : ""}">${esc(label(quiz, i))}</span>`; });
         } else if (q.type === "para") h += `<div class="msbox" style="height:${Math.max(1, Math.min(40, Number(q.lines) || 6)) * 1.9}em"></div>`;
@@ -130,6 +135,26 @@
       h += "</div>";
     }
     return h + "</div></section>";
+  }
+
+  /** A cover page that sits on top of the questions (so nobody sees them before the others do). */
+  function coverHtml(quiz, o, title, pageCount) {
+    const survey = window.isSurveyKind && isSurveyKind(quiz.kind);
+    const nq = (quiz.sections || []).reduce((a, sec) => a + (sec.questions || []).length, 0);
+    let pts = 0; try { pts = window.ScoringModule && ScoringModule.quizTotal ? ScoringModule.quizTotal(quiz) : 0; } catch (e) {}
+    const facts = [];
+    if (o.coverQs && nq) facts.push(["Number of questions", nq]);
+    if (o.coverPts && !survey && quiz.kind !== "answers" && pts) facts.push(["Total points", pts]);
+    if (o.coverTime && quiz.settings && Number(quiz.settings.timeLimit) > 0) facts.push(["Time allowed", `${quiz.settings.timeLimit} minutes`]);
+    if (o.coverPages && pageCount) facts.push(["Pages after this one", pageCount]);
+    let h = `<section class="sheet fixed cover"><div class="cv">`;
+    if (o.coverTitle) h += `<h1 class="cvt">${esc(title)}</h1>`;
+    if (o.coverCourse && o.courseText) h += `<div class="cvc">${esc(o.courseText)}</div>`;
+    if (o.coverDate) h += `<div class="cvd">Date: <span class="ul" style="width:9em"></span></div>`;
+    if (o.coverName) h += `<div class="cvn"><div>Name: <span class="ul" style="width:16em"></span></div><div>Student ID: <span class="ul" style="width:10em"></span></div></div>`;
+    if (facts.length) h += `<table class="cvf">${facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>`;
+    if (String(o.coverText || "").trim()) h += `<div class="cvx">${esc(o.coverText)}</div>`;
+    return h + `</div></section>` + (o.coverBack ? `<section class="sheet fixed cover"><div class="cv"></div></section>` : "");
   }
 
   function build(quiz, name, o) {
@@ -143,9 +168,16 @@
       if (o.doBooklet) body += pagesHtml(quiz, o, true, title);
       if (o.doMarksheet) body += marksheetHtml(quiz, o, title);
     } else body += pagesHtml(quiz, o, false, title);
+    if (o.cover && (!answers || o.doBooklet)) {
+      const qPart = answers ? pagesHtml(quiz, o, true, title) : body;
+      const count = (qPart.match(/<section class="sheet/g) || []).length;
+      const cv = coverHtml(quiz, o, title, count);
+      body = answers ? cv + body : cv + body; // the cover comes first (an Answer Collection's marksheet follows the booklet)
+    }
     const sepCss = { none: "", line: ".q{border-bottom:1px solid #444;padding-bottom:6px}", dotted: ".q{border-bottom:1px dotted #444;padding-bottom:6px}", box: ".q{border:1px solid #444;padding:6px 9px;border-radius:3px}" }[o.separator] || "";
     return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
 @page{size:${W}mm ${H}mm;margin:${o.margin}mm;${o.perPage === 0 && o.pageNumbers ? "@bottom-center{content:counter(page);font-size:9pt}" : ""}}
+${o.cover && o.perPage === 0 ? "@page :first{@bottom-center{content:none}}" : ""}
 *{box-sizing:border-box}
 body{margin:0;font-family:${FONTS[o.font][1]};font-size:${o.size}pt;line-height:${o.lineHeight};color:#000}
 h1{font-size:1.5em;margin:0 0 6px;text-align:center}h2{font-size:1.15em;margin:14px 0 8px;border-bottom:2px solid #000;padding-bottom:2px}
@@ -163,6 +195,8 @@ ol.opts.cols{display:grid;grid-template-columns:1fr 1fr;gap:${o.optGap}px 1.4em}
 .bb{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border:1.2px solid #000;border-radius:50%;font-size:.85em;padding:0 .25em}.bb.sq{border-radius:3px}
 .ans{margin:8px 0 0 2.3em}.blanklines{margin:6px 0 0 2.3em}.wl{border-bottom:1px solid #000;height:1.9em}
 .mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600}span[data-qref]{font-weight:700}.note.bordered{border:1.2px solid #000;padding:2mm 3mm}.udiv{border-top:1px solid #000;margin:8px 0 6px}.note.instructions{font-style:normal;text-align:left;border:1px solid #000;padding:5px 10px}.note.instructions .itl{font-weight:700;font-style:italic;text-align:left;margin-bottom:2px}.note.text{font-style:normal;border-left:0;padding:0}.note.passage{font-style:normal;border:1px solid #000;border-left-width:3px;padding:6px 10px}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msbox{flex:1;border:1.2px solid #000;border-radius:3px}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
+.cover .cv{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9mm;min-height:60%;text-align:center;padding-top:25mm}.cvt{font-size:2.2em;margin:0}.cvc{font-size:1.2em}.cvd,.cvn{font-size:1.1em;text-align:left}.cvn div{margin:6mm 0}table.cvf{border-collapse:collapse;font-size:1.1em}table.cvf th{text-align:left;padding:2px 14px 2px 0;font-weight:600}table.cvf td{padding:2px 0}.cvx{font-size:1.3em;font-weight:700;border:2px solid #000;padding:6mm 10mm;margin-top:10mm}
+.msrow.ue{border-bottom:1px solid #000;padding-bottom:5px}
 .pn{text-align:center;font-size:.85em;margin-top:auto;padding-top:8px}
 ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 @media screen{body{background:#cfcfcf;padding:10px}.sheet{background:#fff;width:${W}mm;min-height:${H}mm;margin:0 auto 12px;padding:${o.margin}mm;box-shadow:0 1px 6px rgba(0,0,0,.4);display:flex;flex-direction:column}${o.pageBorder ? ".sheet{padding:calc(" + o.margin + "mm + 6mm) !important}" : ""}}
@@ -207,6 +241,12 @@ ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
     row("Name / class / date line", chk("nameLine"));
     row("Section headings", chk("showSections"));
     if (!answers) row("Show points", chk("showPoints"));
+    group("Cover page");
+    row("Add a cover page", chk("cover"));
+    row("Title", chk("coverTitle")); row("Course & day/period", chk("coverCourse")); row("Name / ID lines", chk("coverName")); row("Date line", chk("coverDate"));
+    row("Number of questions", chk("coverQs")); if (!answers) row("Total points", chk("coverPts")); row("Time allowed", chk("coverTime")); row("Number of pages", chk("coverPages"));
+    row("Message", txt("coverText", true));
+    row("Blank back (double-sided)", chk("coverBack"));
     group("Font");
     row("Typeface", sel("font", FONTS.map((f, i) => [i, f[0]]), true));
     row("Size (pt)", numSel("size", [8, 9, 10, 11, 12, 13, 14, 16, 18]));
