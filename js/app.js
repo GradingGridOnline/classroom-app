@@ -530,6 +530,36 @@ async function showCourses() {
   }
 }
 
+/** A "Menu ▾" button that opens a small popup of course actions (keeps the course row short so names fit on one line). */
+function makeCourseMenu(actions, extraEl) {
+  const wrap = document.createElement("span");
+  wrap.style.cssText = "position:relative;flex:0 0 auto;";
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "btn btn-ghost btn-small"; btn.textContent = "Menu ▾"; btn.title = "Rename, duplicate, archive, delete…";
+  let pop = null;
+  const close = () => { if (pop) { pop.remove(); pop = null; document.removeEventListener("mousedown", outside, true); } };
+  const outside = (e) => { if (pop && !pop.contains(e.target) && e.target !== btn) close(); };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (pop) { close(); return; }
+    pop = document.createElement("div");
+    pop.style.cssText = "position:absolute;right:0;top:100%;margin-top:4px;z-index:50;min-width:13em;display:flex;flex-direction:column;gap:4px;padding:8px;background:var(--card, #fff);border:1px solid var(--line, #999);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.35);";
+    actions.forEach((a) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn btn-ghost btn-small"; b.style.textAlign = "left"; b.textContent = a.label;
+      if (a.title) b.title = a.title;
+      b.disabled = !!a.disabled;
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); close(); a.run(); });
+      pop.appendChild(b);
+    });
+    if (extraEl) { const lab = document.createElement("div"); lab.className = "hint"; lab.textContent = "Template"; pop.append(lab, extraEl); }
+    wrap.appendChild(pop);
+    document.addEventListener("mousedown", outside, true);
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 function makeSmallButton(label, title, onClick) {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -601,71 +631,30 @@ function renderCourseList() {
       openSchedulePicker(scheduleBtn, course);
     });
     li.appendChild(scheduleBtn);
-    li.appendChild(buildCourseTemplateSelect(course));
-
+    const acts = [];
     if (manual) {
-      const upBtn = makeSmallButton("↑", "Move up", () => {
-        CoursesModule.move(course.id, -1);
-        renderCourseList();
-      });
-      upBtn.disabled = index === 0;
-      const downBtn = makeSmallButton("↓", "Move down", () => {
-        CoursesModule.move(course.id, 1);
-        renderCourseList();
-      });
-      downBtn.disabled = index === active.length - 1;
-      li.append(upBtn, downBtn);
+      acts.push({ label: "↑ Move up", disabled: index === 0, run: () => { CoursesModule.move(course.id, -1); renderCourseList(); } });
+      acts.push({ label: "↓ Move down", disabled: index === active.length - 1, run: () => { CoursesModule.move(course.id, 1); renderCourseList(); } });
     }
-
-    li.appendChild(
-      makeSmallButton("Rename", "", () => {
-        const newName = prompt("Rename course:", course.name);
-        if (newName === null) return;
-        try {
-          CoursesModule.rename(course.id, newName);
-          renderCourseList();
-        } catch (err) {
-          alert(err.message);
-        }
-      })
-    );
-
-    li.appendChild(
-      makeSmallButton("Duplicate", "Copy this course and everything saved in it (saved to Google Drive right away)", () => {
-        runCourseAction(
-          "Duplicating…",
-          () => CoursesModule.duplicate(course.id),
-          "Course duplicated and saved ✓"
-        );
-      })
-    );
-
-    li.appendChild(
-      makeSmallButton("Save as Template", "Save this course's structure (no students or scores) as a reusable template", () => {
-        const name = prompt("Template name:", course.name);
-        if (name === null) return;
-        runCourseAction(
-          "Saving template…",
-          () => TemplatesModule.saveFromCourse(course.id, name),
-          "Template saved ✓"
-        );
-      })
-    );
-
-    li.appendChild(
-      makeSmallButton("Archive", "Move this course to Archived Courses", () => {
-        CoursesModule.setArchived(course.id, true);
-        renderCourseList();
-      })
-    );
-
-    li.appendChild(
-      makeSmallButton("Delete", "", () => {
-        if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
-        CoursesModule.remove(course.id);
-        renderCourseList();
-      })
-    );
+    acts.push({ label: "Rename", run: () => {
+      const newName = prompt("Rename course:", course.name);
+      if (newName === null) return;
+      try { CoursesModule.rename(course.id, newName); renderCourseList(); } catch (err) { alert(err.message); }
+    } });
+    acts.push({ label: "Duplicate", title: "Copy this course and everything saved in it (saved to Google Drive right away)", run: () => {
+      runCourseAction("Duplicating…", () => CoursesModule.duplicate(course.id), "Course duplicated and saved ✓");
+    } });
+    acts.push({ label: "Save as Template", title: "Save this course's structure (no students or scores) as a reusable template", run: () => {
+      const name = prompt("Template name:", course.name);
+      if (name === null) return;
+      runCourseAction("Saving template…", () => TemplatesModule.saveFromCourse(course.id, name), "Template saved ✓");
+    } });
+    acts.push({ label: "Archive", title: "Move this course to Archived Courses", run: () => { CoursesModule.setArchived(course.id, true); renderCourseList(); } });
+    acts.push({ label: "Delete", run: () => {
+      if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
+      CoursesModule.remove(course.id); renderCourseList();
+    } });
+    li.appendChild(makeCourseMenu(acts, buildCourseTemplateSelect(course)));
 
     el.courseList.appendChild(li);
   });
@@ -689,19 +678,13 @@ function renderCourseList() {
     nameSpan.addEventListener("click", () => openCourseDetail(course));
     li.appendChild(nameSpan);
 
-    li.appendChild(
-      makeSmallButton("Restore", "Move this course back to the main list", () => {
-        CoursesModule.setArchived(course.id, false);
-        renderCourseList();
-      })
-    );
-    li.appendChild(
-      makeSmallButton("Delete", "", () => {
+    li.appendChild(makeCourseMenu([
+      { label: "Restore", title: "Move this course back to the main list", run: () => { CoursesModule.setArchived(course.id, false); renderCourseList(); } },
+      { label: "Delete", run: () => {
         if (!confirm(`Delete "${course.name}"? This does not delete its saved roster.`)) return;
-        CoursesModule.remove(course.id);
-        renderCourseList();
-      })
-    );
+        CoursesModule.remove(course.id); renderCourseList();
+      } },
+    ]));
     el.archivedList.appendChild(li);
   });
 
