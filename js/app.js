@@ -545,7 +545,7 @@ function fitLabelText(elx) {
 /** A "Menu ▾" button that opens a small popup of course actions (keeps the course row short so names fit on one line). */
 function makeCourseMenu(actions, extraEl) {
   const wrap = document.createElement("span");
-  wrap.style.cssText = "position:relative;flex:0 0 auto;";
+  wrap.style.cssText = "position:relative;flex:0 0 auto;display:flex;align-items:center;height:26px;";
   const btn = document.createElement("button");
   btn.type = "button"; btn.className = "btn btn-ghost btn-small"; btn.textContent = "Menu ▾"; btn.title = "Rename, duplicate, archive, delete…";
   let pop = null;
