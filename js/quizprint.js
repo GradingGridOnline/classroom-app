@@ -17,7 +17,7 @@
     answerSpace: "line", blankLines: 2, title: "", instructions: "", courseLine: false, nameLine: true, showPoints: true, showSections: true,
     separator: "none", pageBorder: false, pageSize: "A4", orientation: "portrait", margin: 18,
     perPage: 0, sectionBreak: false, keepTogether: true, pageNumbers: true,
-    doBooklet: true, doMarksheet: true, msColumns: 2, msRowGap: 9, msBlank: 40,
+    doBooklet: true, doMarksheet: true, msColumns: 2, msRowGap: 9, msBlank: 40, msSections: true,
     cover: false, coverTitle: true, coverCourse: true, coverName: true, coverDate: true, coverQs: true, coverPts: true, coverTime: true, coverPages: true, coverText: "Do not turn this page until you are told to.", coverBack: false,
   };
   const KEY = "ggo-quizprint";
@@ -115,16 +115,19 @@
   }
 
   function marksheetHtml(quiz, o, title) {
-    const items = flatten(quiz).filter((x) => x.q);
+    const all = flatten(quiz), items = all.filter((x) => x.q);
     let h = `<section class="sheet fixed ms"><div class="doc-head"><h1>${esc(title)} — Marksheet</h1>`;
     if (o.courseLine && o.courseText) h += `<div class="courseline">${esc(o.courseText)}</div>`;
     if (o.nameLine) h += `<div class="idline"><span>Name: <span class="ul" style="width:11em"></span></span><span>Class: <span class="ul" style="width:5em"></span></span><span>Date: <span class="ul" style="width:6em"></span></span></div>`;
     h += `<div class="instr">Mark your answers here, not on the test booklet.</div></div>`;
     const cols = Math.max(1, o.msColumns), per = Math.ceil(items.length / cols) || 1;
     h += `<div class="mscols">`;
+    const headAt = new Map(); // section title -> shown at the top of the column of that section's first question
+    if (o.msSections) { let pendingHead = null, qi = 0; all.forEach((it) => { if (it.section) pendingHead = it.section.title ? it.section : null; else if (it.q) { if (pendingHead) { headAt.set(it.q.id, pendingHead.title); pendingHead = null; } qi++; } }); }
     for (let c = 0; c < cols; c++) {
       h += `<div class="mscol">`;
       items.slice(c * per, (c + 1) * per).forEach(({ q, n, ue }) => {
+        if (headAt.has(q.id)) h += `<div class="mshead">${esc(headAt.get(q.id))}</div>`;
         h += `<div class="msrow${ue ? " ue" : ""}"><span class="msn">${n}</span>`;
         if (q.type === "mc" || q.type === "multi") {
           (q.choices || []).forEach((c2, i) => { h += `<span class="bb${q.type === "multi" ? " sq" : ""}">${esc(label(quiz, i))}</span>`; });
@@ -174,6 +177,7 @@
       const cv = coverHtml(quiz, o, title, count);
       body = answers ? cv + body : cv + body; // the cover comes first (an Answer Collection's marksheet follows the booklet)
     }
+    // text, lines and boxes of one item stay together on one page (flex containers can't break pages cleanly, so print uses block layout)
     const sepCss = { none: "", line: ".q{border-bottom:1px solid #444;padding-bottom:6px}", dotted: ".q{border-bottom:1px dotted #444;padding-bottom:6px}", box: ".q{border:1px solid #444;padding:6px 9px;border-radius:3px}" }[o.separator] || "";
     return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
 @page{size:${W}mm ${H}mm;margin:${o.margin}mm;${o.perPage === 0 && o.pageNumbers ? "@bottom-center{content:counter(page);font-size:9pt}" : ""}}
@@ -196,12 +200,37 @@ ol.opts.cols{display:grid;grid-template-columns:1fr 1fr;gap:${o.optGap}px 1.4em}
 .ans{margin:8px 0 0 2.3em}.blanklines{margin:6px 0 0 2.3em}.wl{border-bottom:1px solid #000;height:1.9em}
 .mscols{display:grid;grid-template-columns:repeat(${o.msColumns},1fr);gap:0 12mm;align-items:start}.courseline{text-align:center;margin:0 0 6px;font-size:.95em}span[data-bl]{display:inline-block;min-width:1.5em;text-align:right;font-weight:600}span[data-qref]{font-weight:700}.note.bordered{border:1.2px solid #000;padding:2mm 3mm}.udiv{border-top:1px solid #000;margin:8px 0 6px}.note.instructions{font-style:normal;text-align:left;border:1px solid #000;padding:5px 10px}.note.instructions .itl{font-weight:700;font-style:italic;text-align:left;margin-bottom:2px}.note.text{font-style:normal;border-left:0;padding:0}.note.passage{font-style:normal;border:1px solid #000;border-left-width:3px;padding:6px 10px}.note{white-space:pre-wrap;font-style:italic;margin:0 0 ${o.qGap}px;padding:4px 8px;border-left:3px solid #000}.sheet.ms{display:block !important}.msbox{flex:1;border:1.2px solid #000;border-radius:3px}.msrow{display:flex;align-items:center;gap:6px;margin-bottom:${o.msRowGap}px;break-inside:avoid}.msn{min-width:2em;font-weight:700;text-align:right}
 .cover .cv{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9mm;min-height:60%;text-align:center;padding-top:25mm}.cvt{font-size:2.2em;margin:0}.cvc{font-size:1.2em}.cvd,.cvn{font-size:1.1em;text-align:left}.cvn div{margin:6mm 0}table.cvf{border-collapse:collapse;font-size:1.1em}table.cvf th{text-align:left;padding:2px 14px 2px 0;font-weight:600}table.cvf td{padding:2px 0}.cvx{font-size:1.3em;font-weight:700;border:2px solid #000;padding:6mm 10mm;margin-top:10mm}
+.note,.doc-head,.cont,.hintline,.ans,.blanklines,.msbox,ol.opts li{break-inside:avoid;page-break-inside:avoid}h2{break-after:avoid;page-break-after:avoid}.qh{break-after:avoid}
+.mshead{font-weight:700;border-bottom:1px solid #000;margin:8px 0 5px;break-after:avoid}.msrow{break-inside:avoid}
 .msrow.ue{border-bottom:1px solid #000;padding-bottom:5px}
 .pn{text-align:center;font-size:.85em;margin-top:auto;padding-top:8px}
 ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
 @media screen{body{background:#cfcfcf;padding:10px}.sheet{background:#fff;width:${W}mm;min-height:${H}mm;margin:0 auto 12px;padding:${o.margin}mm;box-shadow:0 1px 6px rgba(0,0,0,.4);display:flex;flex-direction:column}${o.pageBorder ? ".sheet{padding:calc(" + o.margin + "mm + 6mm) !important}" : ""}}
-@media print{.sheet{display:flex;flex-direction:column;${o.perPage > 0 || true ? `min-height:${H - 2 * o.margin - 2}mm;` : ""}}.sheet.fixed,.sheet+.sheet{break-before:page;page-break-before:always}.sheet:first-child{break-before:auto;page-break-before:auto}}
-</style></head><body>${body}</body></html>`;
+@media print{.pn{position:absolute;bottom:0;left:0;right:0;margin:0}.sheet{display:block;position:relative;${o.perPage > 0 || true ? `min-height:${H - 2 * o.margin - 2}mm;` : ""}}.sheet.fixed,.sheet+.sheet{break-before:page;page-break-before:always}.sheet:first-child{break-before:auto;page-break-before:auto}}
+.pb{break-before:page;page-break-before:always}
+</style></head><body>${body}<script>
+// Page breaks are decided here (not left to the browser): each question, text box and set of lines is measured and moved to the next page whole when it would not fit.
+(function(){
+  var AV=${Math.max(40, H - 2 * o.margin - 6)}*96/25.4;
+  function run(){
+    document.querySelectorAll(".pb").forEach(function(e){e.classList.remove("pb");});
+    document.querySelectorAll(".sheet:not(.cover):not(.ms)").forEach(function(sh){
+      var kids=Array.prototype.filter.call(sh.children,function(c){return !c.classList.contains("pn");});
+      if(!kids.length)return;
+      var bot=function(c){var cs=getComputedStyle(c);return c.getBoundingClientRect().bottom+(parseFloat(cs.marginBottom)||0);};
+      var top=function(c){return c.getBoundingClientRect().top;};
+      var pageTop=top(kids[0]);
+      kids.forEach(function(c,i){
+        var need=bot(c), nx=kids[i+1];
+        if(nx&&(/^(H2|H3)$/.test(c.tagName)||c.classList.contains("note")||c.classList.contains("doc-head")))need=Math.max(need,bot(nx)); // a heading or instructions box stays with what follows
+        if(need-pageTop>AV&&top(c)>pageTop+2){c.classList.add("pb");pageTop=top(c);}
+      });
+    });
+  }
+  window.addEventListener("load",function(){run();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(run);});
+  window.addEventListener("beforeprint",run);
+})();
+<\/script></body></html>`;
   }
 
   function open(quiz, name) {
@@ -264,6 +293,7 @@ ${o.pageBorder ? ".sheet{border:1.5px solid #000;padding:6mm !important}" : ""}
       row("Columns", numSel("msColumns", [1, 2, 3, 4]));
       row("Row spacing", sel("msRowGap", [[4, "Tight"], [9, "Normal"], [16, "Loose"]], true));
       row("Blank width (mm)", numSel("msBlank", [25, 40, 60, 80]));
+      row("Section titles", chk("msSections"));
     }
     group("Pagination");
     row("Paper", sel("pageSize", Object.keys(PAGES).map((k) => [k, k])));

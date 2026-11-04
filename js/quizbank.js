@@ -707,6 +707,12 @@
         sec.notes.push({ id: newId("n"), text: "", kind: "instructions", at: last ? "after" : "start", q: last ? last.id : "" });
         rerender();
       }));
+      if (quiz.sections.length > 1) { // re-order sections
+        const mv = (d) => { const j = si + d; if (j < 0 || j >= quiz.sections.length) return; [quiz.sections[si], quiz.sections[j]] = [quiz.sections[j], quiz.sections[si]]; regrade(); rerender(); };
+        const up = button("▲ Move up", "btn btn-ghost btn-small", () => mv(-1)); up.disabled = si === 0;
+        const dn = button("▼ Move down", "btn btn-ghost btn-small", () => mv(1)); dn.disabled = si === quiz.sections.length - 1;
+        tb.append(up, dn);
+      }
       if (quiz.sections.length > 1) {
         tb.appendChild(button("Delete section", "btn btn-ghost btn-small", () => {
           if (!confirm(`Delete "${sec.title}" and its ${sec.questions.length} question(s)?`)) return;
