@@ -91,6 +91,62 @@
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page { border-radius:0; box-shadow:none; }
 [data-theme="basic"] :is(#journal-panel, #journal-modal) .jr-book { --jr-cover:#6b7d8f; --jr-page:#ffffff; --jr-ms:220ms; --jr-out-next:jr-fade-out; --jr-in-next:jr-fade-in; --jr-out-prev:jr-fade-out; --jr-in-prev:jr-fade-in; border-width:2px; border-radius:2px; box-shadow:none; }
 
+/* ----- one entry per page: big title, text, then a thin rule and the date / tags / actions ----- */
+:is(#journal-panel, #journal-modal) .jr-page { height:clamp(430px, 70vh, 680px); min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+:is(#journal-panel, #journal-modal) .jr-page > .jr-form { overflow:auto; max-height:100%; margin:0; }
+:is(#journal-panel, #journal-modal) .jr-leaf { flex:1; min-height:0; display:flex; flex-direction:column; padding-bottom:14px; }
+:is(#journal-panel, #journal-modal) .jr-title { font-family:var(--font-heading); font-size:1.75rem; line-height:1.15; margin:0 0 10px; font-weight:700; overflow-wrap:anywhere; }
+:is(#journal-panel, #journal-modal) .jr-body { flex:1 1 0; min-height:0; overflow:auto; line-height:1.55; white-space:pre-wrap; padding-right:4px; }
+:is(#journal-panel, #journal-modal) .jr-foot { flex:none; border-top:1px solid var(--jr-rule, var(--line,#999)); margin-top:8px; padding-top:6px; font-size:.8rem; display:grid; gap:3px; }
+:is(#journal-panel, #journal-modal) .jr-foot-meta { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; }
+:is(#journal-panel, #journal-modal) .jr-foot .jr-who { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:.85; }
+:is(#journal-panel, #journal-modal) .jr-foot .jr-chip { font-size:.72rem; padding:0 8px; margin:0 3px 0 0; }
+:is(#journal-panel, #journal-modal) .jr-foot .jr-snap { border-top:0; margin:0; padding:0; font-size:.72rem; }
+:is(#journal-panel, #journal-modal) .jr-foot-actions { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
+:is(#journal-panel, #journal-modal) .jr-foot-actions .btn, :is(#journal-panel, #journal-modal) .jr-foot-actions .jr-pinpill { font-size:.7rem; padding:1px 8px; margin:0; }
+:is(#journal-panel, #journal-modal) .jr-leaf.jr-isdone .jr-title { text-decoration:line-through; opacity:.7; }
+:is(#journal-panel, #journal-modal) .jr-blank { margin:auto; text-align:center; font-style:italic; opacity:.6; max-width:80%; line-height:1.5; }
+:is(#journal-panel, #journal-modal) .jr-stage-head, :is(#journal-panel, #journal-modal) .jr-stage-foot { display:none; }
+@media (max-width:760px) { :is(#journal-panel, #journal-modal) .jr-page { height:auto; min-height:360px; } }
+
+/* VINTAGE: an old leather-bound journal lying open on the desk */
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-bookwrap { margin:8px 6px 26px; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-book { --jr-rule:rgba(70,45,20,.6); --jr-cover:#5a3822; border:18px solid #5a3822; border-radius:12px; background:#5a3822;
+  box-shadow:0 0 0 2px #2f1a0e, inset 0 0 0 2px #8c5d38, 0 16px 22px -4px rgba(0,0,0,.6), 0 30px 34px -12px rgba(0,0,0,.55); }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-book::before { content:""; position:absolute; inset:-11px; border:2px dashed rgba(226,190,120,.55); border-radius:7px; pointer-events:none; z-index:2; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-book::after { content:""; position:absolute; left:calc(50% - 7px); bottom:-38px; width:14px; height:40px; background:linear-gradient(90deg,#7a2323,#a33a3a 50%,#7a2323); clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%); filter:drop-shadow(0 3px 2px rgba(0,0,0,.5)); z-index:3; pointer-events:none; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-page { background:radial-gradient(ellipse at 50% 35%, #f7ecd0 0%, #efdfb8 62%, #e1ca98 100%); color:#33200f; outline:none; padding:26px 28px 34px; font-family:var(--font-body); }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-page-left { border-radius:5px 0 0 5px; box-shadow:inset -38px 0 30px -26px rgba(70,40,10,.6), inset 0 0 40px rgba(120,80,30,.22), -2px 0 0 #ecdfb8, -4px 0 0 #b39a66, -6px 0 0 #ecdfb8, -8px 0 0 #b39a66, -10px 0 0 #e8d8ac; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-page-right { border-radius:0 5px 5px 0; box-shadow:inset 38px 0 30px -26px rgba(70,40,10,.6), inset 0 0 40px rgba(120,80,30,.22), 2px 0 0 #ecdfb8, 4px 0 0 #b39a66, 6px 0 0 #ecdfb8, 8px 0 0 #b39a66, 10px 0 0 #e8d8ac; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-spine { background:linear-gradient(90deg,rgba(60,35,10,.6),rgba(60,35,10,.1) 38%,rgba(60,35,10,.1) 62%,rgba(60,35,10,.6)), #dcc999; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-title { color:#3a2110; font-weight:900; font-size:2rem; letter-spacing:.01em; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-body { color:#2d1c0e; font-size:1.02rem; line-height:28px; background-image:repeating-linear-gradient(to bottom, transparent 0 27px, rgba(110,75,35,.2) 27px 28px); background-attachment:local; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-foot { color:#5a4430; font-style:italic; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-foot .jr-chip { border-color:#8a6a46; background:rgba(120,80,40,.1); color:#4a3320; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-pageno { color:#6b5236; opacity:.8; font-style:italic; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-bookinfo { color:#e8d8ac; opacity:.9; margin-top:30px; }
+
+/* TRON: LEGACY: an Encom touch-panel "light table" with a screen for each entry */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap { background:#071015; border:1px solid #19d3f0; padding:12px 16px 10px; margin:8px 4px 22px; box-shadow:0 0 0 6px #071015, 0 0 0 7px rgba(0,217,255,.5), 0 0 30px rgba(0,217,255,.22); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot { display:flex; justify-content:space-between; gap:12px; font-size:.64rem; letter-spacing:.16em; text-transform:uppercase; color:#7fe9ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head { border-bottom:1px solid rgba(0,217,255,.35); padding-bottom:5px; margin-bottom:10px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot { border-top:1px solid rgba(0,217,255,.35); padding-top:5px; margin-top:10px; align-items:center; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot .jr-sf-bars i { display:inline-block; width:34px; height:6px; border:1px solid #19d3f0; margin-left:6px; border-radius:3px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-book { --jr-rule:#19d3f0; border:0; background:transparent; box-shadow:none; gap:0; grid-template-columns:1fr 12px 1fr; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-spine { background:transparent; box-shadow:none; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page { background:#0a141a; border:1px solid #1fd5f2; border-radius:3px; color:#c9f6ff; padding:34px 22px 30px; font-family:var(--font-body);
+  box-shadow:0 0 14px rgba(0,217,255,.2), inset 0 0 26px rgba(0,217,255,.07); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page::before { content:"ENTRY .PROGRAM"; position:absolute; top:8px; left:14px; right:14px; font-size:.6rem; letter-spacing:.18em; color:#4fe0ff; border-bottom:1px solid rgba(0,217,255,.3); padding-bottom:3px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page::after { content:"END .PROGRAM"; position:absolute; top:8px; right:14px; font-size:.6rem; letter-spacing:.18em; color:#4fe0ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-title { font-size:1.3rem; line-height:1.3; color:#eaffff; letter-spacing:.06em; text-transform:uppercase; text-shadow:0 0 10px rgba(0,217,255,.55); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-body { color:#bff3ff; background-image:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,217,255,.035) 3px 4px); background-attachment:local; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot { color:#7fe9ff; letter-spacing:.04em; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-date { background:#f2d33c; color:#0a141a; font-weight:700; padding:0 7px; letter-spacing:.08em; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-chip { border-color:#19d3f0; color:#4fe0ff; border-radius:0; background:rgba(0,217,255,.07); text-transform:uppercase; letter-spacing:.08em; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pageno { color:#4fe0ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-turn { background:#071015; color:#4fe0ff; border:1px solid #19d3f0; border-radius:0; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookinfo { color:#7fe9ff; letter-spacing:.1em; text-transform:uppercase; font-size:.7rem; }
+
 #journal-modal { position:fixed; inset:0; z-index:20050; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; padding:16px; }
 #journal-modal .jr-modal-box { background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line,#ccc); border-radius:var(--radius,10px); box-shadow:0 12px 40px rgba(0,0,0,.45); width:min(780px,94vw); max-height:88vh; overflow:auto; padding:18px 20px; }
 #journal-modal .jr-modal-head { display:flex; align-items:flex-start; gap:12px; justify-content:space-between; }
@@ -124,7 +180,7 @@
   let creating = false;   // new-entry form open
   let spread = null;    // which two-page spread is showing (null = open at the latest entry)
   let turning = false;  // a page-turn animation is running
-  const PER_PAGE = 3;
+  const PER_PAGE = 1; // one entry per page
   let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
   let sel = { from: "", to: "", tag: "", student: "", word: "" };
 
@@ -284,6 +340,33 @@
     return c;
   }
 
+  /** One entry as a journal page: big title, the text, then a thin rule with the date / who / tags / snapshot / buttons beneath. */
+  function leaf(e) {
+    if (editingId === e.id) return buildForm(e);
+    const c = mk("div", `jr-leaf${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
+    if (e.mode === "list") c.appendChild(donePill(e, (v) => setDone(e, v)));
+    c.appendChild(mk("h3", "jr-title", e.subject || "(no subject)"));
+    const tx = mk("div", "jr-body"); tx.innerHTML = QuizRich.show(e); bindBoxes(tx, e, render); c.appendChild(tx);
+    const foot = mk("div", "jr-foot");
+    const meta = mk("div", "jr-foot-meta");
+    meta.appendChild(mk("span", "jr-date", e.date));
+    const who = mk("span", "jr-who", e.students.length ? `Students (${e.students.length}): ${e.students.map(sName).join(", ")}` : "Whole class");
+    who.title = e.students.length ? e.students.map(sName).join(", ") : "Whole class";
+    meta.appendChild(who);
+    if ((e.sharedWith || []).length) meta.appendChild(mk("span", "jr-who", `Also in: ${e.sharedWith.map(courseName).join(", ")}`));
+    foot.appendChild(meta);
+    if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); foot.appendChild(t); }
+    if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); foot.appendChild(d); } }
+    const a = mk("div", "jr-foot-actions");
+    a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; render(); }));
+    a.appendChild(btn("Full view", "btn btn-ghost btn-small", () => openEntry(e.id)));
+    a.appendChild(pinPill(e, () => { J.setPinned(e.id, !e.pinned); render(); }));
+    a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); render(); } }));
+    foot.appendChild(a);
+    c.appendChild(foot);
+    return c;
+  }
+
   // ---------- the full-entry window ----------
   function openEntry(id) {
     const existing = document.getElementById("journal-modal"); if (existing) existing.remove();
@@ -326,15 +409,22 @@
     const left = mk("div", "jr-page jr-page-left"), right = mk("div", "jr-page jr-page-right");
     book.append(left, mk("div", "jr-spine"), right);
     const info = mk("div", "jr-bookinfo");
+    // panel lettering (only the Tron: Legacy theme shows these)
+    const stageHead = mk("div", "jr-stage-head"); const shR = mk("span"); stageHead.append(mk("span", "", "GradingGrid touch app · journal · OS12"), shR);
+    const stageFoot = mk("div", "jr-stage-foot"); const sfR = mk("span"); const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
+    stageFoot.append(mk("span", "", "Docking channel"), bars, sfR);
     function fill() {
       const base = spread * PER_PAGE * 2;
       [[left, base], [right, base + PER_PAGE]].forEach(([pg, from], i) => {
         pg.innerHTML = "";
-        sorted.slice(from, from + PER_PAGE).forEach((e) => pg.appendChild(entryCard(e)));
+        const here = sorted.slice(from, from + PER_PAGE);
+        here.forEach((e) => pg.appendChild(leaf(e)));
+        if (!here.length && !sorted.length && spread === 0) pg.appendChild(mk("div", "jr-blank", i === 0 ? (tagFilter.size ? "No entries have these tags." : "This journal is empty.") : "Click “+ New Entry” to write the first page."));
         pg.appendChild(mk("div", "jr-pageno", String(spread * 2 + i + 1)));
       });
       prev.disabled = spread === 0; next.disabled = spread >= total - 1;
       info.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2} of ${total * 2} · ${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`;
+      shR.textContent = `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`; sfR.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2}`;
     }
     function turn(dir) {
       if (turning || spread + dir < 0 || spread + dir >= total) return;
@@ -351,7 +441,7 @@
     }
     fill();
     const row = mk("div", "jr-bookrow"); row.append(prev, book, next);
-    wrap.append(row, info);
+    wrap.append(stageHead, row, stageFoot, info);
     return wrap;
   }
 
@@ -483,8 +573,7 @@
     const want = [...tagFilter].map((t) => t.toLowerCase());
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     const sorted = J.entries.filter((e) => !e.pinned && (!want.length || e.tags.some((t) => want.includes(t.toLowerCase())))).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
-    if (!sorted.length && !pinned.length && !creating) panel.appendChild(mk("p", "hint", "No entries to show. Click “+ New Entry”."));
-    if (sorted.length) panel.appendChild(buildBook(sorted));
+    panel.appendChild(buildBook(sorted)); // the journal is always on the desk, even with no entries
     if (pinned.length) {
       const m = mk("div", "jr-margin"); m.appendChild(mk("div", "jr-margin-title", `📌 Margin — pinned entries (${pinned.length})`));
       pinned.forEach((e) => {
