@@ -28,7 +28,8 @@
   const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : q.type === "para" ? "Long answer" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
-  const viewOf = new Map(); // toolId -> "build" | "review"
+  const viewOf = new Map(); // toolId -> "build" | "results" ("review" opens Results in Edit mode)
+  const resultMode = new Map(); // testId -> "view" | "edit": the one Results screen has two modes
   window.QuizBankUI = { open(toolId, testId, view) { editing.set(toolId, testId); viewOf.set(toolId, view || "build"); } };
   const statusMsg = new Map(); // toolId|testId -> text
 
@@ -959,7 +960,7 @@
           lr.appendChild(h("label", "", "Writing lines when printed"));
           lr.appendChild(textInput(String(q.lines || 6), "", (v) => { q.lines = Math.max(1, Math.min(40, Math.round(Number(v) || 6))); rerender(); }, "point-value-input"));
           box.appendChild(lr);
-          box.appendChild(h("p", "hint", isSurvey ? "Students type a paragraph in a text box. Surveys have no points." : "Students type a paragraph in a text box. It isn't marked automatically: open Results ▸ Review Results and type the points (0 to this question's points) for each student."));
+          box.appendChild(h("p", "hint", isSurvey ? "Students type a paragraph in a text box. Surveys have no points." : "Students type a paragraph in a text box. It isn't marked automatically: open Results, switch to Edit mode and type the points (0 to this question's points) for each student."));
         } else if (isSurvey) {
           box.appendChild(h("p", "hint", "Students type their own answer. Surveys have no answer key and no points."));
         } else {
@@ -1048,11 +1049,11 @@
   }
 
   /** Merges all of one student's entries into the earliest one. Needs, for every question, an answer in at most one entry (or you choose which to keep). */
-  async function combineEntries(tool, container, test, quiz, sid) {
+  async function combineEntries(tool, container, test, quiz, sid, batch) {
     const list = quiz.submissions.filter((x) => x.sid === sid).sort(byTime);
-    if (list.length < 2) return;
+    if (list.length < 2) return false;
     const name = list[0].name || sid;
-    if (list.length > 2 && !confirm(`${name} has ${list.length} entries. Combining will merge ALL ${list.length} into the earliest one (attempt ${list[0].attempt}) and delete the others. Continue?`)) return;
+    if (list.length > 2 && !batch && !confirm(`${name} has ${list.length} entries. Combining will merge ALL ${list.length} into the earliest one (attempt ${list[0].attempt}) and delete the others. Continue?`)) return;
     const qs = allQuestions(quiz).map((x) => x.q);
     const effs = list.map((s) => ScoringModule.quizEffectiveAnswers(s));
     const conflicts = [];
@@ -1066,7 +1067,7 @@
     });
     if (conflicts.length) {
       const chosen = await askConflicts(quiz, conflicts, name);
-      if (!chosen) return;
+      if (!chosen) return false;
       Object.assign(pick, chosen);
     }
     const base = list[0];
@@ -1088,8 +1089,99 @@
       catch (e) { serverFailed = true; }
     }
     ScoringModule.regradeQuiz(tool.id, test.id);
-    if (serverFailed) alert("Combined here. The server's copy of an old entry couldn't be removed; it won't come back when you Get Responses.");
+    if (serverFailed && !batch) alert("Combined here. The server's copy of an old entry couldn't be removed; it won't come back when you Get Responses.");
+    if (!batch) renderScoringToolView(tool, container);
+    return serverFailed ? "server" : true;
+  }
+
+  /** Every student with more than one entry, one after another; a dialog appears for each conflicting answer. */
+  async function combineAllDuplicates(tool, container, test, quiz) {
+    const count = new Map();
+    quiz.submissions.forEach((x) => count.set(x.sid, (count.get(x.sid) || 0) + 1));
+    const dupes = [...count.entries()].filter(([, n]) => n > 1);
+    if (!dupes.length) { alert("No student has more than one entry."); return; }
+    const big = dupes.filter(([, n]) => n > 2).length;
+    if (!confirm(`${dupes.length} student${dupes.length === 1 ? " has" : "s have"} more than one entry${big ? ` (${big} with more than 2 — all of their entries will be merged into the earliest)` : ""}.\n\nCombine them all? Where two entries answered the same question differently, you'll be asked which answer to keep. Cancelling a dialog skips that student.`)) return;
+    let done = 0, skipped = 0, serverFailed = false;
+    for (const [sid] of dupes) {
+      const r = await combineEntries(tool, container, test, quiz, sid, true);
+      if (r) done++; else skipped++;
+      if (r === "server") serverFailed = true;
+    }
+    ScoringModule.regradeQuiz(tool.id, test.id);
+    alert(`Combined ${done} student${done === 1 ? "" : "s"}${skipped ? `; skipped ${skipped}` : ""}.${serverFailed ? " Some old server copies couldn't be removed; they won't come back when you Get Responses." : ""}`);
     renderScoringToolView(tool, container);
+  }
+
+  /** The View / Edit switch at the top of the Results screen (Edit adds score editing, Combine and Delete). */
+  function modeBar(tool, container, test, quiz) {
+    const mode = resultMode.get(test.id) === "edit" ? "edit" : "view";
+    const bar = h("div", "qz-actions");
+    bar.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;";
+    bar.appendChild(h("strong", "", "Mode:"));
+    [["view", "View"], ["edit", "Edit"]].forEach(([id, label]) => {
+      bar.appendChild(button(label, id === mode ? "btn btn-primary btn-small" : "btn btn-ghost btn-small", () => { resultMode.set(test.id, id); renderScoringToolView(tool, container); }));
+    });
+    if (mode === "edit") {
+      const count = new Map();
+      quiz.submissions.forEach((x) => count.set(x.sid, (count.get(x.sid) || 0) + 1));
+      const n = [...count.values()].filter((c) => c > 1).length;
+      const b = button(`Combine all duplicate entries${n ? ` (${n})` : ""}`, "btn btn-ghost btn-small", () => combineAllDuplicates(tool, container, test, quiz));
+      b.disabled = n === 0;
+      bar.appendChild(b);
+    }
+    return bar;
+  }
+
+  /** The "Quiz stats" section: scores use each student's counted attempt (the quiz's best / latest / first rule). Returns { section, draw }. */
+  function statsBox(quiz) {
+    const { section, body } = makePresSection("Quiz stats");
+    section.classList.add("qz-sec-review");
+    const draw = () => {
+      body.textContent = "";
+      const total = ScoringModule.quizTotal(quiz);
+      const qs = allQuestions(quiz).map((x) => x.q);
+      const by = new Map();
+      quiz.submissions.forEach((x) => { if (!by.has(x.sid)) by.set(x.sid, []); by.get(x.sid).push(x); });
+      const rule = quiz.settings.attemptRule;
+      const counted = [];
+      by.forEach((list) => {
+        list.sort((a, b) => a.attempt - b.attempt);
+        const scored = list.map((x) => ({ x, sc: ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x)) }));
+        counted.push(rule === "latest" ? scored[scored.length - 1] : rule === "first" ? scored[0] : scored.reduce((a, b) => (b.sc > a.sc ? b : a)));
+      });
+      if (!counted.length) { body.appendChild(h("p", "hint", "No scores yet.")); return; }
+      const scores = counted.map((c) => c.sc).sort((a, b) => a - b);
+      const n = scores.length;
+      const sum = scores.reduce((a, b) => a + b, 0), mean = sum / n;
+      const median = n % 2 ? scores[(n - 1) / 2] : (scores[n / 2 - 1] + scores[n / 2]) / 2;
+      const sd = Math.sqrt(scores.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n);
+      const f = (v) => String(Math.round(v * 100) / 100);
+      const pct = (v) => (total ? ` (${Math.round((1000 * v) / total) / 10}%)` : "");
+      const names = (pick) => counted.filter((c) => c.sc === pick).map((c) => c.x.name || c.x.sid).slice(0, 4).join(", ");
+      const rows = [
+        ["Students counted", String(n)],
+        ["Total entries", `${quiz.submissions.length}${quiz.submissions.length > n ? ` (${quiz.submissions.length - n} extra)` : ""}`],
+        ["Counted attempt", rule === "latest" ? "Latest" : rule === "first" ? "First" : "Best"],
+        ["Maximum points", f(total)],
+        ["High score", `${f(scores[n - 1])}${pct(scores[n - 1])} — ${names(scores[n - 1])}`],
+        ["Low score", `${f(scores[0])}${pct(scores[0])} — ${names(scores[0])}`],
+        ["Median", `${f(median)}${pct(median)}`],
+        ["Average (mean)", `${f(mean)}${pct(mean)}`],
+        ["Standard deviation", f(sd)],
+        ["Range", f(scores[n - 1] - scores[0])],
+      ];
+      const ok = qs.map((q) => counted.filter((c) => { const e = ScoringModule.quizEffectiveAnswers(c.x); return ScoringModule.quizAnswerFraction(q, e[q.id], e["#" + q.id]) === 1; }).length);
+      if (qs.length > 1) {
+        const hard = ok.indexOf(Math.min(...ok)), easy = ok.indexOf(Math.max(...ok));
+        rows.push(["Hardest question", `Q${hard + 1} — ${Math.round((100 * ok[hard]) / n)}% correct`], ["Easiest question", `Q${easy + 1} — ${Math.round((100 * ok[easy]) / n)}% correct`]);
+      }
+      const t = h("table", "roster-table");
+      t.style.maxWidth = "640px";
+      rows.forEach(([k, v]) => { const tr = h("tr"); const th = h("td", "", k); th.style.fontWeight = "700"; tr.append(th, h("td", "", v)); t.appendChild(tr); });
+      body.appendChild(t);
+    };
+    return { section, draw };
   }
 
   // ---------- the review grid ----------
@@ -1100,8 +1192,9 @@
     container.innerHTML = "";
     const regrade = () => ScoringModule.regradeQuiz(tool.id, testId);
 
-    container.appendChild(editorHeader(tool, container, test, quiz, "review"));
-    const { section, body } = makePresSection("Review & edit answers   ● correct   ✕ incorrect");
+    container.appendChild(editorHeader(tool, container, test, quiz, "results"));
+    container.appendChild(modeBar(tool, container, test, quiz));
+    const { section, body } = makePresSection("Edit results   ● correct   ✕ incorrect");
     section.classList.add("qz-sec-review");
     container.appendChild(section);
     body.appendChild(h("p", "hint", "● green = correct, ✕ red = incorrect. Change any student's answer in its box, or fix an answer in the \"Answer key\" row — scores update instantly. Edited answers get a yellow outline and are kept when you Get Responses again."));
@@ -1110,6 +1203,7 @@
       body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
       return;
     }
+    const stats = statsBox(quiz);
 
     const qs = [];
     quiz.sections.forEach((s) => s.questions.forEach((q) => qs.push(q)));
@@ -1303,7 +1397,9 @@
         r.scoreTd.textContent = `${ScoringModule.gradeQuizSubmission(quiz, eff)} / ${total}`;
       });
       pctCells.forEach((td, i) => { td.textContent = `${Math.round((100 * correctCount[i]) / rows.length)}%`; });
+      stats.draw();
     }
+    container.appendChild(stats.section);
     refresh();
   }
 
@@ -1801,9 +1897,11 @@
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
     if (isSurveyKind(quiz.kind)) return renderSurveyResults(tool, container, test, quiz);
+    if (resultMode.get(testId) === "edit") return renderReview(tool, container, testId);
     const style = quiz.settings.labelStyle;
     container.innerHTML = "";
     container.appendChild(editorHeader(tool, container, test, quiz, "results"));
+    container.appendChild(modeBar(tool, container, test, quiz));
 
     if (!document.getElementById("qz-style2")) {
       const st = document.createElement("style");
@@ -1826,7 +1924,7 @@
       body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
       return;
     }
-    body.appendChild(h("p", "hint", "Click a column heading (Student, Attempt, Time, Score or a question) to sort. Hover over a symbol to see the student's answer. To change an answer or fix the answer key, use \"Review answers & regrade\"."));
+    body.appendChild(h("p", "hint", "Click a column heading (Student, Attempt, Time, Score or a question) to sort. Hover over a symbol to see the student's answer. To change an answer, fix the answer key or combine entries, switch to Edit mode above."));
 
     const total = ScoringModule.quizTotal(quiz);
     const colors = ["#1f6fb5", "#2e8b57", "#b8860b", "#a23b72"];
@@ -1945,6 +2043,9 @@
     qs.forEach((q, i) => ftr.appendChild(h("td", "", `${Math.round((100 * correctCount[i]) / count)}%`)));
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
+    const stats = statsBox(quiz);
+    container.appendChild(stats.section);
+    stats.draw();
   }
 
   // ---------- dropdown menus ----------
@@ -2157,7 +2258,7 @@
         return;
       }
       const quiz = ScoringModule.normalizeQuiz(t);
-      const go = (view) => () => { editing.set(tool.id, t.id); viewOf.set(tool.id, view); rerender(); };
+      const go = (view) => () => { editing.set(tool.id, t.id); if (view === "results" || view === "review") { resultMode.set(t.id, view === "review" ? "edit" : "view"); view = "results"; } viewOf.set(tool.id, view); rerender(); };
       const students = new Set(quiz.submissions.map((x) => x.sid)).size;
       tr.children[4].textContent = quiz.token ? "QR open" : "";
       const maxCell = tr.children[1];
@@ -2213,8 +2314,7 @@
       group.appendChild(isSurvey
         ? button(`Show Results (${students})`, "btn btn-ghost btn-small qz-menu-btn", go("results"))
         : menuButton("Results", "#0f7d73", [
-          { label: "Show Results", onClick: go("results") },
-          { label: `Review Results (${students})`, onClick: go("review") },
+          { label: `Results (${students})`, onClick: go("results") },
           {
             label: "Re-Calculate Results",
             onClick: guard(async () => {
@@ -2263,8 +2363,9 @@
     const testId = editing.get(tool.id);
     if (testId && ScoringModule.quizOf(tool.id, testId)) {
       const view = viewOf.get(tool.id);
+      if (view === "review") { resultMode.set(testId, "edit"); return renderResults(tool, container, testId); }
       if (view === "results") return renderResults(tool, container, testId);
-      return view === "review" ? renderReview(tool, container, testId) : renderEditor(tool, container, testId);
+      return renderEditor(tool, container, testId);
     }
     editing.delete(tool.id);
     ScoringModule.testBankTests(tool.id).forEach((t) => { if (t.quiz) ScoringModule.normalizeQuiz(t); });

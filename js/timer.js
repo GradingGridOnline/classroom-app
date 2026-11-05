@@ -25,15 +25,21 @@
   // ----- the button on the main page -----
   const css = document.createElement("style");
   css.textContent = `
-#ggo-timer-btn { position: fixed; top: 6px; right: 14px; z-index: 9000; background: var(--card); }
-@media print { #ggo-timer-btn { display: none !important; } }`;
+#ggo-timer-bar { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+#ggo-timer-bar.ggo-floating { position: fixed; top: 6px; right: 14px; z-index: 9000; margin: 0; }
+@media print { #ggo-timer-bar { display: none !important; } }`;
   document.head.appendChild(css);
   const btn = document.createElement("button");
   btn.id = "ggo-timer-btn";
   btn.type = "button";
   btn.className = "btn btn-ghost btn-small";
   btn.textContent = "Classroom Timer";
-  document.body.appendChild(btn);
+  const bar = document.createElement("div");
+  bar.id = "ggo-timer-bar";
+  bar.appendChild(btn);
+  const main = document.querySelector("main.card");
+  if (main) main.insertBefore(bar, main.firstChild); // top-right inside the card, below the thin line under Settings / info / Admin
+  else { bar.classList.add("ggo-floating"); document.body.appendChild(bar); }
 
   let win = null;
   btn.addEventListener("click", () => {
