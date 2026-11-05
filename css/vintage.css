@@ -27,12 +27,11 @@
 html[data-theme="vintage"] { --hdr-bg: #3d4a2a; }
 [data-theme="vintage"] body {
   color: var(--ink);
-  /* dark olive ground, lit by a warm amber "window" glow on the right, darker toward the edges */
+  /* a drawn café scene (css/vintage-bg.svg): olive ground, glowing arched window, pendant lamps, shelves, coffee branches with flowers and beans */
   background-color: #353b28;
-  background-image:
-    radial-gradient(ellipse 55% 60% at 82% 38%, rgba(233, 180, 90, 0.30) 0%, rgba(233, 180, 90, 0) 100%),
-    radial-gradient(ellipse 45% 50% at 10% 70%, rgba(120, 140, 70, 0.18) 0%, rgba(120, 140, 70, 0) 100%),
-    radial-gradient(ellipse 120% 100% at 50% 40%, rgba(0, 0, 0, 0) 40%, rgba(15, 14, 8, 0.55) 100%);
+  background-image: url("vintage-bg.svg");
+  background-size: cover;
+  background-position: center;
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
