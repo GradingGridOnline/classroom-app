@@ -172,7 +172,14 @@ const AttendanceModule = {
     return this.infractionsOf(rec).reduce((a, i) => a + (this.settings.infractionPoints[i] ?? 0), 0);
   },
 
+  /** Students excluded from the seating chart can't have attendance recorded. */
+  isEligible(studentId) {
+    const st = typeof RosterModule !== "undefined" ? RosterModule.students.find((x) => x.id === studentId) : null;
+    return !(st && st.excludeFromSeating);
+  },
+
   setRecord(studentId, sessionId, fields) {
+    if (!this.isEligible(studentId)) return;
     const key = this.recordKey(studentId, sessionId);
     const existing = this.records[key] || { code: "", infraction: "", memo: "" };
     this.records[key] = { ...existing, ...fields };
@@ -180,7 +187,7 @@ const AttendanceModule = {
 
   /** The header "P" button — marks every given student present for one session in one action. */
   markAllPresent(sessionId, studentIds) {
-    studentIds.forEach((id) => this.setRecord(id, sessionId, { code: "P" }));
+    studentIds.filter((id) => this.isEligible(id)).forEach((id) => this.setRecord(id, sessionId, { code: "P" }));
   },
 
   // ----- General per-student notes -----

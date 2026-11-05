@@ -992,6 +992,106 @@
 
   }
 
+  // ---------- entry order, timestamps, combining ----------
+  /** "Nov 5, 19:31:02" in the teacher's own time zone ("—" when the entry has no time). */
+  function fmtTime(at) {
+    const d = at ? new Date(at) : null;
+    if (!d || isNaN(d)) return "—";
+    return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  }
+  const timeOf = (s) => { const t = s && s.at ? Date.parse(s.at) : NaN; return isNaN(t) ? null : t; };
+  /** One student's entries by time (entries with no time fall back to attempt number). */
+  function byTime(a, b) {
+    const ta = timeOf(a), tb = timeOf(b);
+    return ta !== null && tb !== null && ta !== tb ? ta - tb : a.attempt - b.attempt;
+  }
+  /** Students A-Z, and each student's entries in time order. */
+  function studentOrder(a, b) {
+    return (a.name || a.sid).localeCompare(b.name || b.sid) || String(a.sid).localeCompare(String(b.sid)) || byTime(a, b);
+  }
+  const blankAnswer = (v) => v === undefined || v === null || String(v).trim() === "";
+
+  /** Asks which answer to keep where two or more entries both answered the same question. Resolves to { questionId: entry } or null (cancelled). */
+  function askConflicts(quiz, conflicts, name) {
+    return new Promise((resolve) => {
+      const overlay = h("div");
+      overlay.style.cssText = "position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;";
+      const box = h("div");
+      box.style.cssText = "background:var(--card,#fff);color:var(--ink,#111);border:1px solid var(--line,#ccc);border-radius:var(--radius,8px);max-width:760px;width:100%;max-height:85vh;overflow:auto;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.3);";
+      box.appendChild(h("h3", "", `Both entries answered some questions (${name})`));
+      box.appendChild(h("p", "hint", "Recommended: keep the first answer that was entered (the earliest time). Choose a different one for any question below."));
+      const chosen = {};
+      conflicts.forEach((c, ci) => {
+        const fs = h("div", "category-manage-item");
+        fs.style.cssText = "display:block;margin:8px 0;padding:8px;";
+        fs.appendChild(h("strong", "", `Q${c.n}`));
+        c.options.forEach((o, oi) => {
+          const lab = h("label");
+          lab.style.cssText = "display:flex;gap:8px;align-items:flex-start;margin:4px 0;cursor:pointer;";
+          const r = h("input"); r.type = "radio"; r.name = `qz-conf-${ci}`; r.checked = oi === 0;
+          chosen[c.q.id] = c.options[0].s;
+          r.addEventListener("change", () => { chosen[c.q.id] = o.s; });
+          const t = h("span", "", `${oi === 0 ? "★ First entered (recommended)" : "Later entry"} — attempt ${o.s.attempt}, ${fmtTime(o.s.at)}: ${o.text || "(blank)"}`);
+          t.style.whiteSpace = "pre-wrap";
+          lab.append(r, t);
+          fs.appendChild(lab);
+        });
+        box.appendChild(fs);
+      });
+      const bar = h("div", "qz-actions");
+      const done = (v) => { overlay.remove(); resolve(v); };
+      bar.append(button("Combine entries", "btn btn-primary", () => done(chosen)), button("Cancel", "btn btn-ghost", () => done(null)));
+      box.appendChild(bar);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+    });
+  }
+
+  /** Merges all of one student's entries into the earliest one. Needs, for every question, an answer in at most one entry (or you choose which to keep). */
+  async function combineEntries(tool, container, test, quiz, sid) {
+    const list = quiz.submissions.filter((x) => x.sid === sid).sort(byTime);
+    if (list.length < 2) return;
+    const name = list[0].name || sid;
+    if (list.length > 2 && !confirm(`${name} has ${list.length} entries. Combining will merge ALL ${list.length} into the earliest one (attempt ${list[0].attempt}) and delete the others. Continue?`)) return;
+    const qs = allQuestions(quiz).map((x) => x.q);
+    const effs = list.map((s) => ScoringModule.quizEffectiveAnswers(s));
+    const conflicts = [];
+    const pick = {}; // question id -> entry whose answer is kept
+    qs.forEach((q, qi) => {
+      const filled = list.map((s, i) => ({ s, v: effs[i][q.id] })).filter((x) => !blankAnswer(x.v));
+      if (filled.length === 0) return; // blank everywhere: stays blank
+      pick[q.id] = filled[0].s; // earliest answered entry
+      const distinct = new Set(filled.map((x) => String(x.v).trim()));
+      if (filled.length >= 2 && distinct.size > 1) conflicts.push({ q, n: qi + 1, options: filled.map((x) => ({ s: x.s, text: optionText(quiz, q, x.v) })) });
+    });
+    if (conflicts.length) {
+      const chosen = await askConflicts(quiz, conflicts, name);
+      if (!chosen) return;
+      Object.assign(pick, chosen);
+    }
+    const base = list[0];
+    base.overrides = base.overrides || {};
+    base.marks = base.marks || {};
+    qs.forEach((q) => {
+      const src = pick[q.id];
+      if (!src || src === base) return;
+      base.overrides[q.id] = ScoringModule.quizEffectiveAnswers(src)[q.id]; // an edit, so Get Responses keeps it
+      if (q.type === "para") {
+        if (src.marks && src.marks[q.id] !== undefined) base.marks[q.id] = src.marks[q.id];
+        else delete base.marks[q.id];
+      }
+    });
+    base.combinedFrom = [...(base.combinedFrom || []), ...list.slice(1).map((x) => x.attempt)];
+    let serverFailed = false;
+    for (const other of list.slice(1)) {
+      try { const r = await QuizForms.removeAttempt(tool.id, test.id, other); if (!r.serverCleared) serverFailed = true; }
+      catch (e) { serverFailed = true; }
+    }
+    ScoringModule.regradeQuiz(tool.id, test.id);
+    if (serverFailed) alert("Combined here. The server's copy of an old entry couldn't be removed; it won't come back when you Get Responses.");
+    renderScoringToolView(tool, container);
+  }
+
   // ---------- the review grid ----------
   function renderReview(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
@@ -1021,7 +1121,7 @@
 
     const thead = h("thead");
     const hr = h("tr");
-    ["Student", "Attempt", "Score"].forEach((t) => hr.appendChild(h("th", "", t)));
+    ["Student", "Attempt", "Time", "Score"].forEach((t) => hr.appendChild(h("th", "", t)));
     qs.forEach((q, i) => {
       const th = h("th");
       th.style.textAlign = "center";
@@ -1040,6 +1140,7 @@
     const keyLabel = h("td", "", "🔑 Answer key");
     keyLabel.style.fontWeight = "700";
     keyTr.appendChild(keyLabel);
+    keyTr.appendChild(h("td"));
     keyTr.appendChild(h("td"));
     keyTr.appendChild(h("td"));
     qs.forEach((q) => {
@@ -1079,15 +1180,29 @@
     // student rows
     const rows = [];
     let lastSid = null;
-    const sorted = [...quiz.submissions].sort((a, b) => (a.name || a.sid).localeCompare(b.name || b.sid) || a.attempt - b.attempt);
+    let prevSid = null;
+    const sorted = [...quiz.submissions].sort(studentOrder);
+    const entryCount = new Map();
+    sorted.forEach((x) => entryCount.set(x.sid, (entryCount.get(x.sid) || 0) + 1));
     sorted.forEach((s) => {
       const tr = h("tr", s.sid !== lastSid ? "qz-newstudent" : "");
       lastSid = s.sid;
       const nameTd = h("td", "", s.name || "(not on roster)");
       nameTd.appendChild(h("div", "hint", s.sid));
       nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
+      if (s.sid !== prevSid && entryCount.get(s.sid) > 1) {
+        const cb = button(`Combine ${entryCount.get(s.sid)} entries`, "btn btn-ghost btn-small", () => combineEntries(tool, container, test, quiz, s.sid));
+        cb.title = "Merge this student's entries into one. Works question by question; you choose which answer to keep if both entries answered the same question.";
+        nameTd.appendChild(cb);
+      }
+      prevSid = s.sid;
       tr.appendChild(nameTd);
-      tr.appendChild(h("td", "", String(s.attempt)));
+      const attTd = h("td", "", String(s.attempt));
+      if (s.combinedFrom && s.combinedFrom.length) attTd.appendChild(h("div", "hint", `combined with ${s.combinedFrom.map((n) => "#" + n).join(", ")}`));
+      tr.appendChild(attTd);
+      const timeTd = h("td", "", fmtTime(s.at));
+      timeTd.style.whiteSpace = "nowrap";
+      tr.appendChild(timeTd);
       const scoreTd = h("td");
       scoreTd.style.fontWeight = "700";
       scoreTd.style.whiteSpace = "nowrap";
@@ -1165,6 +1280,7 @@
     ftr.appendChild(fl);
     ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
+    ftr.appendChild(h("td"));
     const pctCells = qs.map(() => { const td = h("td"); td.style.textAlign = "center"; ftr.appendChild(td); return td; });
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
@@ -1192,7 +1308,7 @@
   }
 
   // ---------- CSV export ----------
-  const sortedSubs = (quiz) => [...quiz.submissions].sort((a, b) => (a.name || a.sid).localeCompare(b.name || b.sid) || a.attempt - b.attempt);
+  const sortedSubs = (quiz) => [...quiz.submissions].sort(studentOrder);
   const allQuestions = (quiz) => {
     const out = [];
     quiz.sections.forEach((sec) => sec.questions.forEach((q) => out.push({ q, sec })));
@@ -1680,6 +1796,7 @@
   }
 
   // ---------- the results view: a read-only grid of ● / ✕ ----------
+  const resultSort = new Map(); // testId -> { key: "name"|"attempt"|"time"|"score"|"q:<n>", dir: 1|-1 } (this visit only)
   function renderResults(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
@@ -1709,7 +1826,7 @@
       body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
       return;
     }
-    body.appendChild(h("p", "hint", "Hover over a symbol to see the student's answer. To change an answer or fix the answer key, use \"Review answers & regrade\"."));
+    body.appendChild(h("p", "hint", "Click a column heading (Student, Attempt, Time, Score or a question) to sort. Hover over a symbol to see the student's answer. To change an answer or fix the answer key, use \"Review answers & regrade\"."));
 
     const total = ScoringModule.quizTotal(quiz);
     const colors = ["#1f6fb5", "#2e8b57", "#b8860b", "#a23b72"];
@@ -1722,9 +1839,20 @@
     const thead = h("thead");
     const r1 = h("tr");
     const r2row = h("tr");
-    ["Student", "Attempt", "Score"].forEach((t) => {
-      const th = h("th", "", t);
+    const sort = resultSort.get(testId) || { key: "name", dir: 1 };
+    const sortable = (th, key, label) => {
+      th.style.cursor = "pointer";
+      th.title = "Click to sort; click again to reverse";
+      th.textContent = label + (sort.key === key ? (sort.dir === 1 ? " ▲" : " ▼") : "");
+      th.addEventListener("click", () => {
+        resultSort.set(testId, { key, dir: sort.key === key ? -sort.dir : 1 });
+        renderScoringToolView(tool, container);
+      });
+    };
+    [["name", "Student"], ["attempt", "Attempt"], ["time", "Time"], ["score", "Score"]].forEach(([key, label]) => {
+      const th = h("th");
       th.rowSpan = 2;
+      sortable(th, key, label);
       r1.appendChild(th);
     });
     let num = 0;
@@ -1738,7 +1866,13 @@
         num++;
         qs.push(q);
         const qth = h("th");
-        qth.appendChild(h("div", "", `Q${num}`));
+        const qlab = h("div");
+        sortable(qlab, "q:" + (num - 1), `Q${num}`);
+        qth.style.cursor = "pointer";
+        qth.title = "Click to sort by this question (correct answers first, then click again for incorrect first)";
+        qth.addEventListener("click", () => qlab.click());
+        qlab.addEventListener("click", (e) => e.stopPropagation());
+        qth.appendChild(qlab);
         qth.appendChild(h("div", "item-points-label", `${q.points} pt`));
         r2row.appendChild(qth);
       });
@@ -1754,7 +1888,26 @@
     const tbody = h("tbody");
     const correctCount = qs.map(() => 0);
     let lastSid = null;
-    [...quiz.submissions].sort((a, b) => (a.name || a.sid).localeCompare(b.name || b.sid) || a.attempt - b.attempt).forEach((s) => {
+    const scoreOf = new Map(quiz.submissions.map((x) => [x, ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x))]));
+    const sortValue = (x) => {
+      if (sort.key === "attempt") return x.attempt;
+      if (sort.key === "time") { const t = timeOf(x); return t === null ? 0 : t; }
+      if (sort.key === "score") return scoreOf.get(x);
+      if (sort.key.startsWith("q:")) {
+        const q = qs[Number(sort.key.slice(2))];
+        const e = ScoringModule.quizEffectiveAnswers(x);
+        return q ? ScoringModule.quizAnswerFraction(q, e[q.id], e["#" + q.id]) : 0;
+      }
+      return 0;
+    };
+    const ordered = [...quiz.submissions].sort((a, b) => {
+      if (sort.key === "name") return sort.dir * studentOrder(a, b);
+      // other columns: larger-first when sorted "▲" for score/questions is unnatural, so ▲ = smallest first, except questions (▲ = correct first)
+      const d = sortValue(a) - sortValue(b);
+      const flip = sort.key.startsWith("q:") ? -1 : 1;
+      return d ? sort.dir * flip * d : studentOrder(a, b);
+    });
+    ordered.forEach((s) => {
       const eff = ScoringModule.quizEffectiveAnswers(s);
       const tr = h("tr", s.sid !== lastSid ? "qz-newstudent" : "");
       lastSid = s.sid;
@@ -1763,7 +1916,10 @@
       nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.appendChild(nameTd);
       tr.appendChild(h("td", "", String(s.attempt)));
-      const score = h("td", "", `${ScoringModule.gradeQuizSubmission(quiz, eff)} / ${total}`);
+      const timeTd = h("td", "", fmtTime(s.at));
+      timeTd.style.whiteSpace = "nowrap";
+      tr.appendChild(timeTd);
+      const score = h("td", "", `${scoreOf.get(s)} / ${total}`);
       score.style.cssText = "font-weight:700;white-space:nowrap;";
       tr.appendChild(score);
       qs.forEach((q, i) => {
@@ -1782,6 +1938,7 @@
     const fl = h("td", "", "% correct");
     fl.style.textAlign = "left";
     ftr.appendChild(fl);
+    ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
     const count = quiz.submissions.length;

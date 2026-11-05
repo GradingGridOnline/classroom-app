@@ -163,8 +163,8 @@
       unseatedBox.appendChild(row);
     };
     const notAtDesk = RosterModule.students.filter((s) => !seatedIds.has(s.id));
+    // Students excluded from seating can't have attendance recorded, so they aren't listed here.
     addGroup("Not seated", notAtDesk.filter((s) => !s.excludeFromSeating));
-    addGroup("Excluded Students", notAtDesk.filter((s) => s.excludeFromSeating));
   };
   // ----- desk colors by absences: orange at the limit, red beyond it -----
   // Uses the "Absence warning limit" in Attendance Settings (same limit as the Table's Absences column).

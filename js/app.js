@@ -2157,6 +2157,13 @@ function buildAttendanceStudentRow(student) {
 
 /** The three recording controls (code, infraction, memo) for one student in one class — shared by the Table and the Seating Grid. */
 function buildAttendanceRecordControls(student, session) {
+  if (student.excludeFromSeating) {
+    const note = document.createElement("span");
+    note.className = "hint";
+    note.textContent = "Excluded from seating";
+    note.title = "Students excluded from the seating chart can't have attendance recorded. Include them again on the Roster to record attendance.";
+    return [note];
+  }
   const record = AttendanceModule.getRecord(student.id, session.id);
 
   const codeSelect = document.createElement("select");
