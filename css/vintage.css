@@ -1,6 +1,6 @@
 /* ===== Vintage theme =====
    Based on a vintage coffee-house poster: dark olive-green ground with a warm window glow, aged parchment panels with a
-   double tan-and-brown border, gold wood-type lettering (Rye), coffee-brown buttons, leaf-green accents and ink-brown text.
+   double tan-and-brown border, gold Playfair Display lettering, coffee-brown buttons, leaf-green accents and ink-brown text.
    Loaded after dark.css. */
 [data-theme="vintage"] {
   --paper: #e8d7ad;        /* page + inner bands (aged parchment) */
@@ -11,7 +11,7 @@
   --green-dark: #3f4a26;   /* headings, secondary-button text, hover fill: deep olive */
   --marker: #d9962e;       /* accent: poster gold / amber */
   --line: #bfa774;
-  --font-heading: "Rye", "Bevan", Georgia, "Times New Roman", serif;   /* wood-type poster lettering: titles, section bars */
+  --font-heading: "Playfair Display", Georgia, "Times New Roman", serif;   /* classic high-contrast serif: titles, section bars */
   --font-body: "Old Standard TT", Georgia, "Times New Roman", serif;   /* classic book serif */
   --font-display: "Oswald", "Arial Narrow", sans-serif;               /* bold condensed sign lettering ("FRESHLY BREWED"): tabs, buttons, column heads */
   --font-script: "Oswald", "Arial Narrow", sans-serif;
@@ -62,10 +62,11 @@ html[data-theme="vintage"] { --hdr-bg: #3d4a2a; }
 [data-theme="vintage"] input,
 [data-theme="vintage"] select,
 [data-theme="vintage"] textarea { font-family: var(--font-body); }
-/* The page title sits on the dark ground: gold wood-type lettering with a dark outline, like the poster's "COFFEE" */
+/* The page title sits on the dark ground: bold serif lettering with a dark outline, like the poster's "COFFEE" */
 [data-theme="vintage"] header h1 {
   color: #ecb95f;
-  letter-spacing: 0.03em;
+  font-weight: 900;
+  letter-spacing: 0.02em;
   text-shadow: 1px 1px 0 #1d170d, -1px 1px 0 #1d170d, 1px -1px 0 #1d170d, -1px -1px 0 #1d170d, 0 3px 0 #1d170d;
 }
 /* Header buttons sit on the dark ground: parchment buttons with a brown edge */
