@@ -27,13 +27,16 @@
 html[data-theme="vintage"] { --hdr-bg: #3d4a2a; }
 [data-theme="vintage"] body {
   color: var(--ink);
-  /* a drawn café scene (css/vintage-bg.svg): olive ground, glowing arched window, pendant lamps, shelves, coffee branches with flowers and beans */
-  background-color: #353b28;
-  background-image: url("vintage-bg.svg");
-  background-size: cover;
-  background-position: center;
+  /* old green desk felt: fibre texture (css/vintage-felt.svg) over olive green, lit by a warm amber glow, darker toward the edges */
+  background-color: #3b4a2c;
+  background-image:
+    url("vintage-felt.svg"),
+    radial-gradient(ellipse 55% 60% at 82% 38%, rgba(233, 180, 90, 0.34) 0%, rgba(233, 180, 90, 0) 100%),
+    radial-gradient(ellipse 45% 50% at 10% 70%, rgba(130, 150, 75, 0.20) 0%, rgba(130, 150, 75, 0) 100%),
+    radial-gradient(ellipse 120% 100% at 50% 40%, rgba(0, 0, 0, 0) 40%, rgba(15, 14, 8, 0.55) 100%);
+  background-size: 400px 400px, auto, auto, auto;
   background-attachment: fixed;
-  background-repeat: no-repeat;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
 }
 [data-theme="vintage"] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme="vintage"] select,
