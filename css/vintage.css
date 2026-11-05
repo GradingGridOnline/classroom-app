@@ -1,63 +1,80 @@
 /* ===== Vintage theme =====
-   Cream "tin sign" paper, charcoal ink, and a faded retro palette: slate blue (primary),
-   sage green, peach, and dusty rose (accent), with a chunky slab heading font. Loaded after dark.css. */
+   Based on a vintage coffee-house poster: dark olive-green ground with a warm window glow, aged parchment panels with a
+   double tan-and-brown border, gold wood-type lettering (Rye), coffee-brown buttons, leaf-green accents and ink-brown text.
+   Loaded after dark.css. */
 [data-theme="vintage"] {
-  --paper: #efe4cb;        /* page + inner bands (aged cream) */
-  --card: #fbf5e6;         /* panels, tiles, menus */
-  --ink: #3a3d40;          /* charcoal text */
-  --ink-soft: #6e695e;
-  --green: #5e808c;        /* primary / interactive: slate blue */
-  --green-dark: #3f5c68;   /* headings, secondary-button text, hover fill */
-  --marker: #d98a86;       /* accent: dusty rose */
-  --line: #cdbf9f;
-  --font-heading: "Bevan", Georgia, "Times New Roman", serif;      /* chunky slab: section bars, titles */
-  --font-body: "Old Standard TT", Georgia, "Times New Roman", serif;  /* classic book serif */
-  --font-display: "Oswald", "Arial Narrow", sans-serif;              /* condensed sign lettering: tabs, buttons, column heads */
-  --font-script: "Courgette", "Brush Script MT", cursive;            /* hand-lettered script: sub-headings */
-  --radius: 8px;
-  --radius-small: 6px;
-  --card-shadow: 0 0 0 1px #cdbf9f, 0 2px 0 #d8c9a6;
+  --paper: #e8d7ad;        /* page + inner bands (aged parchment) */
+  --card: #f4e8c8;         /* panels, tiles, menus (light parchment) */
+  --ink: #2b2118;          /* dark coffee ink */
+  --ink-soft: #6b5a43;
+  --green: #66783a;        /* interactive accents: coffee-leaf green */
+  --green-dark: #3f4a26;   /* headings, secondary-button text, hover fill: deep olive */
+  --marker: #d9962e;       /* accent: poster gold / amber */
+  --line: #bfa774;
+  --font-heading: "Rye", "Bevan", Georgia, "Times New Roman", serif;   /* wood-type poster lettering: titles, section bars */
+  --font-body: "Old Standard TT", Georgia, "Times New Roman", serif;   /* classic book serif */
+  --font-display: "Oswald", "Arial Narrow", sans-serif;               /* bold condensed sign lettering ("FRESHLY BREWED"): tabs, buttons, column heads */
+  --font-script: "Oswald", "Arial Narrow", sans-serif;
+  --radius: 6px;
+  --radius-small: 4px;
+  /* poster border: thin brown line, tan band, thin brown line */
+  --card-shadow: 0 0 0 1px #8a6a38, 0 0 0 3px #ead9ae, 0 0 0 4px #8a6a38, 0 4px 10px rgba(0, 0, 0, 0.35);
   --glow: none;
-  --focus-glow: 0 0 0 2px rgba(94, 128, 140, 0.4);
-  --th-bg: #efab8e;        /* column headers: peach */
-  --td-bg: color-mix(in srgb, #efab8e 30%, #fffaf0);
+  --focus-glow: 0 0 0 2px rgba(217, 150, 46, 0.55);
+  --th-bg: #e0b565;        /* column headers: amber gold */
+  --td-bg: color-mix(in srgb, #e0b565 28%, #fbf3dc);
 }
-html[data-theme="vintage"] { --hdr-bg: #56737e; }
+html[data-theme="vintage"] { --hdr-bg: #3d4a2a; }
 [data-theme="vintage"] body {
   color: var(--ink);
-  /* green sunray background (like the "Coffee Time" sign): light rays from the middle, darker toward the edges */
-  background-color: #86a284;
+  /* dark olive ground, lit by a warm amber "window" glow on the right, darker toward the edges */
+  background-color: #353b28;
   background-image:
-    radial-gradient(ellipse 120% 100% at 50% 35%, rgba(0, 0, 0, 0) 45%, rgba(40, 62, 46, 0.35) 100%),
-    repeating-conic-gradient(from 0deg at 50% 35%, rgba(255, 255, 240, 0.17) 0deg 7.5deg, rgba(255, 255, 240, 0) 7.5deg 15deg);
+    radial-gradient(ellipse 55% 60% at 82% 38%, rgba(233, 180, 90, 0.30) 0%, rgba(233, 180, 90, 0) 100%),
+    radial-gradient(ellipse 45% 50% at 10% 70%, rgba(120, 140, 70, 0.18) 0%, rgba(120, 140, 70, 0) 100%),
+    radial-gradient(ellipse 120% 100% at 50% 40%, rgba(0, 0, 0, 0) 40%, rgba(15, 14, 8, 0.55) 100%);
   background-attachment: fixed;
   background-repeat: no-repeat;
 }
 [data-theme="vintage"] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme="vintage"] select,
 [data-theme="vintage"] textarea {
-  background: #fffaf0;
+  background: #fbf3dc;
   color: var(--ink);
-  border: 1px solid #b9a98a;
+  border: 1px solid #a98f5a;
 }
 [data-theme="vintage"] table th { color: var(--ink); }
-[data-theme="vintage"] .btn-primary { background: #5e808c; color: #fff; }
-[data-theme="vintage"] .btn-primary:hover { background: #3f5c68; color: #fff; }
-[data-theme="vintage"] .result { color: #4d7a52; }
+[data-theme="vintage"] .btn-primary { background: #7b4b27; color: #fbf3dc; }
+[data-theme="vintage"] .btn-primary:hover { background: #57331a; color: #fbf3dc; }
+[data-theme="vintage"] .result { color: #55712f; }
 
-/* A variety of vintage faces */
+/* Poster lettering: bold condensed caps for buttons and column heads, hand-painted serif for body text */
 [data-theme="vintage"] .tab-btn,
 [data-theme="vintage"] .btn,
 [data-theme="vintage"] table th,
 [data-theme="vintage"] .panel-toolbar button {
   font-family: var(--font-display);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 [data-theme="vintage"] .tab-btn { font-size: 1rem; }
-[data-theme="vintage"] h4 { font-family: var(--font-script); font-weight: 400; letter-spacing: 0.01em; }
+[data-theme="vintage"] h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
 [data-theme="vintage"] input,
 [data-theme="vintage"] select,
 [data-theme="vintage"] textarea { font-family: var(--font-body); }
-/* The page title sits on the green background: cream lettering with a soft shadow */
-[data-theme="vintage"] header h1 { color: #fbf5e6; text-shadow: 0 2px 0 rgba(40, 62, 46, 0.55); }
+/* The page title sits on the dark ground: gold wood-type lettering with a dark outline, like the poster's "COFFEE" */
+[data-theme="vintage"] header h1 {
+  color: #ecb95f;
+  letter-spacing: 0.03em;
+  text-shadow: 1px 1px 0 #1d170d, -1px 1px 0 #1d170d, 1px -1px 0 #1d170d, -1px -1px 0 #1d170d, 0 3px 0 #1d170d;
+}
+/* Header buttons sit on the dark ground: parchment buttons with a brown edge */
+[data-theme="vintage"] .header .btn-ghost,
+[data-theme="vintage"] #settings-btn,
+[data-theme="vintage"] #help-btn,
+[data-theme="vintage"] #admin-btn {
+  background: #f4e8c8;
+  color: #2b2118;
+  border: 1px solid #8a6a38;
+}
+[data-theme="vintage"] #autosave-indicator { color: #ecdcb4; }
