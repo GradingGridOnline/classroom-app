@@ -161,6 +161,31 @@
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-turn { background:#071015; color:#4fe0ff; border:1px solid #19d3f0; border-radius:0; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookinfo { color:#7fe9ff; letter-spacing:.1em; text-transform:uppercase; font-size:.7rem; }
 
+/* display modes: full (one whole entry), partial (3 per page), compact (6 titles per page) */
+:is(#journal-panel, #journal-modal) .jr-seg { display:inline-flex; align-items:center; gap:4px; margin-left:12px; }
+:is(#journal-panel, #journal-modal) .jr-seg-label { font-size:.82rem; opacity:.8; margin-right:2px; }
+:is(#journal-panel, #journal-modal) .jr-page.jr-multi { overflow:auto; justify-content:flex-start; }
+:is(#journal-panel, #journal-modal) .jr-multi > .jr-item { flex:none; }
+:is(#journal-panel, #journal-modal) .jr-multi > .jr-item + .jr-item { border-top:4px solid var(--jr-rule, var(--ink-soft,#666)); margin-top:10px; padding-top:10px; }
+:is(#journal-panel, #journal-modal) .jr-newslot { display:grid; gap:12px; justify-items:center; text-align:center; }
+:is(#journal-panel, #journal-modal) .jr-newslot:first-child { margin:auto; }
+:is(#journal-panel, #journal-modal) .jr-newbtn { border-style:dashed; padding:10px 22px; font-size:1rem; }
+:is(#journal-panel, #journal-modal) .jr-pe-head { display:flex; align-items:center; gap:8px; }
+:is(#journal-panel, #journal-modal) .jr-pe .jr-title { font-size:1.2rem; margin:0; cursor:pointer; }
+:is(#journal-panel, #journal-modal) .jr-ce .jr-title { font-size:1.1rem; margin:0; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+:is(#journal-panel, #journal-modal) .jr-pe.jr-isdone .jr-title, :is(#journal-panel, #journal-modal) .jr-ce.jr-isdone .jr-title { text-decoration:line-through; opacity:.7; }
+:is(#journal-panel, #journal-modal) .jr-snip { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-line; line-height:1.45; margin:4px 0 6px; overflow-wrap:anywhere; }
+:is(#journal-panel, #journal-modal) .jr-pe .jr-foot { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin-top:2px; padding-top:5px; }
+:is(#journal-panel, #journal-modal) .jr-pe .jr-foot-actions { margin:0 0 0 auto; }
+:is(#journal-panel, #journal-modal) .jr-foot.jr-foot-dotted { border-top:1px dotted var(--jr-rule, var(--line,#999)); }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-pe .jr-title { font-size:1.4rem; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-ce .jr-title { font-size:1.25rem; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-snip { line-height:1.45; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-seg-label { color:#2b2118; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pe .jr-title { font-size:.95rem; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-ce .jr-title { font-size:.9rem; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-multi > .jr-item + .jr-item { border-top-color:#19d3f0; }
+
 #journal-modal { position:fixed; inset:0; z-index:20050; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; padding:16px; }
 #journal-modal .jr-modal-box { background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line,#ccc); border-radius:var(--radius,10px); box-shadow:0 12px 40px rgba(0,0,0,.45); width:min(780px,94vw); max-height:88vh; overflow:auto; padding:18px 20px; }
 #journal-modal .jr-modal-head { display:flex; align-items:flex-start; gap:12px; justify-content:space-between; }
@@ -194,7 +219,11 @@
   let creating = false;   // new-entry form open
   let spread = null;    // which two-page spread is showing (null = open at the latest entry)
   let turning = false;  // a page-turn animation is running
-  const PER_PAGE = 1; // one entry per page
+  const PER = { full: 1, partial: 3, compact: 6 }; // entries per page for each display mode
+  let displayMode = (() => { try { const v = localStorage.getItem("ggo-journal-display"); return PER[v] ? v : "full"; } catch (e) { return "full"; } })();
+  let focusId = null; // the entry the book should open at on its next draw
+  let leadId = null;  // the first entry on the spread now showing
+  const modeNow = () => (creating || editingId ? "full" : displayMode); // writing and editing always use a whole page
   let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
   let sel = { from: "", to: "", tag: "", student: "", word: "" };
 
@@ -314,6 +343,7 @@
       const data = { date: st.date, subject: st.subject, text: body.text, rich: body.rich, students: [...st.students], tags: [...st.tags], mode: st.mode, done: st.done, sharedWith: [...st.courses] };
       let saved;
       if (entry) saved = J.updateEntry(entry.id, data); else { saved = J.addEntry(data); spread = null; }
+      if (saved && saved.id) focusId = saved.id; // the book opens at the page just written
       if (saved && J.syncShared && ((saved.sharedWith || []).length || (saved.syncedTo || []).length)) J.syncShared(saved).then(warnFail);
       editingId = null; creating = false; openForm = null;
       if (!quiet) { render(); if (onDone) onDone(); }
@@ -321,7 +351,7 @@
     };
     openForm = { submit }; formSubmit = submit;
     acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => submit(false)));
-    acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; openForm = null; if (onCancel) onCancel(); else render(); }));
+    acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { if (entry) focusId = entry.id; editingId = null; creating = false; openForm = null; if (onCancel) onCancel(); else render(); }));
     foot.appendChild(acts); f.appendChild(foot);
     if (!entry) setTimeout(() => subj.focus(), 0);
     return f;
@@ -373,7 +403,7 @@
     if (e.tags.length) { const t = mk("div"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); foot.appendChild(t); }
     if (J.settings.snapshots) { const sn = snapParts(e); if (sn.length) { const d = mk("div", "jr-snap"); sn.forEach((p) => d.appendChild(mk("div", "", `${p.who}: ${p.text}`))); foot.appendChild(d); } }
     const a = mk("div", "jr-foot-actions");
-    a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; render(); }));
+    a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; focusId = e.id; render(); }));
     a.appendChild(btn("Full view", "btn btn-ghost btn-small", () => openEntry(e.id)));
     a.appendChild(pinPill(e, () => { J.setPinned(e.id, !e.pinned); render(); }));
     a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); render(); } }));
@@ -413,11 +443,56 @@
   }
 
   // ---------- the book: two pages showing, page-turn buttons on either side ----------
-  const spreads = (n) => Math.max(1, Math.ceil(n / (PER_PAGE * 2)));
+  function startNew() {
+    creating = true; editingId = null; spread = null; focusId = null; render();
+    const bw = panel.querySelector(".jr-bookwrap"); if (bw) bw.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  /** The "+ New Entry" slot that follows the last entry. */
+  function newSlot(count) {
+    const d = mk("div", "jr-item jr-newslot");
+    if (!count) d.appendChild(mk("div", "jr-blank", tagFilter.size ? "No entries have these tags." : "This journal is empty."));
+    d.appendChild(btn("+ New Entry", "btn btn-ghost jr-newbtn", startNew));
+    return d;
+  }
+  /** Partial: title, the first two lines, then a thin dotted rule and the date / tags / buttons in one compact row. */
+  function partialEntry(e) {
+    const c = mk("div", `jr-item jr-pe${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
+    const head = mk("div", "jr-pe-head");
+    if (e.mode === "list") head.appendChild(donePill(e, (v) => setDone(e, v)));
+    const t = mk("h3", "jr-title", e.subject || "(no subject)"); t.title = "Open full view"; t.addEventListener("click", () => openEntry(e.id));
+    head.appendChild(t); c.appendChild(head);
+    c.appendChild(mk("div", "jr-snip", e.text || ""));
+    const foot = mk("div", "jr-foot jr-foot-dotted jr-foot-meta");
+    foot.appendChild(mk("span", "jr-date", e.date));
+    foot.appendChild(mk("span", "jr-who", e.students.length ? `Students (${e.students.length})` : "Whole class"));
+    e.tags.forEach((x) => foot.appendChild(mk("span", "jr-chip static", x)));
+    const a = mk("div", "jr-foot-actions");
+    a.appendChild(btn("Edit", "btn btn-ghost btn-small", () => { editingId = e.id; creating = false; focusId = e.id; render(); }));
+    a.appendChild(btn("Full view", "btn btn-ghost btn-small", () => openEntry(e.id)));
+    a.appendChild(pinPill(e, () => { J.setPinned(e.id, !e.pinned); render(); }));
+    a.appendChild(btn("Delete", "btn btn-ghost btn-small", () => { if (confirm(delMsg(e))) { if (J.removeShared) J.removeShared(e); J.removeEntry(e.id); render(); } }));
+    foot.appendChild(a); c.appendChild(foot);
+    return c;
+  }
+  /** Compact: the title only (click it to open the entry). */
+  function compactEntry(e) {
+    const c = mk("div", `jr-item jr-ce${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
+    const t = mk("h3", "jr-title", e.subject || "(no subject)"); t.title = "Open full view"; t.addEventListener("click", () => openEntry(e.id));
+    c.appendChild(t);
+    return c;
+  }
   function buildBook(sorted) {
     const wrap = mk("div", "jr-bookwrap");
-    const total = spreads(sorted.length + (creating ? 1 : 0));
-    spread = spread === null ? total - 1 : Math.max(0, Math.min(spread, total - 1));
+    const mode = modeNow(), per = PER[mode];
+    // pages: each is a list of items. A new entry's form gets a page of its own; otherwise "+ New Entry" follows the last entry.
+    const pages = [];
+    for (let i = 0; i < sorted.length; i += per) pages.push(sorted.slice(i, i + per).map((e) => ({ e })));
+    if (creating) pages.push([{ form: true }]);
+    else { const last = pages[pages.length - 1]; if (last && last.length < per) last.push({ nu: true }); else pages.push([{ nu: true }]); }
+    const total = Math.max(1, Math.ceil(pages.length / 2));
+    if (focusId) { const pi = pages.findIndex((pg) => pg.some((x) => x.e && x.e.id === focusId)); if (pi >= 0) spread = Math.floor(pi / 2); focusId = null; }
+    if (spread === null) { const li = creating ? pages.length - 1 : pages.map((pg) => pg.some((x) => x.e)).lastIndexOf(true); spread = li < 0 ? 0 : Math.floor(li / 2); }
+    spread = Math.max(0, Math.min(spread, total - 1));
     const prev = btn("‹", "jr-turn jr-turn-prev", () => turn(-1)); prev.title = "Previous pages"; prev.setAttribute("aria-label", "Previous pages");
     const next = btn("›", "jr-turn jr-turn-next", () => turn(1)); next.title = "Next pages"; next.setAttribute("aria-label", "Next pages");
     const book = mk("div", "jr-book");
@@ -429,15 +504,18 @@
     const stageFoot = mk("div", "jr-stage-foot"); const sfR = mk("span"); const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
     stageFoot.append(mk("span", "", "Docking channel"), bars, sfR);
     function fill() {
-      const base = spread * PER_PAGE * 2;
-      [[left, base], [right, base + PER_PAGE]].forEach(([pg, from], i) => {
+      [[left, spread * 2], [right, spread * 2 + 1]].forEach(([pg, idx]) => {
         pg.innerHTML = "";
-        const here = sorted.slice(from, from + PER_PAGE);
-        here.forEach((e) => pg.appendChild(leaf(e)));
-        if (!here.length && creating && from === sorted.length) pg.appendChild(buildForm(null)); // a new entry is written on the next blank page
-        else if (!here.length && !sorted.length && !creating && spread === 0) pg.appendChild(mk("div", "jr-blank", i === 0 ? (tagFilter.size ? "No entries have these tags." : "This journal is empty.") : "Click “+ New Entry” to write the first page."));
-        pg.appendChild(mk("div", "jr-pageno", String(spread * 2 + i + 1)));
+        pg.classList.toggle("jr-multi", per > 1);
+        (pages[idx] || []).forEach((x) => {
+          if (x.form) pg.appendChild(buildForm(null)); // a new entry is written on its own blank page
+          else if (x.nu) pg.appendChild(newSlot(sorted.length));
+          else pg.appendChild(mode === "full" ? leaf(x.e) : mode === "partial" ? partialEntry(x.e) : compactEntry(x.e));
+        });
+        pg.appendChild(mk("div", "jr-pageno", String(idx + 1)));
       });
+      const first = [...(pages[spread * 2] || []), ...(pages[spread * 2 + 1] || [])].find((x) => x.e);
+      leadId = first ? first.e.id : null;
       const lock = creating || !!editingId; // finish or cancel the open page first
       prev.disabled = lock || spread === 0; next.disabled = lock || spread >= total - 1;
       prev.title = next.title = lock ? "Save or cancel the open entry first" : "";
@@ -575,7 +653,21 @@
     panel.innerHTML = "";
     const bar = mk("div", "panel-toolbar");
     const left = mk("div", "panel-toolbar-buttons");
-    left.appendChild(btn("+ New Entry", "btn btn-ghost", () => { creating = true; editingId = null; spread = null; render(); const bw = panel.querySelector(".jr-bookwrap"); if (bw) bw.scrollIntoView({ behavior: "smooth", block: "start" }); }));
+    left.appendChild(btn("+ New Entry", "btn btn-ghost", startNew));
+    const seg = mk("div", "jr-seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "How entries are shown");
+    seg.appendChild(mk("span", "jr-seg-label", "Show entries:"));
+    [["full", "Full"], ["partial", "Partial"], ["compact", "Compact"]].forEach(([id, label]) => {
+      const b = btn(label, `btn btn-small ${displayMode === id ? "btn-primary" : "btn-ghost"}`, () => {
+        if (creating || editingId) return;
+        focusId = leadId; displayMode = id;
+        try { localStorage.setItem("ggo-journal-display", id); } catch (e) {}
+        render();
+      });
+      b.setAttribute("aria-pressed", String(displayMode === id)); b.disabled = creating || !!editingId;
+      b.title = { full: "One whole entry per page", partial: "Up to 3 entries per page: title, first 2 lines, details", compact: "Up to 6 entries per page: titles only" }[id];
+      seg.appendChild(b);
+    });
+    left.appendChild(seg);
     bar.appendChild(left);
     const right = mk("div", "panel-toolbar-buttons"); right.appendChild(status);
     right.appendChild(btn("Save Journal", "btn btn-primary", async () => {
