@@ -34,6 +34,12 @@
 :is(#journal-panel, #journal-modal) .jr-chip.tagbtn { cursor:pointer; }
 :is(#journal-panel, #journal-modal) .jr-bar.click { cursor:pointer; }
 :is(#journal-panel, #journal-modal) .jr-filterbar { margin:0 0 8px; }
+:is(#journal-panel, #journal-modal) .jr-sf { margin:6px 0 14px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); }
+:is(#journal-panel, #journal-modal) .jr-sf-top { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+:is(#journal-panel, #journal-modal) .jr-sf-top b { font-family:var(--font-heading); }
+:is(#journal-panel, #journal-modal) .jr-sf-grid { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:flex-end; }
+:is(#journal-panel, #journal-modal) .jr-sf-grid label { display:flex; flex-direction:column; font-size:.78rem; gap:2px; }
+:is(#journal-panel, #journal-modal) .jr-sf-tags { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin-top:8px; font-size:.82rem; }
 :is(#journal-panel, #journal-modal) .jr-snap { font-size:.8rem; opacity:.8; border-top:1px dashed var(--line,#ccc); margin-top:4px; padding-top:3px; }
 :is(#journal-panel, #journal-modal) .jr-pick { position:relative; }
 :is(#journal-panel, #journal-modal) .jr-pick-list { max-height:220px; overflow:auto; border:1px solid var(--line,#ccc); border-radius:6px; padding:4px 8px; margin-top:4px; }
@@ -226,6 +232,11 @@
   const modeNow = () => (creating || editingId ? "full" : displayMode); // writing and editing always use a whole page
   let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
   let sel = { from: "", to: "", tag: "", student: "", word: "" };
+  const SORTS = { "date-asc": "Date: oldest first", "date-desc": "Date: newest first", "title-asc": "Title: A → Z", "title-desc": "Title: Z → A", "edited": "Recently edited", "students": "Most students", "tags": "Most tags" };
+  const VIEW0 = { word: "", from: "", to: "", student: "", type: "", status: "", any: true };
+  let view = Object.assign({}, VIEW0);
+  let sortKey = (() => { try { const v = localStorage.getItem("ggo-journal-sort"); return SORTS[v] ? v : "date-asc"; } catch (e) { return "date-asc"; } })();
+  const viewActive = () => tagFilter.size || Object.keys(VIEW0).some((k) => k !== "any" && view[k]);
 
   const students = () => RosterModule.students.slice().sort((a, b) => (a.classNumber || 0) - (b.classNumber || 0));
   const sName = (id) => { const s = RosterModule.students.find((x) => x.id === id); return s ? `#${s.classNumber || "—"} ${s.name || "(unnamed)"}` : "(removed student)"; };
@@ -450,7 +461,7 @@
   /** The "+ New Entry" slot that follows the last entry. */
   function newSlot(count) {
     const d = mk("div", "jr-item jr-newslot");
-    if (!count) d.appendChild(mk("div", "jr-blank", tagFilter.size ? "No entries have these tags." : "This journal is empty."));
+    if (!count) d.appendChild(mk("div", "jr-blank", viewActive() ? "No entries match the filters." : "This journal is empty."));
     d.appendChild(btn("+ New Entry", "btn btn-ghost jr-newbtn", startNew));
     return d;
   }
@@ -481,6 +492,75 @@
     c.appendChild(t);
     return c;
   }
+  const cmpDate = (a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || "");
+  function visibleEntries() {
+    const want = [...tagFilter].map((t) => t.toLowerCase()), w = view.word.trim().toLowerCase();
+    const list = J.entries.filter((e) => {
+      if (e.pinned) return false;
+      if (want.length) { const has = e.tags.map((t) => t.toLowerCase()); if (!(view.any ? want.some((t) => has.includes(t)) : want.every((t) => has.includes(t)))) return false; }
+      if (w && !`${e.subject || ""} ${e.text || ""} ${e.tags.join(" ")}`.toLowerCase().includes(w)) return false;
+      if (view.from && e.date < view.from) return false;
+      if (view.to && e.date > view.to) return false;
+      if (view.student && !(view.student === "__class" ? !e.students.length : e.students.includes(view.student))) return false;
+      if (view.type && (view.type === "list") !== (e.mode === "list")) return false;
+      if (view.status && (e.mode !== "list" || (view.status === "done") !== !!e.done)) return false;
+      return true;
+    });
+    const t = (e) => (e.subject || "").toLowerCase();
+    const by = {
+      "date-asc": cmpDate, "date-desc": (a, b) => cmpDate(b, a),
+      "title-asc": (a, b) => t(a).localeCompare(t(b)) || cmpDate(a, b), "title-desc": (a, b) => t(b).localeCompare(t(a)) || cmpDate(a, b),
+      "edited": (a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""),
+      "students": (a, b) => b.students.length - a.students.length || cmpDate(a, b), "tags": (a, b) => b.tags.length - a.tags.length || cmpDate(a, b),
+    }[sortKey];
+    return list.sort(by);
+  }
+  let refocus = null;
+  const defSpread = () => (sortKey === "date-asc" ? null : 0);
+  /** The sort & filter bar that sits right under the book. */
+  function sortFilterBar(shown, total) {
+    const bar = mk("div", "jr-sf");
+    const top = mk("div", "jr-sf-top");
+    top.appendChild(mk("b", "", "Sort & filter"));
+    const cnt = mk("span", "hint", viewActive() ? `Showing ${shown} of ${total} entries` : `${total} entr${total === 1 ? "y" : "ies"}`);
+    top.appendChild(cnt);
+    if (viewActive()) top.appendChild(btn("Clear filters", "btn btn-ghost btn-small", () => { tagFilter = new Set(); view = Object.assign({}, VIEW0); spread = defSpread(); render(); }));
+    bar.appendChild(top);
+    const g = mk("div", "jr-sf-grid"); bar.appendChild(g);
+    const lab = (t, el) => { const l = mk("label", "", t); l.appendChild(el); g.appendChild(l); return el; };
+    const opt = (v, t) => Object.assign(mk("option"), { value: v, textContent: t });
+    const sortSel = mk("select"); Object.entries(SORTS).forEach(([k, v]) => sortSel.appendChild(opt(k, v))); sortSel.value = sortKey;
+    sortSel.addEventListener("change", () => { sortKey = sortSel.value; try { localStorage.setItem("ggo-journal-sort", sortKey); } catch (e) {} spread = defSpread(); render(); });
+    lab("Sort by", sortSel);
+    const word = lab("Search", Object.assign(mk("input"), { type: "search", id: "jr-f-word", value: view.word, placeholder: "title, text or tag…" }));
+    let wt; word.addEventListener("input", () => { clearTimeout(wt); wt = setTimeout(() => { view.word = word.value; refocus = "jr-f-word"; spread = defSpread(); render(); }, 250); });
+    const from = lab("From", Object.assign(mk("input"), { type: "date", value: view.from }));
+    const to = lab("To", Object.assign(mk("input"), { type: "date", value: view.to }));
+    const stu = mk("select"); stu.appendChild(opt("", "Anyone")); stu.appendChild(opt("__class", "Whole class only")); students().forEach((x) => stu.appendChild(opt(x.id, sName(x.id)))); stu.value = view.student;
+    lab("Student", stu);
+    const type = mk("select"); [["", "All"], ["note", "Notes"], ["list", "Check-lists"]].forEach(([v, t]) => type.appendChild(opt(v, t))); type.value = view.type;
+    lab("Type", type);
+    const status = mk("select"); [["", "Any"], ["todo", "To do"], ["done", "Done"]].forEach(([v, t]) => status.appendChild(opt(v, t))); status.value = view.status;
+    lab("Check-list status", status);
+    [[from, "from"], [to, "to"], [stu, "student"], [type, "type"], [status, "status"]].forEach(([el, k]) => el.addEventListener("change", () => { view[k] = el.value; if (k === "type" && el.value === "note") view.status = ""; spread = defSpread(); render(); }));
+    const tags = J.allTags();
+    if (tags.length) {
+      const tb = mk("div", "jr-sf-tags"); tb.appendChild(mk("span", "", "Tags:"));
+      tags.forEach((t) => {
+        const on = [...tagFilter].some((x) => x.toLowerCase() === t.toLowerCase());
+        const c = mk("button", `jr-chip tagbtn${on ? " on" : ""}`, t); c.type = "button"; c.setAttribute("aria-pressed", String(on));
+        c.addEventListener("click", () => { tagFilter = new Set([...tagFilter].filter((x) => x.toLowerCase() !== t.toLowerCase())); if (!on) tagFilter.add(t); spread = defSpread(); render(); });
+        tb.appendChild(c);
+      });
+      if (tagFilter.size > 1) {
+        const m = mk("select"); m.append(opt("any", "match any tag"), opt("all", "match all tags")); m.value = view.any ? "any" : "all";
+        m.addEventListener("change", () => { view.any = m.value === "any"; spread = defSpread(); render(); }); tb.appendChild(m);
+      }
+      bar.appendChild(tb);
+    }
+    return bar;
+  }
+
   function buildBook(sorted) {
     const wrap = mk("div", "jr-bookwrap");
     const mode = modeNow(), per = PER[mode];
@@ -675,14 +755,11 @@
     }));
     bar.appendChild(right); panel.appendChild(bar);
 
-    if (tagFilter.size) {
-      const fb = mk("div", "jr-filterbar jr-row"); fb.appendChild(mk("span", "", `Showing entries tagged: ${[...tagFilter].join(", ")}`));
-      fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = new Set(); spread = null; render(); })); panel.appendChild(fb);
-    }
-    const want = [...tagFilter].map((t) => t.toLowerCase());
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
-    const sorted = J.entries.filter((e) => !e.pinned && (!want.length || e.tags.some((t) => want.includes(t.toLowerCase())))).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
+    const sorted = visibleEntries();
     panel.appendChild(buildBook(sorted)); // the journal is always on the desk, even with no entries
+    panel.appendChild(sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length));
+    if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
     if (pinned.length) {
       const m = mk("div", "jr-margin"); m.appendChild(mk("div", "jr-margin-title", `📌 Margin — pinned entries (${pinned.length})`));
       pinned.forEach((e) => {
