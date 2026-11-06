@@ -109,6 +109,14 @@
 :is(#journal-panel, #journal-modal) .jr-stage-head, :is(#journal-panel, #journal-modal) .jr-stage-foot { display:none; }
 @media (max-width:760px) { :is(#journal-panel, #journal-modal) .jr-page { height:auto; min-height:360px; } }
 
+/* writing a new entry (or editing one) happens on the page itself */
+:is(#journal-panel, #journal-modal) .jr-leafform { display:flex; flex-direction:column; gap:8px; border:0; padding:0; background:transparent; }
+:is(#journal-panel, #journal-modal) .jr-page > .jr-leafform { height:100%; padding-bottom:14px; box-sizing:border-box; }
+:is(#journal-panel, #journal-modal) .jr-leafform .jr-subject { flex:none; font-family:var(--font-heading); font-size:1.6rem; font-weight:700; line-height:1.2; color:inherit; background:transparent; border:0; border-bottom:1px dashed var(--jr-rule, var(--line,#999)); border-radius:0; padding:2px 0 6px; width:100%; box-sizing:border-box; box-shadow:none; }
+:is(#journal-panel, #journal-modal) .jr-leafform .jr-ed { flex:1 1 0; min-height:120px; display:flex; flex-direction:column; }
+:is(#journal-panel, #journal-modal) .jr-page .jr-leafform .jr-ed [contenteditable] { flex:1; min-height:0 !important; overflow:auto; }
+:is(#journal-panel, #journal-modal) .jr-leafform .jr-formfoot { flex:none; border-top:1px solid var(--jr-rule, var(--line,#999)); padding-top:6px; display:grid; gap:6px; font-size:.82rem; max-height:55%; overflow:auto; }
+
 /* VINTAGE: an old leather-bound journal lying open on the desk */
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-bookwrap { margin:8px 6px 26px; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-book { --jr-rule:rgba(70,45,20,.6); --jr-cover:#5a3822; border:18px solid #5a3822; border-radius:12px; background:#5a3822;
@@ -122,6 +130,9 @@
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-title { color:#3a2110; font-weight:900; font-size:2rem; letter-spacing:.01em; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-body { color:#2d1c0e; font-size:1.02rem; line-height:28px; background-image:repeating-linear-gradient(to bottom, transparent 0 27px, rgba(110,75,35,.2) 27px 28px); background-attachment:local; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-foot { color:#5a4430; font-style:italic; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-leafform { color:#2d1c0e; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-subject { color:#3a2110; font-weight:900; font-size:1.9rem; }
+[data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-formfoot { color:#5a4430; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-foot .jr-chip { border-color:#8a6a46; background:rgba(120,80,40,.1); color:#4a3320; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-pageno { color:#6b5236; opacity:.8; font-style:italic; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-bookinfo { color:#e8d8ac; opacity:.9; margin-top:30px; }
@@ -141,6 +152,9 @@
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-title { font-size:1.3rem; line-height:1.3; color:#eaffff; letter-spacing:.06em; text-transform:uppercase; text-shadow:0 0 10px rgba(0,217,255,.55); }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-body { color:#bff3ff; background-image:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,217,255,.035) 3px 4px); background-attachment:local; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot { color:#7fe9ff; letter-spacing:.04em; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform { color:#bff3ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-subject { color:#eaffff; font-size:1.2rem; text-transform:uppercase; letter-spacing:.06em; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-formfoot { color:#7fe9ff; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-date { background:#f2d33c; color:#0a141a; font-weight:700; padding:0 7px; letter-spacing:.08em; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-chip { border-color:#19d3f0; color:#4fe0ff; border-radius:0; background:rgba(0,217,255,.07); text-transform:uppercase; letter-spacing:.08em; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pageno { color:#4fe0ff; }
@@ -225,7 +239,7 @@
 
   // ---------- the entry form ----------
   function buildForm(entry, onDone, onCancel) {
-    const f = mk("div", "jr-form");
+    const f = mk("div", "jr-form jr-leafform"); const foot = mk("div", "jr-formfoot"); // title + text on top, the details under a thin rule
     const st = { date: entry ? entry.date : today(), subject: entry ? entry.subject || "" : "", students: new Set(entry ? entry.students : []), tags: new Set(entry ? entry.tags : []), mode: entry && entry.mode === "list" ? "list" : "entry", done: !!(entry && entry.done), courses: new Set(entry ? entry.sharedWith || [] : []) };
     const row = mk("div", "jr-row");
     const date = mk("input"); date.type = "date"; date.value = st.date; date.addEventListener("input", () => { st.date = date.value; });
@@ -241,7 +255,7 @@
     });
     if (!students().length) list.appendChild(mk("em", "", "No students in this course's roster."));
     det.appendChild(list); upd(); row.appendChild(det);
-    f.appendChild(row);
+    foot.appendChild(row);
 
     // entry / check list switch, and the "also show in" course pills
     const mrow = mk("div", "jr-row");
@@ -249,7 +263,7 @@
     const dp = mk("span"); const drawDone = () => { dp.textContent = ""; if (st.mode === "list") { const b = mk("button", `jr-donepill${st.done ? " on" : ""}`, st.done ? "✔ Done" : "○ To do"); b.type = "button"; b.addEventListener("click", () => { st.done = !st.done; drawDone(); }); dp.appendChild(b); } };
     swc.addEventListener("change", () => { st.mode = swc.checked ? "list" : "entry"; drawDone(); });
     sw.append(swc, mk("span", "jr-track"), mk("span", "", "Check list (this whole entry is a task to complete)"));
-    mrow.append(sw, dp); drawDone(); f.appendChild(mrow);
+    mrow.append(sw, dp); drawDone(); foot.appendChild(mrow);
     const others = otherCourses();
     if (others.length) {
       const cd = mk("details", "jr-pick"); const cs = mk("summary"); cd.appendChild(cs);
@@ -261,14 +275,14 @@
         cl.appendChild(b);
       });
       cl.appendChild(mk("div", "jr-meta", "The entry appears in each ticked course's journal and can be edited there too. Its students stay with each course."));
-      cd.appendChild(cl); updC(); f.appendChild(cd);
+      cd.appendChild(cl); updC(); foot.appendChild(cd);
     }
 
-    const subj = mk("input"); subj.placeholder = "Subject"; subj.value = st.subject; subj.style.width = "100%"; subj.addEventListener("input", () => { st.subject = subj.value; });
+    const subj = mk("input"); subj.className = "jr-subject"; subj.placeholder = "Title"; subj.value = st.subject; subj.style.width = "100%"; subj.addEventListener("input", () => { st.subject = subj.value; });
     f.appendChild(subj);
     const body = { text: entry ? entry.text : "", rich: entry ? entry.rich || "" : "" };
     const text = QuizRich.editor({ text: body.text, rich: body.rich, placeholder: "Journal entry…", lists: true, onSubmit: () => { if (formSubmit) formSubmit(false); }, onChange: (t, r) => { body.text = t; body.rich = r; } });
-    text.style.width = "100%"; text.style.boxSizing = "border-box";
+    text.style.width = "100%"; text.style.boxSizing = "border-box"; text.classList.add("jr-ed");
     text.querySelector("[contenteditable]").style.minHeight = "110px";
     f.appendChild(text);
 
@@ -289,7 +303,7 @@
       ni.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addTag(); } });
       tagBox.append(ni, btn("Add tag", "btn btn-ghost btn-small", addTag));
     };
-    drawTags(); f.appendChild(tagBox);
+    drawTags(); foot.appendChild(tagBox);
 
     const acts = mk("div", "jr-row");
     // Saves the form into the journal. quiet = called by Save Journal / leaving the tab: an empty form is just dropped.
@@ -308,7 +322,8 @@
     openForm = { submit }; formSubmit = submit;
     acts.appendChild(btn(entry ? "Save changes" : "Add entry", "btn btn-primary btn-small", () => submit(false)));
     acts.appendChild(btn("Cancel", "btn btn-ghost btn-small", () => { editingId = null; creating = false; openForm = null; if (onCancel) onCancel(); else render(); }));
-    f.appendChild(acts);
+    foot.appendChild(acts); f.appendChild(foot);
+    if (!entry) setTimeout(() => subj.focus(), 0);
     return f;
   }
 
@@ -401,7 +416,7 @@
   const spreads = (n) => Math.max(1, Math.ceil(n / (PER_PAGE * 2)));
   function buildBook(sorted) {
     const wrap = mk("div", "jr-bookwrap");
-    const total = spreads(sorted.length);
+    const total = spreads(sorted.length + (creating ? 1 : 0));
     spread = spread === null ? total - 1 : Math.max(0, Math.min(spread, total - 1));
     const prev = btn("‹", "jr-turn jr-turn-prev", () => turn(-1)); prev.title = "Previous pages"; prev.setAttribute("aria-label", "Previous pages");
     const next = btn("›", "jr-turn jr-turn-next", () => turn(1)); next.title = "Next pages"; next.setAttribute("aria-label", "Next pages");
@@ -419,19 +434,22 @@
         pg.innerHTML = "";
         const here = sorted.slice(from, from + PER_PAGE);
         here.forEach((e) => pg.appendChild(leaf(e)));
-        if (!here.length && !sorted.length && spread === 0) pg.appendChild(mk("div", "jr-blank", i === 0 ? (tagFilter.size ? "No entries have these tags." : "This journal is empty.") : "Click “+ New Entry” to write the first page."));
+        if (!here.length && creating && from === sorted.length) pg.appendChild(buildForm(null)); // a new entry is written on the next blank page
+        else if (!here.length && !sorted.length && !creating && spread === 0) pg.appendChild(mk("div", "jr-blank", i === 0 ? (tagFilter.size ? "No entries have these tags." : "This journal is empty.") : "Click “+ New Entry” to write the first page."));
         pg.appendChild(mk("div", "jr-pageno", String(spread * 2 + i + 1)));
       });
-      prev.disabled = spread === 0; next.disabled = spread >= total - 1;
+      const lock = creating || !!editingId; // finish or cancel the open page first
+      prev.disabled = lock || spread === 0; next.disabled = lock || spread >= total - 1;
+      prev.title = next.title = lock ? "Save or cancel the open entry first" : "";
       info.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2} of ${total * 2} · ${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`;
       shR.textContent = `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`; sfR.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2}`;
     }
     function turn(dir) {
-      if (turning || spread + dir < 0 || spread + dir >= total) return;
+      if (turning || creating || editingId || spread + dir < 0 || spread + dir >= total) return;
       const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
       const T = reduce ? 0 : parseInt(getComputedStyle(book).getPropertyValue("--jr-ms")) || 260;
       const name = dir > 0 ? "next" : "prev";
-      turning = true; editingId = null;
+      turning = true;
       book.classList.add(`jr-out-${name}`);
       setTimeout(() => {
         spread += dir; fill();
@@ -557,7 +575,7 @@
     panel.innerHTML = "";
     const bar = mk("div", "panel-toolbar");
     const left = mk("div", "panel-toolbar-buttons");
-    left.appendChild(btn("+ New Entry", "btn btn-ghost", () => { creating = true; editingId = null; render(); }));
+    left.appendChild(btn("+ New Entry", "btn btn-ghost", () => { creating = true; editingId = null; spread = null; render(); const bw = panel.querySelector(".jr-bookwrap"); if (bw) bw.scrollIntoView({ behavior: "smooth", block: "start" }); }));
     bar.appendChild(left);
     const right = mk("div", "panel-toolbar-buttons"); right.appendChild(status);
     right.appendChild(btn("Save Journal", "btn btn-primary", async () => {
@@ -565,7 +583,6 @@
     }));
     bar.appendChild(right); panel.appendChild(bar);
 
-    if (creating) panel.appendChild(buildForm(null));
     if (tagFilter.size) {
       const fb = mk("div", "jr-filterbar jr-row"); fb.appendChild(mk("span", "", `Showing entries tagged: ${[...tagFilter].join(", ")}`));
       fb.appendChild(btn("Show all entries", "btn btn-ghost btn-small", () => { tagFilter = new Set(); spread = null; render(); })); panel.appendChild(fb);
