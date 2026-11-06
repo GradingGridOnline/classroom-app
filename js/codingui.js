@@ -38,6 +38,11 @@ const CodingUI = {
   .cu-code kbd{font:600 .75rem monospace;border:1px solid currentColor;border-radius:4px;padding:0 5px;opacity:.7;flex:none}
   .cu-code .l{font-weight:600}
   .cu-code .d{display:block;font-size:.82rem;opacity:.8;font-weight:400}
+  .cu-code .d i{font-style:normal;font-weight:600}
+  .cu-dim{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--green-dark,#223d26);margin:8px 0 0;border-bottom:1px solid var(--line,#ddd);padding-bottom:2px}
+  .cu-dim:first-child{margin-top:0}
+  .cu-r2{border-top:1px dashed var(--line,#ddd);margin-top:12px;padding-top:12px}
+  .cu-col{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft,#777);margin-bottom:2px}
   .cu-note{width:100%;font:inherit;border:1.5px solid var(--line,#ddd);border-radius:8px;padding:8px;background:var(--paper,#fff);color:var(--ink);resize:vertical;min-height:54px}
   .cu-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
   .cu-nav .sp{flex:1}
@@ -71,7 +76,7 @@ const CodingUI = {
       ${cfg.instructions ? `<div class="cu-instr">${E(cfg.instructions)}</div>` : ""}
       <div class="cu-main">
         <div class="cu-pane"><h3>Participant response</h3><div class="cu-head"></div><div class="cu-resp"></div></div>
-        <div class="cu-pane"><h3>Codes ${cfg.multi ? "(choose all that apply)" : "(choose one)"}</h3><div class="cu-codes"></div>
+        <div class="cu-pane"><h3>Codes ${cfg.mode === "complex" ? "(add every code that applies)" : "(choose one)"}</h3><div class="cu-codes"></div>
           ${cfg.allowNote ? `<textarea class="cu-note" placeholder="Note (optional)"></textarea>` : ""}</div>
       </div>
       <div class="cu-nav"><button class="b g prev" type="button">← Previous</button>
@@ -125,12 +130,22 @@ const CodingUI = {
       const ctx = (cfg.contextCols || []).filter((c) => d[c] != null && d[c] !== "");
       $(".cu-head").innerHTML = `<div class="cu-who">${cfg.participantCol ? E(d[cfg.participantCol]) : "Item " + (i + 1)} <span class="cu-ctx">· item ${i + 1} of ${total}</span></div>` +
         (ctx.length ? `<div class="cu-ctx">${ctx.map((c) => `<b>${E(c)}:</b> ${E(d[c])}`).join(" &nbsp; ")}</div>` : "");
-      $(".cu-resp").textContent = d[cfg.responseCol] == null ? "" : String(d[cfg.responseCol]);
+      const rs = $(".cu-resp"); rs.textContent = "";
+      [cfg.responseCol, cfg.responseCol2].filter(Boolean).forEach((col, k) => {
+        const blk = document.createElement("div"); if (k) blk.className = "cu-r2";
+        if (cfg.responseCol2) { const h = document.createElement("div"); h.className = "cu-col"; h.textContent = col; blk.appendChild(h); }
+        const tx = document.createElement("div"); tx.textContent = d[col] == null ? "" : String(d[col]); blk.appendChild(tx); rs.appendChild(blk);
+      });
       const box = $(".cu-codes"); box.innerHTML = "";
+      let lastDim = null;
       codes.forEach((c, n) => {
+        if (cfg.mode === "complex" && (c.dimension || "") !== lastDim) {
+          lastDim = c.dimension || "";
+          if (lastDim) { const h = document.createElement("div"); h.className = "cu-dim"; h.textContent = lastDim; box.appendChild(h); }
+        }
         const b = document.createElement("button"); b.type = "button";
         b.className = "cu-code" + (it.codes.includes(c.id) ? " on" : "");
-        b.innerHTML = `<kbd>${n < 9 ? n + 1 : ""}</kbd><span><span class="l">${E(c.label)}</span>${c.description ? `<span class="d">${E(c.description)}</span>` : ""}</span>`;
+        b.innerHTML = `<kbd>${n < 9 ? n + 1 : ""}</kbd><span><span class="l">${E(c.label)}</span>${c.description ? `<span class="d">${E(c.description)}</span>` : ""}${c.include ? `<span class="d"><i>Include:</i> ${E(c.include)}</span>` : ""}${c.exclude ? `<span class="d"><i>Exclude:</i> ${E(c.exclude)}</span>` : ""}</span>`;
         b.onclick = () => toggle(c.id);
         box.appendChild(b);
       });
@@ -142,11 +157,11 @@ const CodingUI = {
     function toggle(id) {
       const it = itemAt(pos); if (!it) return;
       const has = it.codes.includes(id);
-      if (cfg.multi) it.codes = has ? it.codes.filter((x) => x !== id) : [...it.codes, id];
+      if (cfg.mode === "complex" || cfg.multi) it.codes = has ? it.codes.filter((x) => x !== id) : [...it.codes, id];
       else it.codes = has ? [] : [id];
       root.querySelectorAll(".cu-code").forEach((b, n) => b.classList.toggle("on", it.codes.includes(codes[n].id)));
       recount(); queue();
-      if (!cfg.multi && it.codes.length && !onlyUncoded) setTimeout(() => step(1), 250);
+      if (cfg.mode !== "complex" && !cfg.multi && it.codes.length && !onlyUncoded) setTimeout(() => step(1), 250);
     }
     async function step(dir) {
       let i = pos + dir;

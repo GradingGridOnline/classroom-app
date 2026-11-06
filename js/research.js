@@ -45,7 +45,7 @@ const ResearchTools = {
     r.querySelectorAll(".rt-open").forEach((a) => a.onclick = (e) => { e.preventDefault(); this.open(byId[a.dataset.id]); });
     r.querySelector("#rt-new").onclick = async () => {
       const title = r.querySelector("#rt-new-title").value.trim() || "Untitled coding tool";
-      const config = { participantCol: "", responseCol: "", contextCols: [], columns: [], shownCols: [], codes: [], multi: false, allowNote: true, instructions: "" };
+      const config = { participantCol: "", responseCol: "", contextCols: [], columns: [], shownCols: [], codes: [], mode: "simple", multi: false, allowNote: true, instructions: "" };
       const { data: row, error: er } = await this.db().from("rt_tools").insert({ title, kind: "coding", config }).select().single();
       if (er) return this.msg(er.message, true);
       this.open(row);
@@ -77,7 +77,7 @@ const ResearchTools = {
 
   saveConfig() {
     const t = this.tool, c = t.config;
-    c.shownCols = [...new Set([c.participantCol, c.responseCol, ...(c.contextCols || [])].filter(Boolean))];
+    c.shownCols = [...new Set([c.participantCol, c.responseCol, c.responseCol2, ...(c.contextCols || [])].filter(Boolean))];
     clearTimeout(this._saveT);
     this._saveT = setTimeout(async () => {
       const { error } = await this.db().from("rt_tools").update({ config: c }).eq("id", t.id);
@@ -94,10 +94,11 @@ const ResearchTools = {
       ${cols.length ? `<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin-top:14px;align-items:center;max-width:640px">
         <label>Participant column</label><select id="rt-pc"><option value="">(none)</option>${cols.map((x) => `<option ${x === c.participantCol ? "selected" : ""}>${this.esc(x)}</option>`).join("")}</select>
         <label>Response column</label><select id="rt-rc"><option value="">(choose)</option>${cols.map((x) => `<option ${x === c.responseCol ? "selected" : ""}>${this.esc(x)}</option>`).join("")}</select>
+        <label>Second response column<br><span class="hint">optional, e.g. the English version beside the Japanese</span></label><select id="rt-rc2"><option value="">(none)</option>${cols.map((x) => `<option ${x === c.responseCol2 ? "selected" : ""}>${this.esc(x)}</option>`).join("")}</select>
         <label>Also show researchers</label><div>${cols.map((x) => `<label style="margin-right:12px;white-space:nowrap"><input type="checkbox" class="rt-cx" value="${this.esc(x)}" ${(c.contextCols || []).includes(x) ? "checked" : ""}> ${this.esc(x)}</label>`).join("")}</div></div>
         <p class="hint">Researchers only ever receive these columns — nothing else in your file leaves your account.</p>` : ""}`;
     const sel = (id, key) => { const e = p.querySelector(id); if (e) e.onchange = () => { c[key] = e.value; this.saveConfig(); }; };
-    sel("#rt-pc", "participantCol"); sel("#rt-rc", "responseCol");
+    sel("#rt-pc", "participantCol"); sel("#rt-rc", "responseCol"); sel("#rt-rc2", "responseCol2");
     p.querySelectorAll(".rt-cx").forEach((cb) => cb.onchange = () => { c.contextCols = [...p.querySelectorAll(".rt-cx:checked")].map((x) => x.value); this.saveConfig(); });
     p.querySelector("#rt-file").onchange = (e) => this.upload(e.target.files[0]);
   },
@@ -130,6 +131,7 @@ const ResearchTools = {
       c.responseCol = guess(/respon|answer|text|comment/i);
       c.contextCols = [];
       t.item_count = rows.length;
+      c.responseCol2 = "";
       c.shownCols = [...new Set([c.participantCol, c.responseCol].filter(Boolean))];
       const { error } = await db.from("rt_tools").update({ config: c, item_count: rows.length }).eq("id", t.id);
       if (error) throw error;
@@ -140,25 +142,52 @@ const ResearchTools = {
 
   // ---------- Codes ----------
   paneCodes(p) {
-    const c = this.tool.config; c.codes = c.codes || [];
+    const c = this.tool.config; c.codes = c.codes || []; c.mode = c.mode || (c.multi ? "complex" : "simple");
+    const cx = () => c.mode === "complex";
     const draw = () => {
-      p.innerHTML = `<p class="hint">The codes researchers choose from. Keys 1–9 select the first nine in order.</p>
-        <div id="rt-codelist">${c.codes.map((x, i) => `<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center"><span style="width:1.4em">${i < 9 ? i + 1 : ""}</span>
-          <input data-i="${i}" data-f="label" value="${this.esc(x.label)}" placeholder="Code name" style="flex:1 1 180px">
-          <input data-i="${i}" data-f="description" value="${this.esc(x.description || "")}" placeholder="Description (optional)" style="flex:2 1 260px">
-          <button class="btn btn-ghost btn-small" data-up="${i}" type="button">↑</button><button class="btn btn-ghost btn-small" data-rm="${i}" type="button">✕</button></div>`).join("")}</div>
-        <button id="rt-addcode" class="btn btn-small btn-primary" type="button">+ Add code</button>
-        <div style="margin-top:14px;display:grid;gap:8px;max-width:640px">
-          <label><input type="checkbox" id="rt-multi" ${c.multi ? "checked" : ""}> Allow several codes per item</label>
+      const dims = [...new Set(c.codes.map((x) => x.dimension).filter(Boolean))];
+      p.innerHTML = `<div style="display:grid;gap:8px;max-width:700px;margin-bottom:12px">
+          <label><strong>Coding style</strong><br>
+            <label style="font-weight:400"><input type="radio" name="rt-mode" value="simple" ${cx() ? "" : "checked"}> Simple — the researcher picks one code per item</label><br>
+            <label style="font-weight:400"><input type="radio" name="rt-mode" value="complex" ${cx() ? "checked" : ""}> Complex — codes belong to a type (dimension); the researcher adds any codes from any type that apply</label></label>
           <label><input type="checkbox" id="rt-note" ${c.allowNote ? "checked" : ""}> Allow a note per item</label>
-          <label>Instructions shown to researchers<br><textarea id="rt-instr" rows="4" style="width:100%">${this.esc(c.instructions || "")}</textarea></label></div>`;
+          <label>Instructions shown to researchers<br><textarea id="rt-instr" rows="3" style="width:100%">${this.esc(c.instructions || "")}</textarea></label></div>
+        <p class="hint"><strong>Upload codes</strong> from a CSV or Excel file with columns <code>code</code>, <code>dimension</code>, <code>option_label</code>, <code>description</code>, and optionally <code>include_when</code>, <code>exclude_when</code>. Uploading replaces the list below. Or add codes by hand.</p>
+        <input type="file" id="rt-cfile" accept=".csv,.xlsx,.xls,.tsv" style="margin-bottom:12px">
+        <datalist id="rt-dims">${dims.map((d) => `<option value="${this.esc(d)}">`).join("")}</datalist>
+        <div>${c.codes.map((x, i) => `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;align-items:center"><span style="width:1.4em">${i < 9 ? i + 1 : ""}</span>
+          ${cx() ? `<input data-i="${i}" data-f="dimension" list="rt-dims" value="${this.esc(x.dimension || "")}" placeholder="Type / dimension" style="flex:1 1 140px">` : ""}
+          <input data-i="${i}" data-f="label" value="${this.esc(x.label)}" placeholder="Code name" style="flex:1 1 160px">
+          <input data-i="${i}" data-f="description" value="${this.esc(x.description || "")}" placeholder="Description (optional)" style="flex:2 1 220px">
+          ${cx() ? `<input data-i="${i}" data-f="include" value="${this.esc(x.include || "")}" placeholder="Include when (optional)" style="flex:1 1 160px"><input data-i="${i}" data-f="exclude" value="${this.esc(x.exclude || "")}" placeholder="Exclude when (optional)" style="flex:1 1 160px">` : ""}
+          <button class="btn btn-ghost btn-small" data-up="${i}" type="button">↑</button><button class="btn btn-ghost btn-small" data-rm="${i}" type="button">✕</button></div>`).join("")}</div>
+        <button id="rt-addcode" class="btn btn-small btn-primary" type="button">+ Add code</button>`;
       p.querySelectorAll("[data-f]").forEach((i) => i.oninput = () => { c.codes[+i.dataset.i][i.dataset.f] = i.value; this.saveConfig(); });
       p.querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => { if (confirm("Remove this code? Existing codings keep its id but it will no longer be shown.")) { c.codes.splice(+b.dataset.rm, 1); this.saveConfig(); draw(); } });
       p.querySelectorAll("[data-up]").forEach((b) => b.onclick = () => { const i = +b.dataset.up; if (i > 0) { [c.codes[i - 1], c.codes[i]] = [c.codes[i], c.codes[i - 1]]; this.saveConfig(); draw(); } });
-      p.querySelector("#rt-addcode").onclick = () => { c.codes.push({ id: this.uid(), label: "", description: "" }); this.saveConfig(); draw(); };
-      p.querySelector("#rt-multi").onchange = (e) => { c.multi = e.target.checked; this.saveConfig(); };
+      p.querySelector("#rt-addcode").onclick = () => { c.codes.push({ id: this.uid(), dimension: c.codes.length ? c.codes[c.codes.length - 1].dimension || "" : "", label: "", description: "" }); this.saveConfig(); draw(); };
+      p.querySelectorAll("[name=rt-mode]").forEach((r) => r.onchange = () => { c.mode = r.value; c.multi = r.value === "complex"; this.saveConfig(); draw(); });
       p.querySelector("#rt-note").onchange = (e) => { c.allowNote = e.target.checked; this.saveConfig(); };
       p.querySelector("#rt-instr").oninput = (e) => { c.instructions = e.target.value; this.saveConfig(); };
+      p.querySelector("#rt-cfile").onchange = async (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        try {
+          const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "", raw: false });
+          const get = (r, names) => { for (const k of Object.keys(r)) if (names.includes(k.trim().toLowerCase())) return String(r[k]).trim(); return ""; };
+          const out = rows.map((r) => ({
+            id: get(r, ["code", "id", "code_id"]), dimension: get(r, ["dimension", "type", "category", "code_type"]),
+            label: get(r, ["option_label", "label", "name", "code_label"]), description: get(r, ["description", "definition"]),
+            include: get(r, ["include_when", "include"]), exclude: get(r, ["exclude_when", "exclude"]),
+          })).filter((x) => x.id || x.label);
+          if (!out.length) throw new Error("No codes found. Expected columns like code, dimension, option_label.");
+          const seen = new Set(); out.forEach((x) => { if (!x.id || seen.has(x.id)) x.id = this.uid(); seen.add(x.id); if (!x.label) x.label = x.id; });
+          if (c.codes.length && !confirm(`Replace the ${c.codes.length} current codes with ${out.length} from the file?`)) return;
+          c.codes = out;
+          if (out.some((x) => x.dimension) && !cx() && confirm("This file has code types (dimensions). Switch to Complex coding?")) { c.mode = "complex"; c.multi = true; }
+          this.saveConfig(); draw(); this.msg(`Loaded ${out.length} codes.`);
+        } catch (err) { this.msg("Code upload failed: " + (err.message || err), true); }
+      };
     };
     draw();
   },
@@ -241,6 +270,8 @@ const ResearchTools = {
 
   async exportData(fmt, coders, codings) {
     const t = this.tool, db = this.db(), label = Object.fromEntries((t.config.codes || []).map((c) => [c.id, c.label || c.id]));
+    const dimOf = Object.fromEntries((t.config.codes || []).map((c) => [c.id, c.dimension || ""]));
+    const dimsOf = [...new Set((t.config.codes || []).map((c) => c.dimension).filter(Boolean))];
     const items = [];
     for (let from = 0; from < t.item_count; from += 1000) {
       const { data, error } = await db.from("rt_items").select("idx,data").eq("tool_id", t.id).order("idx").range(from, from + 999);
@@ -253,6 +284,7 @@ const ResearchTools = {
       coders.forEach((cd) => {
         const c = map[cd.key + ":" + it.idx];
         row[`${cd.name} – Code`] = c ? (c.codes || []).map((id) => label[id] || id).join("; ") : "";
+        if (t.config.mode === "complex") dimsOf.forEach((dm) => { row[`${cd.name} – ${dm}`] = c ? (c.codes || []).filter((id) => dimOf[id] === dm).map((id) => label[id] || id).join("; ") : ""; });
         if (t.config.allowNote) row[`${cd.name} – Note`] = c ? c.note || "" : "";
       });
       return row;

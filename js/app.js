@@ -2263,8 +2263,8 @@ function applyInfractionColor(select, infraction) {
 function absenceCellColor(absences) {
   const limit = AttendanceModule.settings.absenceLimit;
   if (!limit || limit <= 0) return "";
-  if (absences > limit) return "#e57373"; // red
-  if (absences === limit) return "#ffb74d"; // orange
+  if (absences > limit) return "var(--hl-red)"; // red
+  if (absences === limit) return "var(--hl-orange)"; // orange
   return "";
 }
 

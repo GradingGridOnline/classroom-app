@@ -75,6 +75,14 @@ body::before { display: none !important; }
 .stage svg { width: min(88cqw, 82cqh); height: min(88cqw, 82cqh); }
 .stage.done .dg, .stage.done svg { color: var(--marker); animation: tblink .7s steps(2) infinite; }
 @keyframes tblink { 50% { opacity: .25; } }
+body.flash { animation: tflash .5s steps(2, jump-none) infinite; }
+body.flash .stage { animation: tflash .5s steps(2, jump-none) infinite; }
+@keyframes tflash { 0% { background: var(--paper); } 100% { background: color-mix(in srgb, var(--marker) 80%, #ffffff); } }
+body.flash .stage .dg, body.flash .stage svg { color: var(--ink); animation: none; }
+.btn-ghost { background: var(--card); color: var(--green-dark); border: 1.5px solid var(--green); }
+.btn-ghost:hover { background: var(--green); color: #fff; }
+[data-theme="vintage"] .btn-ghost { background: linear-gradient(#fbefc9, #ecd58e); color: #3b2a14; border: 1.5px solid #a9803a; }
+[data-theme="vintage"] .btn-ghost:hover { background: linear-gradient(#f4c96b, #d9962e); color: #2b2118; }
 .t-row { display: flex; gap: 6px; flex: none; }
 .t-row .btn { flex: 1; }
 .t-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: none; max-height: 34%; overflow: auto; }
@@ -88,7 +96,7 @@ body::before { display: none !important; }
     const el = (tag, cls, text) => { const e = d.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
     const button = (label, cls, fn) => { const b = el("button", cls || "btn btn-ghost btn-small", label); b.type = "button"; b.addEventListener("click", fn); return b; };
 
-    let timers = [mkTimer(1)], sel = 0, nextN = 2, editing = false, ctx = null;
+    let flashUntil = 0, timers = [mkTimer(1)], sel = 0, nextN = 2, editing = false, ctx = null;
     function mkTimer(n) { return { name: `Timer ${n}`, total: 0, remaining: 0, running: false, endAt: 0, done: false }; }
     const audio = () => {
       try {
@@ -118,6 +126,7 @@ body::before { display: none !important; }
     const grid = el("div", "t-grid");
     const foot = el("div", "t-row");
     d.body.append(tabs, stage, controls, grid, foot);
+    d.body.addEventListener("click", () => { flashUntil = 0; });
 
     let tabBtns = [], startBtn = null;
 
@@ -189,6 +198,7 @@ body::before { display: none !important; }
       const t = timers[sel];
       if (startBtn) startBtn.textContent = t.running ? "Pause" : "Start";
       stage.classList.toggle("done", t.done);
+      d.body.classList.toggle("flash", Date.now() < flashUntil);
       if (!prefs.analog) {
         stage.innerHTML = `<div class="dg">${fmt(t.remaining)}</div><div class="nm"></div>`;
       } else {
@@ -208,7 +218,7 @@ body::before { display: none !important; }
       timers.forEach((t) => {
         if (!t.running) return;
         t.remaining = t.endAt - now;
-        if (t.remaining <= 0) { t.remaining = 0; t.running = false; t.done = true; chime(); }
+        if (t.remaining <= 0) { t.remaining = 0; t.running = false; t.done = true; flashUntil = Date.now() + 15000; chime(); }
       });
       const root = d.documentElement, src = document.documentElement;
       ["data-theme", "data-textsize"].forEach((a) => {

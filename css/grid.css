@@ -477,6 +477,18 @@ table.source-grid.source-grid-over {
   --hl-red: #e57373; --hl-orange: #ffb74d; --hl-yellow: #ffd54f; --hl-green: #81c784; --hl-teal: #4db6ac;
   --hl-blue: #64b5f6; --hl-purple: #ba68c8; --hl-pink: #f48fb1; --hl-gray: #b0bec5;
 }
+[data-theme="basic"] {
+  --hl-red: #e9a1a1; --hl-orange: #f2c18d; --hl-yellow: #f1dc8f; --hl-green: #a8d3ab; --hl-teal: #90cfc8;
+  --hl-blue: #9cc6ee; --hl-purple: #cfa9dc; --hl-pink: #efb4cb; --hl-gray: #c7d0d6;
+}
+[data-theme="dark"] {
+  --hl-red: #c76a6a; --hl-orange: #d49a52; --hl-yellow: #cfb44f; --hl-green: #68a56d; --hl-teal: #4c9d94;
+  --hl-blue: #5a8fc4; --hl-purple: #9c6fb0; --hl-pink: #c97a9c; --hl-gray: #8b9aa3;
+}
+[data-theme="vintage"] {
+  --hl-red: #d98b70; --hl-orange: #e3a95c; --hl-yellow: #e6cd78; --hl-green: #a3b577; --hl-teal: #84ad9a;
+  --hl-blue: #8fa9bb; --hl-purple: #b595a8; --hl-pink: #dfa595; --hl-gray: #c1b79d;
+}
 [data-theme="cyberpunk"] {
   --hl-red: #ff5c6c; --hl-orange: #ff9f43; --hl-yellow: #ffe94d; --hl-green: #4dff9a; --hl-teal: #19e6e6;
   --hl-blue: #5cb8ff; --hl-purple: #c58bff; --hl-pink: #ff5cb0; --hl-gray: #a9bcc6;
