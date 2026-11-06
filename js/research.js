@@ -77,7 +77,7 @@ const ResearchTools = {
 
   saveConfig() {
     const t = this.tool, c = t.config;
-    c.shownCols = [...new Set([c.participantCol, c.responseCol, c.responseCol2, ...(c.contextCols || [])].filter(Boolean))];
+    c.shownCols = [...new Set([c.participantCol, ...(c.targets || []).flatMap((x) => x.cols), ...(c.contextCols || [])].filter(Boolean))];
     clearTimeout(this._saveT);
     this._saveT = setTimeout(async () => {
       const { error } = await this.db().from("rt_tools").update({ config: c }).eq("id", t.id);
@@ -93,14 +93,40 @@ const ResearchTools = {
       <input id="rt-file" type="file" accept=".csv,.xlsx,.xls,.tsv">
       ${cols.length ? `<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin-top:14px;align-items:center;max-width:640px">
         <label>Participant column</label><select id="rt-pc"><option value="">(none)</option>${cols.map((x) => `<option ${x === c.participantCol ? "selected" : ""}>${this.esc(x)}</option>`).join("")}</select>
-        <label>Response column</label><select id="rt-rc"><option value="">(choose)</option>${cols.map((x) => `<option ${x === c.responseCol ? "selected" : ""}>${this.esc(x)}</option>`).join("")}</select>
-        <label>Second response column<br><span class="hint">optional, e.g. the English version beside the Japanese</span></label><select id="rt-rc2"><option value="">(none)</option>${cols.map((x) => `<option ${x === c.responseCol2 ? "selected" : ""}>${this.esc(x)}</option>`).join("")}</select>
+        <label>Items to code<br><span class="hint">Each item is one or more columns shown together as a single block (e.g. Japanese + English). The researcher codes each item separately.</span></label><div id="rt-targets"></div>
         <label>Also show researchers</label><div>${cols.map((x) => `<label style="margin-right:12px;white-space:nowrap"><input type="checkbox" class="rt-cx" value="${this.esc(x)}" ${(c.contextCols || []).includes(x) ? "checked" : ""}> ${this.esc(x)}</label>`).join("")}</div></div>
         <p class="hint">Researchers only ever receive these columns — nothing else in your file leaves your account.</p>` : ""}`;
     const sel = (id, key) => { const e = p.querySelector(id); if (e) e.onchange = () => { c[key] = e.value; this.saveConfig(); }; };
-    sel("#rt-pc", "participantCol"); sel("#rt-rc", "responseCol"); sel("#rt-rc2", "responseCol2");
+    sel("#rt-pc", "participantCol");
+    if (cols.length) this.drawTargets(p.querySelector("#rt-targets"));
     p.querySelectorAll(".rt-cx").forEach((cb) => cb.onchange = () => { c.contextCols = [...p.querySelectorAll(".rt-cx:checked")].map((x) => x.value); this.saveConfig(); });
     p.querySelector("#rt-file").onchange = (e) => this.upload(e.target.files[0]);
+  },
+
+  drawTargets(box) {
+    const c = this.tool.config, cols = c.columns || [];
+    if (!c.targets) { c.targets = [{ id: "t0", label: "", cols: [c.responseCol, c.responseCol2].filter(Boolean) }]; }
+    const draw = () => {
+      box.innerHTML = c.targets.map((t, i) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px">
+        <div style="display:flex;gap:6px;margin-bottom:6px"><input data-ti="${i}" class="rt-tl" value="${this.esc(t.label)}" placeholder="Item name (e.g. Class reflection)" style="flex:1">
+          ${c.targets.length > 1 ? `<button class="btn btn-ghost btn-small" data-trm="${i}" type="button">✕</button>` : ""}</div>
+        <div>${cols.map((x) => `<label style="margin-right:12px;white-space:nowrap"><input type="checkbox" data-ti="${i}" class="rt-tc" value="${this.esc(x)}" ${t.cols.includes(x) ? "checked" : ""}> ${this.esc(x)}</label>`).join("")}</div></div>`).join("") +
+        `<button class="btn btn-ghost btn-small" id="rt-addt" type="button">+ Add another item to code</button>`;
+      box.querySelectorAll(".rt-tl").forEach((e) => e.oninput = () => { c.targets[+e.dataset.ti].label = e.value; this.saveConfig(); });
+      box.querySelectorAll(".rt-tc").forEach((e) => e.onchange = () => {
+        const t = c.targets[+e.dataset.ti];
+        const on = [...box.querySelectorAll(`.rt-tc[data-ti="${e.dataset.ti}"]:checked`)].map((q) => q.value);
+        t.cols = cols.filter((x) => on.includes(x));
+        this.saveConfig();
+      });
+      box.querySelectorAll("[data-trm]").forEach((b) => b.onclick = () => {
+        const i = +b.dataset.trm;
+        if (i === 0 && !confirm("Removing the first item makes the next one the first, which can mix up codings already saved. Continue?")) return;
+        c.targets.splice(i, 1); this.saveConfig(); draw();
+      });
+      box.querySelector("#rt-addt").onclick = () => { c.targets.push({ id: this.uid(), label: "", cols: [] }); this.saveConfig(); draw(); };
+    };
+    draw(); this.saveConfig();
   },
 
   async upload(file) {
@@ -128,11 +154,11 @@ const ResearchTools = {
       c.columns = columns;
       const guess = (re) => columns.find((x) => re.test(x)) || "";
       c.participantCol = guess(/particip|^id$|subject|name/i);
-      c.responseCol = guess(/respon|answer|text|comment/i);
+      c.targets = [{ id: "t0", label: "", cols: [guess(/respon|answer|text|comment/i)].filter(Boolean) }];
+      delete c.responseCol; delete c.responseCol2;
       c.contextCols = [];
       t.item_count = rows.length;
-      c.responseCol2 = "";
-      c.shownCols = [...new Set([c.participantCol, c.responseCol].filter(Boolean))];
+      c.shownCols = [...new Set([c.participantCol, ...c.targets.flatMap((x) => x.cols)].filter(Boolean))];
       const { error } = await db.from("rt_tools").update({ config: c, item_count: rows.length }).eq("id", t.id);
       if (error) throw error;
       this.msg(`Loaded ${rows.length} items. Check the column choices below.`);
@@ -279,13 +305,18 @@ const ResearchTools = {
       items.push(...data);
     }
     const map = {}; codings.forEach((c) => { map[c.coder + ":" + c.idx] = c; });
+    const T = CodingUI.targetsOf(t.config), multiT = T.length > 1;
     const rows = items.map((it) => {
       const row = { ...it.data };
       coders.forEach((cd) => {
         const c = map[cd.key + ":" + it.idx];
-        row[`${cd.name} – Code`] = c ? (c.codes || []).map((id) => label[id] || id).join("; ") : "";
-        if (t.config.mode === "complex") dimsOf.forEach((dm) => { row[`${cd.name} – ${dm}`] = c ? (c.codes || []).filter((id) => dimOf[id] === dm).map((id) => label[id] || id).join("; ") : ""; });
-        if (t.config.allowNote) row[`${cd.name} – Note`] = c ? c.note || "" : "";
+        const st = CodingUI.decode(t.config, c ? c.codes : [], c ? c.note : "");
+        T.forEach((tg, k) => {
+          const pre = cd.name + (multiT ? ` – ${tg.label || "Item " + (k + 1)}` : ""), cur = st[tg.id];
+          row[`${pre} – Code`] = cur.codes.map((id) => label[id] || id).join("; ");
+          if (t.config.mode === "complex") dimsOf.forEach((dm) => { row[`${pre} – ${dm}`] = cur.codes.filter((id) => dimOf[id] === dm).map((id) => label[id] || id).join("; "); });
+          if (t.config.allowNote) row[`${pre} – Note`] = cur.note;
+        });
       });
       return row;
     });
@@ -303,7 +334,7 @@ const ResearchTools = {
   // ---------- Code it yourself (mirror of the researcher page) ----------
   async paneTry(p) {
     const t = this.tool, db = this.db(), c = t.config;
-    if (!t.item_count || !c.responseCol || !(c.codes || []).length) { p.innerHTML = `<p class="hint">Upload data, choose the response column and add at least one code first.</p>`; return; }
+    if (!t.item_count || !CodingUI.targetsOf(c).some((x) => x.cols.length) || !(c.codes || []).length) { p.innerHTML = `<p class="hint">Upload data, choose the response column and add at least one code first.</p>`; return; }
     p.innerHTML = `<div id="rt-ui"></div>`;
     const shown = new Set(c.shownCols || []);
     const adapter = {

@@ -43,6 +43,10 @@ const CodingUI = {
   .cu-dim:first-child{margin-top:0}
   .cu-r2{border-top:1px dashed var(--line,#ddd);margin-top:12px;padding-top:12px}
   .cu-col{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft,#777);margin-bottom:2px}
+  .cu-tgt.multi{border:1.5px solid var(--line,#ddd);border-radius:8px;padding:10px;margin-bottom:10px;cursor:pointer}
+  .cu-tgt.multi.act{border-color:var(--green,#2f5233);box-shadow:0 0 0 2px color-mix(in srgb,var(--green,#2f5233) 25%,transparent)}
+  .cu-tgt .cu-th{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--green-dark,#223d26);margin-bottom:4px}
+  .cu-tgt.ok .cu-th{color:var(--green,#2f5233)}
   .cu-note{width:100%;font:inherit;border:1.5px solid var(--line,#ddd);border-radius:8px;padding:8px;background:var(--paper,#fff);color:var(--ink);resize:vertical;min-height:54px}
   .cu-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
   .cu-nav .sp{flex:1}
@@ -55,14 +59,44 @@ const CodingUI = {
   .cu input[type=number]{width:70px;font:inherit;padding:5px;border:1.5px solid var(--line,#ddd);border-radius:6px;background:var(--paper,#fff);color:var(--ink)}
   `,
 
+  // ----- targets: each row can hold several things to code ("targets"), each made of one or more linked columns -----
+  targetsOf(cfg) {
+    if (cfg.targets && cfg.targets.length) return cfg.targets;
+    return [{ id: "t0", label: "", cols: [cfg.responseCol, cfg.responseCol2].filter(Boolean) }];
+  },
+  // Stored format (no database change): codes of the first target are plain ids, others are "targetId|codeId";
+  // notes are plain text for the first target alone, otherwise a JSON object keyed by target id.
+  decode(cfg, codes, note) {
+    const T = this.targetsOf(cfg), first = T[0].id, st = {};
+    T.forEach((t) => { st[t.id] = { codes: [], note: "" }; });
+    (codes || []).forEach((c) => {
+      c = String(c); const k = c.indexOf("|"), tid = k > 0 ? c.slice(0, k) : first, id = k > 0 ? c.slice(k + 1) : c;
+      if (st[tid]) st[tid].codes.push(id);
+    });
+    let n = note || "";
+    if (n[0] === "{") { try { const o = JSON.parse(n); Object.keys(o).forEach((k) => { if (st[k]) st[k].note = String(o[k]); }); n = null; } catch (e) {} }
+    if (n !== null) st[first].note = n;
+    return st;
+  },
+  encode(cfg, st) {
+    const T = this.targetsOf(cfg), first = T[0].id, codes = [];
+    T.forEach((t) => ((st[t.id] || {}).codes || []).forEach((id) => codes.push(t.id === first ? id : t.id + "|" + id)));
+    const wn = T.filter((t) => st[t.id] && st[t.id].note);
+    let note = "";
+    if (wn.length === 1 && wn[0].id === first && st[first].note[0] !== "{") note = st[first].note;
+    else if (wn.length) { const o = {}; wn.forEach((t) => { o[t.id] = st[t.id].note; }); note = JSON.stringify(o); }
+    return { codes, note };
+  },
+
   mount(root, adapter) {
-    const E = this._esc;
+    const E = this._esc, self = this;
     const meta = adapter.meta, cfg = meta.config || {};
     const codes = cfg.codes || [];
+    const T = this.targetsOf(cfg), multiT = T.length > 1;
     const total = meta.item_count || 0;
-    const cache = new Map(); // idx -> item
+    const cache = new Map(); // idx -> item (with .st = per-target state)
     const PAGE = 200;
-    let pos = 0, onlyUncoded = false, saveTimer = null, dirty = false, loaded = 0;
+    let pos = 0, ai = 0, onlyUncoded = false, saveTimer = null, dirty = false;
     let doneCount = meta.coded || 0;
 
     if (!document.getElementById("cu-css")) {
@@ -76,7 +110,7 @@ const CodingUI = {
       ${cfg.instructions ? `<div class="cu-instr">${E(cfg.instructions)}</div>` : ""}
       <div class="cu-main">
         <div class="cu-pane"><h3>Participant response</h3><div class="cu-head"></div><div class="cu-resp"></div></div>
-        <div class="cu-pane"><h3>Codes ${cfg.mode === "complex" ? "(add every code that applies)" : "(choose one)"}</h3><div class="cu-codes"></div>
+        <div class="cu-pane"><h3 class="cu-ch"></h3><div class="cu-codes"></div>
           ${cfg.allowNote ? `<textarea class="cu-note" placeholder="Note (optional)"></textarea>` : ""}</div>
       </div>
       <div class="cu-nav"><button class="b g prev" type="button">← Previous</button>
@@ -98,14 +132,14 @@ const CodingUI = {
       const from = Math.floor(i / PAGE) * PAGE;
       try {
         const items = await adapter.fetch(from, PAGE);
-        items.forEach((it) => cache.set(it.idx, { ...it, codes: it.codes || [], note: it.note || "" }));
+        items.forEach((it) => cache.set(it.idx, { ...it, st: self.decode(cfg, it.codes, it.note) }));
         return cache.has(i);
       } catch (e) { setSt("Load failed", true); return false; }
     }
-    const isCoded = (it) => it && ((it.codes && it.codes.length) || false);
+    const tCoded = (it, t) => !!(it.st[t.id] && it.st[t.id].codes.length);
+    const isCoded = (it) => !!it && T.every((t) => tCoded(it, t));
     function recount() {
       let n = 0; cache.forEach((it) => { if (isCoded(it)) n++; });
-      // Until every page is cached, trust the larger of the server count and what we've seen.
       if (cache.size >= total) doneCount = n; else doneCount = Math.max(n, doneCount);
       $(".cu-prog .t").textContent = `${doneCount} of ${total} coded`;
       $(".cu-prog i").style.width = total ? Math.min(100, (doneCount / total) * 100) + "%" : "0";
@@ -116,26 +150,30 @@ const CodingUI = {
       clearTimeout(saveTimer); dirty = false;
       const it = itemAt(pos); if (!it) return;
       setSt("Saving…");
-      try { await adapter.save(it.idx, it.codes, it.note); setSt("Saved"); }
+      const enc = self.encode(cfg, it.st);
+      try { await adapter.save(it.idx, enc.codes, enc.note); setSt("Saved"); }
       catch (e) { dirty = true; setSt("Not saved — retry", true); throw e; }
     }
     function queue() { dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => flush().catch(() => {}), 600); }
 
-    async function show(i) {
-      if (i < 0 || i >= total) return;
-      try { await flush(); } catch (e) { return; }
-      if (!(await ensure(i))) return;
-      pos = i;
-      const it = itemAt(i), d = it.data || {};
-      const ctx = (cfg.contextCols || []).filter((c) => d[c] != null && d[c] !== "");
-      $(".cu-head").innerHTML = `<div class="cu-who">${cfg.participantCol ? E(d[cfg.participantCol]) : "Item " + (i + 1)} <span class="cu-ctx">· item ${i + 1} of ${total}</span></div>` +
-        (ctx.length ? `<div class="cu-ctx">${ctx.map((c) => `<b>${E(c)}:</b> ${E(d[c])}`).join(" &nbsp; ")}</div>` : "");
-      const rs = $(".cu-resp"); rs.textContent = "";
-      [cfg.responseCol, cfg.responseCol2].filter(Boolean).forEach((col, k) => {
-        const blk = document.createElement("div"); if (k) blk.className = "cu-r2";
-        if (cfg.responseCol2) { const h = document.createElement("div"); h.className = "cu-col"; h.textContent = col; blk.appendChild(h); }
-        const tx = document.createElement("div"); tx.textContent = d[col] == null ? "" : String(d[col]); blk.appendChild(tx); rs.appendChild(blk);
+    function drawTargets(it) {
+      const d = it.data || {}, rs = $(".cu-resp"); rs.textContent = "";
+      T.forEach((t, k) => {
+        const blk = document.createElement("div");
+        blk.className = "cu-tgt" + (multiT ? " multi" : "") + (k === ai ? " act" : "") + (multiT && tCoded(it, t) ? " ok" : "");
+        if (multiT) blk.onclick = () => { ai = k; drawTargets(it); drawCodes(it); };
+        if (multiT) { const h = document.createElement("div"); h.className = "cu-th"; h.textContent = (t.label || `Item ${k + 1}`) + (tCoded(it, t) ? " ✓" : ""); blk.appendChild(h); }
+        t.cols.forEach((col, j) => {
+          const w = document.createElement("div"); if (j) w.className = "cu-r2";
+          if (t.cols.length > 1) { const h = document.createElement("div"); h.className = "cu-col"; h.textContent = col; w.appendChild(h); }
+          const tx = document.createElement("div"); tx.textContent = d[col] == null ? "" : String(d[col]); w.appendChild(tx); blk.appendChild(w);
+        });
+        rs.appendChild(blk);
       });
+    }
+    function drawCodes(it) {
+      const cur = it.st[T[ai].id];
+      $(".cu-ch").textContent = (multiT ? `Codes for “${T[ai].label || "Item " + (ai + 1)}” ` : "Codes ") + (cfg.mode === "complex" ? "(add every code that applies)" : "(choose one)");
       const box = $(".cu-codes"); box.innerHTML = "";
       let lastDim = null;
       codes.forEach((c, n) => {
@@ -144,24 +182,45 @@ const CodingUI = {
           if (lastDim) { const h = document.createElement("div"); h.className = "cu-dim"; h.textContent = lastDim; box.appendChild(h); }
         }
         const b = document.createElement("button"); b.type = "button";
-        b.className = "cu-code" + (it.codes.includes(c.id) ? " on" : "");
+        b.className = "cu-code" + (cur.codes.includes(c.id) ? " on" : "");
         b.innerHTML = `<kbd>${n < 9 ? n + 1 : ""}</kbd><span><span class="l">${E(c.label)}</span>${c.description ? `<span class="d">${E(c.description)}</span>` : ""}${c.include ? `<span class="d"><i>Include:</i> ${E(c.include)}</span>` : ""}${c.exclude ? `<span class="d"><i>Exclude:</i> ${E(c.exclude)}</span>` : ""}</span>`;
         b.onclick = () => toggle(c.id);
         box.appendChild(b);
       });
-      const nt = $(".cu-note"); if (nt) nt.value = it.note;
+      const nt = $(".cu-note"); if (nt) nt.value = cur.note;
+    }
+
+    async function show(i, target) {
+      if (i < 0 || i >= total) return;
+      try { await flush(); } catch (e) { return; }
+      if (!(await ensure(i))) return;
+      pos = i;
+      const it = itemAt(i), d = it.data || {};
+      if (target == null) { const f = T.findIndex((t) => !tCoded(it, t)); target = f < 0 ? 0 : f; }
+      ai = target;
+      const ctx = (cfg.contextCols || []).filter((c) => d[c] != null && d[c] !== "");
+      $(".cu-head").innerHTML = `<div class="cu-who">${cfg.participantCol ? E(d[cfg.participantCol]) : "Item " + (i + 1)} <span class="cu-ctx">· item ${i + 1} of ${total}</span></div>` +
+        (ctx.length ? `<div class="cu-ctx">${ctx.map((c) => `<b>${E(c)}:</b> ${E(d[c])}`).join(" &nbsp; ")}</div>` : "");
+      drawTargets(it); drawCodes(it);
       $(".go").value = i + 1;
       $(".prev").disabled = i === 0; $(".next").disabled = i >= total - 1;
       recount();
     }
     function toggle(id) {
       const it = itemAt(pos); if (!it) return;
-      const has = it.codes.includes(id);
-      if (cfg.mode === "complex" || cfg.multi) it.codes = has ? it.codes.filter((x) => x !== id) : [...it.codes, id];
-      else it.codes = has ? [] : [id];
-      root.querySelectorAll(".cu-code").forEach((b, n) => b.classList.toggle("on", it.codes.includes(codes[n].id)));
-      recount(); queue();
-      if (cfg.mode !== "complex" && !cfg.multi && it.codes.length && !onlyUncoded) setTimeout(() => step(1), 250);
+      const cur = it.st[T[ai].id], has = cur.codes.includes(id);
+      if (cfg.mode === "complex" || cfg.multi) cur.codes = has ? cur.codes.filter((x) => x !== id) : [...cur.codes, id];
+      else cur.codes = has ? [] : [id];
+      root.querySelectorAll(".cu-code").forEach((b, n) => b.classList.toggle("on", cur.codes.includes(codes[n].id)));
+      drawTargets(it); recount(); queue();
+      if (cfg.mode !== "complex" && !cfg.multi && cur.codes.length) {
+        // single-code style: move on by itself — to the row's next uncoded item, else the next row
+        setTimeout(() => {
+          if (itemAt(pos) !== it) return;
+          const nx = T.findIndex((t, k) => k !== ai && !tCoded(it, t));
+          if (nx >= 0) { ai = nx; drawTargets(it); drawCodes(it); } else if (!onlyUncoded) step(1);
+        }, 250);
+      }
     }
     async function step(dir) {
       let i = pos + dir;
@@ -181,20 +240,21 @@ const CodingUI = {
     $(".u").onchange = (e) => { onlyUncoded = e.target.checked; };
     $(".go").onchange = (e) => { const n = parseInt(e.target.value, 10); if (n >= 1 && n <= total) show(n - 1); };
     const nt = $(".cu-note");
-    if (nt) nt.oninput = () => { const it = itemAt(pos); if (it) { it.note = nt.value; queue(); } };
+    if (nt) nt.oninput = () => { const it = itemAt(pos); if (it) { it.st[T[ai].id].note = nt.value; queue(); } };
     const keyHandler = (e) => {
       if (!root.isConnected) return document.removeEventListener("keydown", keyHandler);
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "textarea" || tag === "input" || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowRight") step(1);
       else if (e.key === "ArrowLeft") step(-1);
+      else if (e.key === "ArrowDown" && multiT) { e.preventDefault(); const it = itemAt(pos); ai = (ai + 1) % T.length; drawTargets(it); drawCodes(it); }
+      else if (e.key === "ArrowUp" && multiT) { e.preventDefault(); const it = itemAt(pos); ai = (ai + T.length - 1) % T.length; drawTargets(it); drawCodes(it); }
       else if (/^[1-9]$/.test(e.key) && codes[+e.key - 1]) toggle(codes[+e.key - 1].id);
     };
     document.addEventListener("keydown", keyHandler);
     window.addEventListener("beforeunload", () => { if (dirty) flush().catch(() => {}); });
 
     if (!total) { $(".cu-resp").textContent = "No items have been uploaded for this tool yet."; return { flush }; }
-    // Resume at the first uncoded item.
     (async () => {
       recount();
       for (let i = 0; i < total; i++) { if (!(await ensure(i))) break; if (!isCoded(itemAt(i))) { pos = i; break; } }
