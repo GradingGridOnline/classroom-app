@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Research Tool</title>
+  <style>
+    :root { --paper:#f6f5f1; --ink:#2b2a28; --ink-soft:#6b6560; --green:#2f5233; --green-dark:#223d26; --line:#ddd8cd; --card:#fff; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font:16px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif; padding:20px 14px; }
+    #app { max-width:1100px; margin:0 auto; }
+    .login { max-width:380px; margin:6vh auto 0; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px 22px; }
+    .login h1 { font:700 1.3rem Georgia,serif; color:var(--green-dark); margin:0 0 4px; }
+    .login p { color:var(--ink-soft); margin:0 0 16px; font-size:.92rem; }
+    .login label { display:block; font-weight:600; margin:12px 0 5px; }
+    .login input { width:100%; font:inherit; padding:11px; border:1.5px solid var(--line); border-radius:8px; }
+    .login button { width:100%; margin-top:18px; font:inherit; font-weight:600; padding:12px; border:0; border-radius:8px; background:var(--green); color:#fff; cursor:pointer; }
+    .login button:disabled { opacity:.6; }
+    .err { color:#b3261e; min-height:1.4em; margin-top:10px; font-size:.93rem; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="js/config.js"></script>
+  <script src="js/codingui.js"></script>
+  <script>
+  (function () {
+    const cfg = (typeof APP_CONFIG !== "undefined" && APP_CONFIG.supabase) || {};
+    const token = new URLSearchParams(location.search).get("t") || "";
+    const app = document.getElementById("app");
+    const ERR = {
+      bad_login: "Username or password is wrong.",
+      locked: "Too many wrong attempts. Try again in 15 minutes.",
+      revoked: "This login has been switched off. Contact the person who sent it."
+    };
+    async function rpc(fn, args) {
+      const res = await fetch(cfg.url + "/rest/v1/rpc/" + fn, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: cfg.anonKey, Authorization: "Bearer " + cfg.anonKey },
+        body: JSON.stringify(args)
+      });
+      if (!res.ok) throw new Error("Server error " + res.status);
+      return res.json();
+    }
+    function loginForm(note) {
+      app.innerHTML = `<form class="login"><h1>Research Tool</h1><p>Sign in with the username and password you were given.</p>
+        <label for="u">Username</label><input id="u" autocomplete="username" autocapitalize="off" spellcheck="false">
+        <label for="p">Password</label><input id="p" type="password" autocomplete="current-password">
+        <button type="submit">Sign in</button><div class="err">${note || ""}</div></form>`;
+      app.querySelector("form").onsubmit = async (e) => {
+        e.preventDefault();
+        const u = app.querySelector("#u").value.trim(), p = app.querySelector("#p").value;
+        const btn = app.querySelector("button"), err = app.querySelector(".err");
+        btn.disabled = true; err.textContent = "";
+        try { await start(u, p); } catch (x) { err.textContent = x.message; btn.disabled = false; }
+      };
+    }
+    async function start(user, pass) {
+      const r = await rpc("rt_login", { p_token: token, p_user: user, p_pass: pass });
+      if (!r.ok) throw new Error(ERR[r.error] || "Sign-in failed.");
+      try { sessionStorage.setItem("rt-cred-" + token, JSON.stringify([user, pass])); } catch (e) {}
+      const adapter = {
+        meta: { title: r.title, config: r.config, item_count: r.item_count, coded: r.coded },
+        extraButtons: [{ label: "Sign out", onClick: () => { try { sessionStorage.removeItem("rt-cred-" + token); } catch (e) {} location.reload(); } }],
+        fetch: async (from, count) => {
+          const f = await rpc("rt_fetch", { p_token: token, p_user: user, p_pass: pass, p_from: from, p_count: count });
+          if (!f.ok) throw new Error(f.error); return f.items;
+        },
+        save: async (idx, codes, note) => {
+          const s = await rpc("rt_save", { p_token: token, p_user: user, p_pass: pass, p_idx: idx, p_codes: codes, p_note: note });
+          if (!s.ok) throw new Error(s.error);
+        }
+      };
+      app.innerHTML = '<div id="ui"></div>';
+      CodingUI.mount(document.getElementById("ui"), adapter);
+    }
+    if (!token) { loginForm("This link is incomplete."); return; }
+    let saved = null; try { saved = JSON.parse(sessionStorage.getItem("rt-cred-" + token)); } catch (e) {}
+    if (saved) start(saved[0], saved[1]).catch(() => loginForm()); else loginForm();
+  })();
+  </script>
+</body>
+</html>
