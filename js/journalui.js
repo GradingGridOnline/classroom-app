@@ -215,7 +215,8 @@
 :is(#journal-panel, #journal-modal) .jr-mentry { border-bottom:1px dashed var(--line,#999); padding:3px 0; }
 :is(#journal-panel, #journal-modal) .jr-mentry > summary { cursor:pointer; display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
 :is(#journal-panel, #journal-modal) .jr-margin { border-top:3px double var(--line,#999); background:var(--card,#fff); color:var(--ink,#222); border-radius:0 0 8px 8px; padding:8px 14px 10px; margin:0 0 16px; }
-:is(#journal-panel, #journal-modal) .jr-margin-title { font-weight:700; margin:0 0 6px; }
+:is(#journal-panel, #journal-modal) .jr-margin-title { font-weight:700; margin:0 0 6px; cursor:pointer; user-select:none; display:flex; align-items:center; gap:6px; }
+:is(#journal-panel, #journal-modal) .jr-margin.shut .jr-margin-title { margin:0; }
 :is(#journal-panel, #journal-modal) .jr-margin .jr-entry .jr-text { -webkit-line-clamp:6; line-clamp:6; }
 `;
   document.head.appendChild(css);
@@ -761,13 +762,24 @@
     panel.appendChild(sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length));
     if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
     if (pinned.length) {
-      const m = mk("div", "jr-margin"); m.appendChild(mk("div", "jr-margin-title", `📌 Margin — pinned entries (${pinned.length})`));
+      const m = mk("div", "jr-margin");
+      let shut = false; try { shut = localStorage.getItem("ggo-journal-margin-shut") === "1"; } catch (e) {}
+      const mt = mk("div", "jr-margin-title"); mt.tabIndex = 0; mt.setAttribute("role", "button");
+      const mtext = () => `${shut ? "▸" : "▾"} 📌 Margin — pinned entries (${pinned.length})`;
+      mt.textContent = mtext(); mt.setAttribute("aria-expanded", String(!shut)); m.classList.toggle("shut", shut);
+      const flip = () => {
+        shut = !shut; try { localStorage.setItem("ggo-journal-margin-shut", shut ? "1" : "0"); } catch (e) {}
+        mt.textContent = mtext(); mt.setAttribute("aria-expanded", String(!shut)); m.classList.toggle("shut", shut);
+        m.querySelectorAll(".jr-mentry").forEach((x) => { x.hidden = shut; });
+      };
+      mt.addEventListener("click", flip); mt.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); flip(); } });
+      m.appendChild(mt);
       pinned.forEach((e) => {
         const d = mk("details", "jr-mentry"); if (editingId === e.id) d.open = true;
         const sm = mk("summary"); sm.appendChild(mk("b", "", e.subject || "(no subject)")); sm.appendChild(mk("span", "jr-meta", `  ${e.date}${e.mode === "list" ? (e.done ? " · ✔ done" : " · to do") : ""}${e.tags.length ? " · " + e.tags.map((t) => "#" + t).join(" ") : ""}`));
         sm.appendChild(pinPill(e, () => { J.setPinned(e.id, false); render(); }));
         sm.querySelector(".jr-pinpill").addEventListener("click", (ev) => ev.stopPropagation());
-        d.append(sm, entryCard(e)); m.appendChild(d);
+        d.append(sm, entryCard(e)); d.hidden = shut && editingId !== e.id; m.appendChild(d);
       });
       panel.appendChild(m);
     }
