@@ -7,14 +7,14 @@
   const SECTIONS = [
     ["seating-banks", "#seating-panel .banks-section"],
     ["seating-groups", "#seating-panel .group-list-section"],
-    ["seating-settings", "#seating-settings"],
+    ["seating-settings", "#seating-settings", true], // true = always open, no collapse
   ];
   const KEY = "ggo-sections-closed";
   let closed = new Set();
   try { closed = new Set(JSON.parse(localStorage.getItem(KEY)) || []); } catch (e) { closed = new Set(); }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify([...closed])); } catch (e) {} };
 
-  function add([id, selector]) {
+  function add([id, selector, fixed]) {
     const sec = document.querySelector(selector);
     if (!sec || sec.dataset.ggoSection) return;
     const head = sec.querySelector(":scope > .attendance-settings-header") || sec.querySelector(":scope > h3");
@@ -22,6 +22,7 @@
     sec.dataset.ggoSection = id;
     sec.classList.add("ggo-section");
     head.classList.add("ggo-sec-head");
+    if (fixed) { sec.classList.add("ggo-fixed"); return; }
     head.title = "Click the heading to collapse or expand";
     const apply = () => sec.classList.toggle("ggo-collapsed", closed.has(id));
     head.addEventListener("click", (e) => {

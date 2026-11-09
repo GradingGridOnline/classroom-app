@@ -131,4 +131,7 @@ h4.pres-subhead {
 .ggo-section.ggo-collapsed > .ggo-sec-head h3::before { content: "▸ "; }
 .ggo-section.ggo-collapsed > :not(.ggo-sec-head) { display: none !important; }
 .ggo-section.ggo-collapsed > .ggo-sec-head { margin-bottom: 0; }
+.ggo-section.ggo-fixed > .ggo-sec-head { cursor: default; }
+.ggo-section.ggo-fixed > h3.ggo-sec-head::before,
+.ggo-section.ggo-fixed > .ggo-sec-head h3::before { content: none; }
 .grid-size-controls[hidden] { display: none !important; }
