@@ -21,14 +21,15 @@
 
   // ---------- data (one small file per course) ----------
   const CM = {
-    items: [], courseId: null,
+    items: [], calendar: null, courseId: null,
     file: (id) => `classmaterial-${id}.json`,
     async load(courseId) {
       this.courseId = courseId;
       const d = await storage.loadFile(this.file(courseId));
       this.items = d && Array.isArray(d.items) ? d.items : [];
+      this.calendar = d && d.calendar && typeof d.calendar === "object" ? d.calendar : null;
     },
-    async save() { if (this.courseId) await storage.saveFile(this.file(this.courseId), { items: this.items }); },
+    async save() { if (this.courseId) await storage.saveFile(this.file(this.courseId), { items: this.items, calendar: this.calendar }); },
     newId: () => `cm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };
 
@@ -75,16 +76,22 @@
       if (this.token && window.google && google.accounts) { try { google.accounts.oauth2.revoke(this.token, () => {}); } catch (e) {} }
       this.token = null; this.exp = 0; this.email = ""; try { localStorage.removeItem("ggo-cm-google"); } catch (e) {}
     },
-    async api(path, opt = {}) {
+    /** Any Google REST call with the signed-in token. Errors carry Google's own message. */
+    async call(url, opt = {}) {
       await this.connect();
-      const res = await fetch("https://www.googleapis.com/drive/v3" + path, {
+      const res = await fetch(url, {
         method: opt.method || "GET", headers: Object.assign({ Authorization: "Bearer " + this.token }, opt.body ? { "Content-Type": "application/json" } : {}),
         body: opt.body ? JSON.stringify(opt.body) : undefined,
       });
-      if (res.status === 401) { this.token = null; this.exp = 0; if (!opt._retry) return this.api(path, Object.assign({}, opt, { _retry: true })); }
-      if (!res.ok) { const e = new Error(res.status === 404 ? "not-found" : `Google Drive said ${res.status}`); e.status = res.status; throw e; }
+      if (res.status === 401) { this.token = null; this.exp = 0; if (!opt._retry) return this.call(url, Object.assign({}, opt, { _retry: true })); }
+      if (!res.ok) {
+        let m = ""; try { m = (await res.json()).error.message || ""; } catch (e) {}
+        const e = new Error(res.status === 404 ? "not-found" : /has not been used|is disabled/i.test(m) ? "The Google Slides API isn't switched on yet. In Google Cloud Console, open this project's APIs & Services and enable \"Google Slides API\" (one time)." : `Google said ${res.status}${m ? ": " + m : ""}`);
+        e.status = res.status; throw e;
+      }
       return res.status === 204 ? null : res.json();
     },
+    api(path, opt) { return this.call("https://www.googleapis.com/drive/v3" + path, opt); },
     async folder(name, parent) {
       const q = `mimeType='application/vnd.google-apps.folder' and trashed=false and name='${name.replace(/['\\]/g, "\\$&")}'` + (parent ? ` and '${parent}' in parents` : "");
       const found = await this.api(`/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`);
@@ -163,12 +170,23 @@
     busy = ""; render();
   }
 
+  let view = "materials";
   function render() {
     panel.innerHTML = "";
     if (!CM.courseId) { panel.appendChild(mk("p", "hint", "Open a course to see its class material.")); return; }
+    const views = Object.assign({ materials: { label: "Materials" } }, API.views);
+    const seg = mk("div", "cm-row");
+    Object.entries(views).forEach(([k, v]) => { const b = btn(v.label, `btn btn-small ${view === k ? "btn-primary" : "btn-ghost"}`, () => { view = k; render(); }); b.setAttribute("aria-pressed", String(view === k)); seg.appendChild(b); });
+    if (Object.keys(views).length > 1) panel.appendChild(seg);
+    const host = mk("div"); panel.appendChild(host);
+    if (view !== "materials" && views[view]) { views[view].render(host); return; }
+    renderMaterials(host);
+  }
+  function renderMaterials(host) {
     const top = mk("div", "cm-row");
     const nm = mk("div", "cm-newmenu");
     Object.entries(KINDS).forEach(([k, v]) => nm.appendChild(btn(`+ New ${v.label.toLowerCase()}`, "btn btn-ghost", () => {
+      if (k === "slides" && API.newSlideshow) return API.newSlideshow();
       const t = prompt(`Name for the new ${v.label.toLowerCase()}:`, `${courseTitle()} – ${v.label}`);
       if (t && t.trim()) run(`Creating ${v.label.toLowerCase()}`, () => createItem(k, t.trim()));
     })));
@@ -177,7 +195,7 @@
     top.appendChild(g);
     if (G.email || G.connected()) top.appendChild(btn("Disconnect", "btn btn-ghost btn-small", () => { G.disconnect(); render(); }));
     top.appendChild(mk("span", "result cm-note", note));
-    panel.appendChild(top);
+    host.appendChild(top);
 
     const bar = mk("div", "cm-row");
     [["all", "All"], ...Object.entries(KINDS).map(([k, v]) => [k, v.plural])].forEach(([k, l]) => {
@@ -187,9 +205,9 @@
     const q = mk("input"); q.type = "search"; q.placeholder = "Search titles…"; q.value = query;
     q.addEventListener("input", () => { query = q.value; drawList(); }); bar.appendChild(q);
     bar.appendChild(btn("↻ Refresh from Drive", "btn btn-ghost btn-small", () => run("Refreshing", refreshAll)));
-    panel.appendChild(bar);
+    host.appendChild(bar);
 
-    const holder = mk("div"); panel.appendChild(holder);
+    const holder = mk("div"); host.appendChild(holder);
     function drawList() {
       holder.innerHTML = "";
       const list = CM.items.filter((i) => (filter === "all" || i.kind === filter) && (!query.trim() || i.title.toLowerCase().includes(query.trim().toLowerCase())))
@@ -201,10 +219,11 @@
         li.appendChild(mk("span", "cm-ico", K.icon));
         const mid = mk("div");
         const a = mk("a", "cm-title", it.title); a.href = K.url(it.fileId); a.target = "_blank"; a.rel = "noopener"; mid.appendChild(a);
-        mid.appendChild(mk("div", "cm-meta", `${K.label} · edited ${fmt(it.updatedAt)}${it.missing ? " · missing from Drive" : ""}`));
+        mid.appendChild(mk("div", "cm-meta", `${K.label}${API.itemMeta ? API.itemMeta(it) : ""} · edited ${fmt(it.updatedAt)}${it.missing ? " · missing from Drive" : ""}`));
         li.appendChild(mid);
         const acts = mk("div", "cm-acts");
         const open = mk("a", "btn btn-ghost btn-small", it.kind === "slides" ? "Open / Present" : "Open"); open.href = K.url(it.fileId); open.target = "_blank"; open.rel = "noopener"; acts.appendChild(open);
+        if (API.itemActions) API.itemActions(it, acts);
         acts.appendChild(btn("Rename", "btn btn-ghost btn-small", () => { const t = prompt("New name:", it.title); if (t && t.trim() && t.trim() !== it.title) run("Renaming", () => renameItem(it, t.trim())); }));
         acts.appendChild(btn("Duplicate", "btn btn-ghost btn-small", () => run("Duplicating", () => duplicateItem(it))));
         acts.appendChild(btn("Remove from list", "btn btn-ghost btn-small", () => { if (confirm("Remove from this list? The file stays in your Google Drive.")) { CM.items = CM.items.filter((x) => x !== it); CM.save().then(render); } }));
@@ -214,7 +233,7 @@
       holder.appendChild(ul);
     }
     drawList();
-    panel.appendChild(mk("div", "cm-soon", "Coming next: templates for slide types, adding course data (seating chart, journal, quizzes), the class calendar, and automatic QR codes."));
+    host.appendChild(mk("div", "cm-soon", "Coming next: more slide types, adding course data (seating chart, journal, quizzes), and automatic QR codes."));
   }
 
   async function ensureLoaded() {
@@ -232,5 +251,8 @@
     if (on) ensureLoaded().then(render);
   };
   tabBtn.addEventListener("click", () => window.showTab("classmaterial"));
-  window.ClassMaterial = { render, ensureLoaded, G, CM, KINDS };
+  // Other files (classmaterial-slides.js) plug in through this object.
+  const API = { views: {}, newSlideshow: null, itemMeta: null, itemActions: null };
+  Object.assign(API, { render, run, say, ensureLoaded, G, CM, KINDS, mk, btn, courseTitle, createItem, fmt });
+  window.ClassMaterial = API;
 })();
