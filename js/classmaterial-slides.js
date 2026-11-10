@@ -177,13 +177,13 @@
           r.push({ updateParagraphStyle: { objectId: id, textRange: { type: "ALL" }, style: { alignment: "CENTER" }, fields: "alignment" } });
         }
       },
-      table(page, x, y, widths, rows, hiRow, H, fs) {
+      table(page, x, y, widths, rows, hiRow, H, fs, hiColor) {
         const id = sid("tb"), W = widths.reduce((a, b) => a + b, 0);
         r.push({ createTable: { objectId: id, elementProperties: props(page, x, y, W, H || rows.length * 22), rows: rows.length, columns: widths.length } });
         widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { objectId: id, columnIndices: [ci], tableColumnProperties: { columnWidth: pt(w) }, fields: "columnWidth" } }));
         rows.forEach((row, ri) => {
           const head = ri === 0, hi = ri === hiRow;
-          const fill = head ? PAL.dark : hi ? PAL.amber : ri % 2 ? PAL.white : PAL.cream;
+          const fill = head ? PAL.dark : hi ? (hiColor || PAL.amber) : ri % 2 ? PAL.white : PAL.cream;
           r.push({ updateTableCellProperties: { objectId: id, tableRange: { location: { rowIndex: ri, columnIndex: 0 }, rowSpan: 1, columnSpan: widths.length }, tableCellProperties: { tableCellBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } }, contentAlignment: "MIDDLE" }, fields: "tableCellBackgroundFill.solidFill.color,contentAlignment" } });
           row.forEach((cell, ci) => {
             if (!cell) return; const loc = { rowIndex: ri, columnIndex: ci };
@@ -197,20 +197,51 @@
 
   // ---------- slide types ("Basic" slideshow = Title + Today's goals + Calendar) ----------
   const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+  /** Cover slide templates. To add one: add an entry here (bg + draw) and a preview in COVER_PREVIEW. */
+  const COVERS = {
+    classic: { label: "Classic", bg: PAL.dark, draw(b, page, c) {
+      b.rect(page, 0, 300, 720, 105, "#223d26");
+      b.text(page, 50, 120, 620, 90, c.title, { size: 40, bold: true, font: "Georgia", color: PAL.cream });
+      b.text(page, 50, 215, 620, 30, c.sub, { size: 18, color: "#e6d9a8" });
+      b.text(page, 50, 322, 620, 40, c.course, { size: 22, font: "Georgia", color: PAL.cream });
+    } },
+    band: { label: "Top band", bg: PAL.cream, draw(b, page, c) {
+      b.rect(page, 0, 0, 720, 92, PAL.dark);
+      b.text(page, 40, 30, 640, 36, c.course, { size: 22, font: "Georgia", color: PAL.cream });
+      b.text(page, 40, 140, 640, 110, c.title, { size: 42, bold: true, font: "Georgia", color: PAL.dark });
+      b.rect(page, 40, 262, 120, 4, "#e0a526");
+      b.text(page, 40, 280, 640, 30, c.sub, { size: 18, color: PAL.soft });
+    } },
+    centered: { label: "Centered", bg: "#223d26", draw(b, page, c) {
+      b.text(page, 40, 110, 640, 110, c.title, { size: 44, bold: true, font: "Georgia", color: PAL.cream, align: "CENTER" });
+      b.rect(page, 300, 236, 120, 4, "#e0a526");
+      b.text(page, 40, 256, 640, 30, c.sub, { size: 18, color: "#e6d9a8", align: "CENTER" });
+      b.text(page, 40, 330, 640, 34, c.course, { size: 20, font: "Georgia", color: PAL.cream, align: "CENTER" });
+    } },
+    sidebar: { label: "Side bar", bg: PAL.cream, draw(b, page, c) {
+      b.rect(page, 0, 0, 200, 405, PAL.dark);
+      if (c.n) { b.text(page, 10, 110, 180, 24, "LESSON", { size: 14, bold: true, color: "#e6d9a8", align: "CENTER" }); b.text(page, 10, 136, 180, 120, c.n, { size: 90, bold: true, font: "Georgia", color: PAL.cream, align: "CENTER" }); }
+      b.text(page, 230, 120, 450, 120, c.title, { size: 36, bold: true, font: "Georgia", color: PAL.dark });
+      b.text(page, 230, 250, 450, 30, c.sub, { size: 16, color: PAL.soft });
+      b.text(page, 230, 330, 450, 34, c.course, { size: 18, font: "Georgia", color: PAL.soft });
+    } },
+  };
   const SLIDE_TYPES = {
     title(b, page, ctx) {
-      b.rect(page, 0, 300, 720, 105, "#223d26");
-      b.text(page, 50, 120, 620, 90, ctx.lesson && ctx.lesson.title ? ctx.lesson.title : ctx.title, { size: 40, bold: true, font: "Georgia", color: PAL.cream });
-      b.text(page, 50, 215, 620, 30, ctx.lesson ? lessonLabel(ctx.lesson) : "", { size: 18, color: "#e6d9a8" });
-      b.text(page, 50, 322, 620, 40, ctx.course, { size: 22, font: "Georgia", color: PAL.cream });
+      const o = ctx.opts.title, v = COVERS[o.variant] || COVERS.classic, l = ctx.lesson;
+      v.draw(b, page, {
+        title: l && l.title ? l.title : ctx.title,
+        sub: [o.showLesson && l ? lessonLabel(l) : "", o.subtitle || ""].filter(Boolean).join("   ·   "),
+        course: o.showCourse ? ctx.course : "", n: l ? String(l.n) : "",
+      });
     },
     goals(b, page, ctx) {
       const l = ctx.lesson; if (!l) return false;
       b.text(page, 40, 28, 640, 50, "Today’s goals", { size: 32, bold: true, font: "Georgia", color: PAL.dark });
       const goals = (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean);
       b.text(page, 50, 95, 620, goals.length ? 180 : 40, goals.length ? goals.join("\n") : (l.title || ""), { size: 22, bullets: !!goals.length });
-      if (l.materials) { b.rect(page, 40, 295, 300, 90, PAL.white); b.text(page, 50, 300, 280, 80, "Materials\n" + l.materials, { size: 13, color: PAL.soft }); }
-      if (l.homework) { b.rect(page, 380, 295, 300, 90, PAL.white); b.text(page, 390, 300, 280, 80, "Homework\n" + l.homework, { size: 13, color: PAL.soft }); }
+      if (l.materials && ctx.opts.goals.materials) { b.rect(page, 40, 295, 300, 90, PAL.white); b.text(page, 50, 300, 280, 80, "Materials\n" + l.materials, { size: 13, color: PAL.soft }); }
+      if (l.homework && ctx.opts.goals.homework) { b.rect(page, 380, 295, 300, 90, PAL.white); b.text(page, 390, 300, 280, 80, "Homework\n" + l.homework, { size: 13, color: PAL.soft }); }
     },
     calendar(b, page, ctx) {
       const L = cal().lessons; if (!L.length) return false;
@@ -218,8 +249,8 @@
       const cur = ctx.lesson ? L.findIndex((x) => x.id === ctx.lesson.id) : -1;
       if (L.length > MAX) from = Math.max(0, Math.min(L.length - MAX, (cur < 0 ? 0 : cur) - 4));
       const part = L.slice(from, from + MAX);
-      const rows = [["#", "Week · Date", "Class calendar — what we do"]].concat(part.map((l) => [String(l.n), parse(l.date) ? `${weekOf(l.date) ? `Wk ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : "", clip([l.title, (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ")].filter(Boolean).join(" — "), 90)]));
-      b.table(page, 0, 0, [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13);
+      const rows = [["#", "Week · Date", "Class calendar — what we do"]].concat(part.map((l) => [String(l.n), parse(l.date) ? `${weekOf(l.date) ? `Wk ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : "", clip([l.title, ctx.opts.calendar.goals ? (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ") : ""].filter(Boolean).join(" — "), 90)]));
+      b.table(page, 0, 0, [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13, (HILITES[ctx.opts.calendar.highlight] || HILITES.amber).hex);
     },
   };
   /** Reads the course's current seating chart + roster straight from storage, so every rebuild is up to date. */
@@ -244,7 +275,7 @@
     if (ctx.lesson) b.text(page, 360, 22, 320, 28, lessonLabel(ctx.lesson), { size: 13, color: PAL.soft, align: "END" });
     S.keys.forEach((k, i) => {
       const [r, c] = k.split("-").map(Number), st = byId.get(S.seats[k]), g = S.groups[k];
-      const nm = st ? clip(st.name || "", 20) : "";
+      const full = st ? String(st.name || "") : "", nm = st ? (ctx.opts.seating.names === "first" ? full.split(/\s+/)[0] : clip(full, 20)) : "";
       b.desk(page, ox + (c1 - c) * cw + 2, oy + (r1 - r) * ch + 2, // turned 180° so it reads from the students' side of the room
          cw - 4, ch - 4, withGroups && g ? hsl(Math.round((g * 137.508) % 360), 70, 78) : PAL.white, nm, size, false);
     });
@@ -255,25 +286,42 @@
   };
   SLIDE_TYPES.seating = seatingSlide(false);
   SLIDE_TYPES.seatingGroups = seatingSlide(true);
-  const BASIC = ["title", "goals", "seating", "seatingGroups", "calendar"];
+  const TYPE_LABELS = { title: "Cover slide", goals: "Today’s goals", seating: "Seating chart", seatingGroups: "Seating chart — groups", calendar: "Class calendar" };
+  const HILITES = { amber: { label: "Amber", hex: PAL.amber }, green: { label: "Green", hex: "#bfe3bd" }, blue: { label: "Blue", hex: "#b9d7f2" }, pink: { label: "Pink", hex: "#f6c6d8" } };
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const defaultOpts = () => ({
+    order: ["title", "goals", "seating", "seatingGroups", "calendar"].map((t) => ({ type: t, on: true })),
+    title: { variant: "classic", showCourse: true, showLesson: true, subtitle: "" },
+    goals: { materials: true, homework: true },
+    seating: { names: "full" },
+    calendar: { goals: true, highlight: "amber" },
+  });
+  /** Options saved with a slideshow, filled in with defaults for anything missing (so adding options later is safe). */
+  function getOpts(it) {
+    const d = defaultOpts(), o = (it && it.source && it.source.options) || {}, out = clone(d);
+    ["title", "goals", "seating", "calendar"].forEach((k) => Object.assign(out[k], o[k] || {}));
+    if (Array.isArray(o.order)) { const seen = new Set(); out.order = o.order.filter((x) => TYPE_LABELS[x.type] && !seen.has(x.type) && seen.add(x.type)); d.order.forEach((x) => { if (!seen.has(x.type)) out.order.push(x); }); }
+    return out;
+  }
+  const bgFor = (type, opts) => (type === "title" ? (COVERS[opts.title.variant] || COVERS.classic).bg : PAL.cream);
 
   /** (Re)builds the generated slides of a Basic slideshow. First time: replaces the blank starter slide. Later: replaces the generated slides only. */
-  async function buildBasic(it) {
+  async function buildBasic(it, opts) {
+    opts = opts || getOpts(it);
     try { if (await syncAttendance()) await CM.save(); } catch (e) {}
     const pres = await G.call(`${SLIDES}${it.fileId}?fields=slides.objectId`);
     const oldIds = it.source && it.source.slideIds ? it.source.slideIds : (pres.slides || []).map((s) => s.objectId);
-    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating() };
+    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating(), opts };
     const b = Builder(), made = [], byType = {}; let idx = 0;
-    BASIC.forEach((type) => {
+    opts.order.filter((x) => x.on).map((x) => x.type).forEach((type) => {
       const probe = Builder(), pid = sid("p");
-      const dark = type === "title";
-      probe.slide(pid, idx, dark ? PAL.dark : PAL.cream);
+      probe.slide(pid, idx, bgFor(type, opts));
       if (SLIDE_TYPES[type](probe, pid, ctx) === false) return;
       b.r.push(...probe.r); made.push(pid); byType[type] = pid; idx++;
     });
     oldIds.forEach((id) => b.r.push({ deleteObject: { objectId: id } }));
     await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
-    it.source = { template: "basic", slideIds: made, byType };
+    it.source = { template: "basic", slideIds: made, byType, options: opts };
     it.updatedAt = new Date().toISOString();
     await CM.save();
   }
@@ -284,8 +332,8 @@
     const pres = await G.call(`${SLIDES}${it.fileId}?fields=slides.objectId`);
     const ids = (pres.slides || []).map((x) => x.objectId), at = ids.indexOf(old);
     if (at < 0) return false; // the teacher deleted it — leave the deck alone
-    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating() };
-    const b = Builder(), pid = sid("p"); b.slide(pid, at, PAL.cream);
+    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating(), opts: getOpts(it) };
+    const b = Builder(), pid = sid("p"); b.slide(pid, at, bgFor(type, ctx.opts));
     if (SLIDE_TYPES[type](b, pid, ctx) === false) return false;
     b.r.push({ deleteObject: { objectId: old } });
     await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
@@ -320,26 +368,142 @@
   }
   const lessonOptions = () => [["", "No lesson"], ...cal().lessons.map((l) => [l.id, `${lessonLabel(l)}${l.title ? " — " + l.title : ""}`])];
 
-  CMX.newSlideshow = () => {
-    sortLessons();
-    modal("New slideshow", [
-      { key: "title", label: "Name", value: `${CMX.courseTitle()} – Slideshow` },
-      { key: "tpl", label: "Start from", options: [["basic", "Basic (title, today’s goals, calendar)"], ["blank", "Blank"]], value: "basic" },
-      { key: "lesson", label: "For which lesson?", options: lessonOptions() },
-    ], "Create", (v) => {
-      if (!v.title.trim()) return;
-      CMX.run("Creating slideshow", async () => {
-        const it = await CMX.createItem("slides", v.title.trim());
-        it.lessonId = v.lesson || null;
-        await CM.save();
-        if (v.tpl === "basic") await buildBasic(it);
-      });
-    });
+  // ---------- the big slideshow setup window (new slideshow, or "Setup…" on an existing Basic one) ----------
+  const COVER_PREVIEW = {
+    // tiny CSS pictures of each cover: [bg, [x%, y%, w%, h%, color]...]
+    classic: ["#2f5233", [[0, 74, 100, 26, "#223d26"], [8, 28, 70, 12, "#f6f5f1"], [8, 46, 40, 5, "#e6d9a8"]]],
+    band: ["#f6f5f1", [[0, 0, 100, 23, "#2f5233"], [8, 38, 70, 12, "#2f5233"], [8, 60, 22, 3, "#e0a526"]]],
+    centered: ["#223d26", [[15, 30, 70, 12, "#f6f5f1"], [40, 52, 20, 3, "#e0a526"], [30, 78, 40, 6, "#f6f5f1"]]],
+    sidebar: ["#f6f5f1", [[0, 0, 28, 100, "#2f5233"], [6, 30, 16, 24, "#f6f5f1"], [36, 32, 54, 11, "#2f5233"], [36, 55, 30, 4, "#8a8472"]]],
   };
+  const css2 = mk("style");
+  css2.textContent = `
+#cm-setup { position:fixed; inset:0; z-index:20003; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; padding:2vh 2vw; }
+#cm-setup .cs-win { background:var(--card,#fff); color:var(--ink,#222); width:min(1100px,96vw); height:min(760px,94vh); border-radius:12px; border:2px solid var(--green); box-shadow:0 16px 50px rgba(0,0,0,.55); display:grid; grid-template-rows:auto 1fr auto; overflow:hidden; }
+#cm-setup .cs-head { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+#cm-setup .cs-head h2 { margin:0; font-family:var(--font-heading); }
+#cm-setup .cs-body { display:grid; grid-template-columns:minmax(260px,340px) 1fr; min-height:0; }
+#cm-setup .cs-left { border-right:1px solid var(--line); padding:14px 16px; overflow:auto; display:grid; gap:10px; align-content:start; }
+#cm-setup .cs-right { padding:16px 20px; overflow:auto; }
+#cm-setup label.f { display:flex; flex-direction:column; gap:3px; font-size:.82rem; }
+#cm-setup input[type=text], #cm-setup select { font:inherit; padding:7px 8px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); }
+#cm-setup .cs-h { font-size:.74rem; text-transform:uppercase; letter-spacing:.07em; color:var(--ink-soft,#777); margin:6px 0 0; }
+#cm-setup .cs-slide { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; cursor:pointer; }
+#cm-setup .cs-slide.sel { border-color:var(--green); background:color-mix(in srgb, var(--green) 10%, transparent); }
+#cm-setup .cs-slide .nm { flex:1; font-weight:600; }
+#cm-setup .cs-slide.off .nm { opacity:.5; text-decoration:line-through; }
+#cm-setup .cs-covers { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; margin:8px 0 14px; }
+#cm-setup .cs-cover { border:2px solid var(--line); border-radius:8px; padding:6px; cursor:pointer; text-align:center; font-size:.85rem; background:transparent; color:inherit; font:inherit; }
+#cm-setup .cs-cover.sel { border-color:var(--green); box-shadow:0 0 0 2px color-mix(in srgb, var(--green) 30%, transparent); }
+#cm-setup .cs-thumb { position:relative; width:100%; aspect-ratio:16/9; border-radius:4px; overflow:hidden; border:1px solid rgba(0,0,0,.15); margin-bottom:5px; }
+#cm-setup .cs-thumb i { position:absolute; display:block; border-radius:1px; }
+#cm-setup .cs-foot { padding:12px 20px; border-top:1px solid var(--line); display:flex; gap:10px; justify-content:flex-end; align-items:center; }
+#cm-setup .cs-opt { display:flex; gap:8px; align-items:center; margin:6px 0; }
+@media (max-width:760px){ #cm-setup .cs-body { grid-template-columns:1fr; } #cm-setup .cs-left { border-right:0; border-bottom:1px solid var(--line); max-height:42vh; } }
+`;
+  document.head.appendChild(css2);
+
+  function setupDialog(it) {
+    sortLessons();
+    const O = it ? getOpts(it) : defaultOpts();
+    const st = { name: it ? it.title : `${CMX.courseTitle()} – Slideshow`, lesson: it ? it.lessonId || "" : "", tpl: it && !(it.source && it.source.template === "basic") ? "blank" : "basic", sel: "title" };
+    const ov = mk("div"); ov.id = "cm-setup";
+    const win = mk("div", "cs-win"); ov.appendChild(win);
+    const close = () => ov.remove();
+    const head = mk("div", "cs-head"); head.append(mk("h2", "", it ? "Slideshow setup" : "New slideshow"), btn("✕", "btn btn-ghost btn-small", close)); win.appendChild(head);
+    const body = mk("div", "cs-body"); win.appendChild(body);
+    const left = mk("div", "cs-left"), right = mk("div", "cs-right"); body.append(left, right);
+    const foot = mk("div", "cs-foot"); win.appendChild(foot);
+
+    const f = (label, el) => { const l = mk("label", "f", label); l.appendChild(el); return l; };
+    const opt = (v, t) => Object.assign(mk("option"), { value: v, textContent: t });
+    const check = (label, obj, key, on) => { const l = mk("label", "cs-opt"); const c = mk("input"); c.type = "checkbox"; c.checked = !!obj[key]; c.addEventListener("change", () => { obj[key] = c.checked; if (on) on(); }); l.append(c, " " + label); return l; };
+
+    function drawLeft() {
+      left.innerHTML = "";
+      const nm = mk("input"); nm.type = "text"; nm.value = st.name; nm.addEventListener("input", () => { st.name = nm.value; });
+      left.appendChild(f("Name", nm));
+      const ls = mk("select"); lessonOptions().forEach(([v, t]) => ls.appendChild(opt(v, t))); ls.value = st.lesson; ls.addEventListener("change", () => { st.lesson = ls.value; });
+      left.appendChild(f("For which lesson?", ls));
+      if (!it) {
+        const tp = mk("select"); tp.append(opt("basic", "Basic (set up slides below)"), opt("blank", "Blank (empty slideshow)")); tp.value = st.tpl;
+        tp.addEventListener("change", () => { st.tpl = tp.value; draw(); }); left.appendChild(f("Start from", tp));
+      }
+      if (st.tpl !== "basic") return;
+      left.appendChild(mk("div", "cs-h", "Slides — click one to set it up"));
+      O.order.forEach((x, i) => {
+        const row = mk("div", `cs-slide${st.sel === x.type ? " sel" : ""}${x.on ? "" : " off"}`);
+        const c = mk("input"); c.type = "checkbox"; c.checked = x.on; c.title = "Include this slide";
+        c.addEventListener("click", (e) => e.stopPropagation()); c.addEventListener("change", () => { x.on = c.checked; drawLeft(); });
+        const mv = (d) => (e) => { e.stopPropagation(); const j = i + d; if (j < 0 || j >= O.order.length) return; [O.order[i], O.order[j]] = [O.order[j], O.order[i]]; drawLeft(); };
+        row.append(c, mk("span", "nm", `${i + 1}. ${TYPE_LABELS[x.type]}`), btn("↑", "btn btn-ghost btn-small", mv(-1)), btn("↓", "btn btn-ghost btn-small", mv(1)));
+        row.addEventListener("click", () => { st.sel = x.type; drawLeft(); drawRight(); });
+        left.appendChild(row);
+      });
+    }
+
+    function drawRight() {
+      right.innerHTML = "";
+      if (st.tpl !== "basic") { right.appendChild(mk("p", "hint", "A blank slideshow is created in your Drive. Choose “Basic” to build the title, goals, seating and calendar slides.")); return; }
+      right.appendChild(mk("h3", "", TYPE_LABELS[st.sel]));
+      if (st.sel === "title") {
+        right.appendChild(mk("div", "cs-h", "Cover style"));
+        const grid = mk("div", "cs-covers");
+        Object.entries(COVERS).forEach(([k, v]) => {
+          const card = mk("button", "cs-cover" + (O.title.variant === k ? " sel" : "")); card.type = "button";
+          const th = mk("div", "cs-thumb"), pv = COVER_PREVIEW[k]; th.style.background = pv[0];
+          pv[1].forEach(([x, y, w, h, col]) => { const i = mk("i"); i.style.cssText = `left:${x}%;top:${y}%;width:${w}%;height:${h}%;background:${col}`; th.appendChild(i); });
+          card.append(th, document.createTextNode(v.label)); card.addEventListener("click", () => { O.title.variant = k; drawRight(); });
+          grid.appendChild(card);
+        });
+        right.appendChild(grid);
+        right.appendChild(check("Show the course name", O.title, "showCourse"));
+        right.appendChild(check("Show the lesson / week / date line", O.title, "showLesson"));
+        const sub = mk("input"); sub.type = "text"; sub.value = O.title.subtitle; sub.placeholder = "e.g. Unit 3 — Describing people"; sub.addEventListener("input", () => { O.title.subtitle = sub.value; });
+        right.appendChild(f("Extra subtitle (optional)", sub));
+        right.appendChild(mk("p", "hint", "More cover styles and options will be added here."));
+      } else if (st.sel === "goals") {
+        right.appendChild(mk("p", "hint", "Shows the lesson’s goals as bullets. Skipped when no lesson is chosen."));
+        right.appendChild(check("Show materials", O.goals, "materials")); right.appendChild(check("Show homework", O.goals, "homework"));
+      } else if (st.sel === "seating" || st.sel === "seatingGroups") {
+        right.appendChild(mk("p", "hint", st.sel === "seatingGroups" ? "Same chart with each group in its own color. Skipped when no groups are set up." : "The real seating chart, shown from the students’ side of the room. Refreshed whenever you press Present."));
+        const ns = mk("select"); ns.append(opt("full", "Full name"), opt("first", "First name only")); ns.value = O.seating.names; ns.addEventListener("change", () => { O.seating.names = ns.value; });
+        right.appendChild(f("Names on desks (both seating slides)", ns));
+      } else if (st.sel === "calendar") {
+        right.appendChild(mk("p", "hint", "A full-page table of the class calendar. The lesson this slideshow is for is highlighted."));
+        right.appendChild(check("Include each lesson’s goals next to its title", O.calendar, "goals"));
+        const hs = mk("select"); Object.entries(HILITES).forEach(([k, v]) => hs.appendChild(opt(k, v.label))); hs.value = O.calendar.highlight; hs.addEventListener("change", () => { O.calendar.highlight = hs.value; });
+        right.appendChild(f("Highlight color", hs));
+      }
+    }
+    const draw = () => { drawLeft(); drawRight(); }; draw();
+
+    foot.appendChild(mk("span", "hint", it ? "Saving rebuilds the generated slides; edits you made to them are replaced." : ""));
+    foot.appendChild(btn("Cancel", "btn btn-ghost", close));
+    foot.appendChild(btn(it ? "Save & rebuild" : "Create slideshow", "btn btn-primary", () => {
+      const title = st.name.trim(); if (!title) return;
+      close();
+      if (!it) {
+        CMX.run("Creating slideshow", async () => {
+          const n = await CMX.createItem("slides", title); n.lessonId = st.lesson || null; await CM.save();
+          if (st.tpl === "basic") await buildBasic(n, O);
+        });
+      } else {
+        CMX.run("Rebuilding slides", async () => {
+          if (title !== it.title) { await G.api(`/files/${it.fileId}?fields=id`, { method: "PATCH", body: { name: title } }); it.title = title; }
+          it.lessonId = st.lesson || null; await CM.save();
+          if (st.tpl === "basic") await buildBasic(it, O);
+        });
+      }
+    }));
+    document.body.appendChild(ov);
+  }
+  CMX.newSlideshow = () => setupDialog(null);
   CMX.itemMeta = (it) => { const l = it.lessonId ? lessonById(it.lessonId) : null; return l ? ` · ${lessonLabel(l)}` : ""; };
   CMX.itemActions = (it, acts) => {
     if (it.kind !== "slides") return;
     acts.appendChild(btn("▶ Present", "btn btn-primary btn-small", () => present(it)));
+    if (it.source && it.source.template === "basic") acts.appendChild(btn("Setup…", "btn btn-ghost btn-small", () => setupDialog(it)));
     acts.appendChild(btn("Lesson…", "btn btn-ghost btn-small", () => {
       sortLessons();
       modal("Tie this slideshow to a lesson", [{ key: "lesson", label: "Lesson", options: lessonOptions(), value: it.lessonId || "" }], "Save", (v) => {
