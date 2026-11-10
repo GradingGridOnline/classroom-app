@@ -681,6 +681,7 @@
     document.body.appendChild(ov);
   }
   CMX.newSlideshow = () => setupDialog(null);
+  Object.assign(CMX, { buildBasic, getOpts, TYPE_LABELS, STYLES, FONT_SETS, COVERS, MODERN_COVERS, SLIDES });
   CMX.itemMeta = (it) => { const l = it.lessonId ? lessonById(it.lessonId) : null; return l ? ` · ${lessonLabel(l)}` : ""; };
   CMX.itemActions = (it, acts) => {
     if (it.kind !== "slides") return;

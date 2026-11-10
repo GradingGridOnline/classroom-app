@@ -239,6 +239,7 @@
       holder.appendChild(ul);
     }
     drawList();
+    if (API.afterMaterials) API.afterMaterials(host);
     host.appendChild(mk("div", "cm-soon", "Coming next: more slide types, adding course data (seating chart, journal, quizzes), and automatic QR codes."));
   }
 
@@ -258,7 +259,7 @@
   };
   tabBtn.addEventListener("click", () => window.showTab("classmaterial"));
   // Other files (classmaterial-slides.js) plug in through this object.
-  const API = { views: {}, newSlideshow: null, itemMeta: null, itemActions: null };
-  Object.assign(API, { render, run, say, ensureLoaded, G, CM, KINDS, mk, btn, courseTitle, createItem, fmt });
+  const API = { views: {}, newSlideshow: null, itemMeta: null, itemActions: null, afterMaterials: null };
+  Object.assign(API, { render, run, say, ensureLoaded, G, CM, KINDS, mk, btn, courseTitle, createItem, fmt, courseFolder });
   window.ClassMaterial = API;
 })();
