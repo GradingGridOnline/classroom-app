@@ -137,7 +137,23 @@
   CMX.views.calendar = { label: "Lesson calendar", render: renderCalendar };
 
   // ---------- Slides API building blocks ----------
-  const PAL = { dark: "#2f5233", cream: "#f6f5f1", ink: "#2b2a28", soft: "#6b6560", amber: "#ffe08a", line: "#cfc9b8", white: "#ffffff" };
+  const PAL = { dark: "#2f5233", cream: "#f6f5f1", ink: "#2b2a28", soft: "#6b6560", amber: "#ffe08a", line: "#cfc9b8", white: "#ffffff", accent: "#e0a526" };
+  let HEAD = "Georgia", BODY = "Arial", DECO = false; // set per build by applyStyle()
+  /** Visual styles. Each one sets the palette, the two font families and its own cover templates. */
+  const STYLES = {
+    classic: { label: "Classic", pal: { dark: "#2f5233", cream: "#f6f5f1", ink: "#2b2a28", soft: "#6b6560", amber: "#ffe08a", line: "#cfc9b8", white: "#ffffff", accent: "#e0a526" }, fonts: { head: "Georgia", body: "Arial" }, deco: false },
+    modern: { label: "Modern", pal: { dark: "#14161a", cream: "#f6f6f3", ink: "#14161a", soft: "#6b7280", amber: "#cfe0ff", line: "#d8d9d6", white: "#ffffff", accent: "#ff5a36" }, fonts: { head: "Candela Deck", body: "Graphik" }, deco: true },
+  };
+  const FONT_SETS = {
+    brand: { label: "Candela Deck + Graphik", head: "Candela Deck", body: "Graphik" },
+    open: { label: "Lora + Inter (always available)", head: "Lora", body: "Inter" },
+  };
+  function applyStyle(opts) {
+    const st = STYLES[opts.style] || STYLES.classic;
+    Object.assign(PAL, st.pal);
+    const fs = opts.style === "modern" ? FONT_SETS[opts.fonts] || FONT_SETS.brand : st.fonts;
+    HEAD = fs.head; BODY = fs.body; DECO = st.deco;
+  }
   const rgb = (h) => ({ red: parseInt(h.slice(1, 3), 16) / 255, green: parseInt(h.slice(3, 5), 16) / 255, blue: parseInt(h.slice(5, 7), 16) / 255 });
   const sid = (() => { let n = 0; const run = Math.random().toString(36).slice(2, 7); return (tag) => `gg_${run}_${tag}${++n}`; })();
   function Builder() {
@@ -145,7 +161,7 @@
     const pt = (v) => ({ magnitude: v, unit: "PT" });
     const props = (page, x, y, w, h) => ({ pageObjectId: page, size: { width: pt(w), height: pt(h) }, transform: { scaleX: 1, scaleY: 1, translateX: x, translateY: y, unit: "PT" } });
     const style = (id, o, extra) => {
-      const st = { fontSize: pt(o.size || 16), bold: !!o.bold, fontFamily: o.font || "Arial", foregroundColor: { opaqueColor: { rgbColor: rgb(o.color || PAL.ink) } } };
+      const st = { fontSize: pt(o.size || 16), bold: !!o.bold, fontFamily: o.font || BODY, foregroundColor: { opaqueColor: { rgbColor: rgb(o.color || PAL.ink) } } };
       r.push({ updateTextStyle: Object.assign({ objectId: id, textRange: { type: "ALL" }, style: st, fields: "fontSize,bold,fontFamily,foregroundColor" }, extra || {}) });
     };
     return {
@@ -204,35 +220,35 @@
   const COVERS = {
     classic: { label: "Classic", bg: PAL.dark, draw(b, page, c) {
       b.rect(page, 0, 300, 720, 105, "#223d26");
-      b.text(page, 50, 120, 620, 90, c.title, { size: 40, bold: true, font: "Georgia", color: PAL.cream });
+      b.text(page, 50, 120, 620, 90, c.title, { size: 40, bold: true, font: HEAD, color: PAL.cream });
       b.text(page, 50, 215, 620, 30, c.sub, { size: 18, color: "#e6d9a8" });
-      b.text(page, 50, 322, 620, 40, c.course, { size: 22, font: "Georgia", color: PAL.cream });
+      b.text(page, 50, 322, 620, 40, c.course, { size: 22, font: HEAD, color: PAL.cream });
     } },
     band: { label: "Top band", bg: PAL.cream, draw(b, page, c) {
       b.rect(page, 0, 0, 720, 92, PAL.dark);
-      b.text(page, 40, 30, 640, 36, c.course, { size: 22, font: "Georgia", color: PAL.cream });
-      b.text(page, 40, 140, 640, 110, c.title, { size: 42, bold: true, font: "Georgia", color: PAL.dark });
+      b.text(page, 40, 30, 640, 36, c.course, { size: 22, font: HEAD, color: PAL.cream });
+      b.text(page, 40, 140, 640, 110, c.title, { size: 42, bold: true, font: HEAD, color: PAL.dark });
       b.rect(page, 40, 262, 120, 4, "#e0a526");
       b.text(page, 40, 280, 640, 30, c.sub, { size: 18, color: PAL.soft });
     } },
     centered: { label: "Centered", bg: "#223d26", draw(b, page, c) {
-      b.text(page, 40, 110, 640, 110, c.title, { size: 44, bold: true, font: "Georgia", color: PAL.cream, align: "CENTER" });
+      b.text(page, 40, 110, 640, 110, c.title, { size: 44, bold: true, font: HEAD, color: PAL.cream, align: "CENTER" });
       b.rect(page, 300, 236, 120, 4, "#e0a526");
       b.text(page, 40, 256, 640, 30, c.sub, { size: 18, color: "#e6d9a8", align: "CENTER" });
-      b.text(page, 40, 330, 640, 34, c.course, { size: 20, font: "Georgia", color: PAL.cream, align: "CENTER" });
+      b.text(page, 40, 330, 640, 34, c.course, { size: 20, font: HEAD, color: PAL.cream, align: "CENTER" });
     } },
     sidebar: { label: "Side bar", bg: PAL.cream, draw(b, page, c) {
       b.rect(page, 0, 0, 200, 405, PAL.dark);
-      if (c.n) { b.text(page, 10, 110, 180, 24, "LESSON", { size: 14, bold: true, color: "#e6d9a8", align: "CENTER" }); b.text(page, 10, 136, 180, 120, c.n, { size: 90, bold: true, font: "Georgia", color: PAL.cream, align: "CENTER" }); }
-      b.text(page, 230, 120, 450, 120, c.title, { size: 36, bold: true, font: "Georgia", color: PAL.dark });
+      if (c.n) { b.text(page, 10, 110, 180, 24, "LESSON", { size: 14, bold: true, color: "#e6d9a8", align: "CENTER" }); b.text(page, 10, 136, 180, 120, c.n, { size: 90, bold: true, font: HEAD, color: PAL.cream, align: "CENTER" }); }
+      b.text(page, 230, 120, 450, 120, c.title, { size: 36, bold: true, font: HEAD, color: PAL.dark });
       b.text(page, 230, 250, 450, 30, c.sub, { size: 16, color: PAL.soft });
-      b.text(page, 230, 330, 450, 34, c.course, { size: 18, font: "Georgia", color: PAL.soft });
+      b.text(page, 230, 330, 450, 34, c.course, { size: 18, font: HEAD, color: PAL.soft });
     } },
   };
   COVERS.textbook = { label: "Textbook picture", bg: PAL.cream, draw(b, page, c) {
     b.rect(page, 450, 0, 270, 405, "#e9e4d3");
-    b.text(page, 40, 44, 380, 30, c.course, { size: 18, font: "Georgia", color: PAL.soft });
-    b.text(page, 40, 120, 390, 140, c.title, { size: 38, bold: true, font: "Georgia", color: PAL.dark });
+    b.text(page, 40, 44, 380, 30, c.course, { size: 18, font: HEAD, color: PAL.soft });
+    b.text(page, 40, 120, 390, 140, c.title, { size: 38, bold: true, font: HEAD, color: PAL.dark });
     b.rect(page, 40, 272, 100, 4, "#e0a526");
     b.text(page, 40, 290, 390, 60, c.sub, { size: 16, color: PAL.soft });
     if (c.image) {
@@ -241,9 +257,41 @@
       b.image(page, c.image.url, x, y, w, h);
     }
   } };
+  /** Modern covers. The textbook picture runs from the top-right corner to the bottom-right corner. */
+  function flushPicture(b, page, c) {
+    if (!c.image) { b.rect(page, 480, 0, 240, 405, PAL.accent); return 240; }
+    let h = 405, w = h * c.image.w / c.image.h;
+    if (w > 340) { w = 340; h = w * c.image.h / c.image.w; }
+    b.image(page, c.image.url, 720 - w, 0, w, h);
+    return w;
+  }
+  const MODERN_COVERS = {
+    modernPicture: { label: "Full-height picture", bg: "#f6f6f3", needsPicture: true, draw(b, page, c) {
+      const pw = flushPicture(b, page, c), tw = 720 - pw - 80;
+      b.text(page, 40, 40, tw, 24, (c.course || "").toUpperCase(), { size: 11, bold: true, color: PAL.accent });
+      b.text(page, 40, 110, tw, 160, c.title, { size: 40, bold: true, font: HEAD, color: PAL.ink });
+      b.rect(page, 40, 290, 56, 4, PAL.accent);
+      b.text(page, 40, 308, tw, 60, c.sub, { size: 14, color: PAL.soft });
+    } },
+    modernDark: { label: "Dark + picture", bg: "#14161a", needsPicture: true, draw(b, page, c) {
+      const pw = flushPicture(b, page, c), tw = 720 - pw - 80;
+      b.text(page, 40, 40, tw, 24, (c.course || "").toUpperCase(), { size: 11, bold: true, color: PAL.accent });
+      b.text(page, 40, 110, tw, 160, c.title, { size: 40, bold: true, font: HEAD, color: "#f6f6f3" });
+      b.rect(page, 40, 290, 56, 4, PAL.accent);
+      b.text(page, 40, 308, tw, 60, c.sub, { size: 14, color: "#b9bcc4" });
+    } },
+    modernType: { label: "Typographic", bg: "#f6f6f3", draw(b, page, c) {
+      b.text(page, 40, 40, 640, 24, (c.course || "").toUpperCase(), { size: 11, bold: true, color: PAL.accent });
+      b.text(page, 40, 100, 640, 200, c.title, { size: 56, bold: true, font: HEAD, color: PAL.ink });
+      b.rect(page, 0, 356, 720, 49, PAL.ink);
+      b.text(page, 40, 366, 640, 28, c.sub, { size: 14, color: "#f6f6f3" });
+    } },
+  };
+  const coverSet = (opts) => (opts.style === "modern" ? MODERN_COVERS : COVERS);
+  const coverOf = (opts) => { const set = coverSet(opts); return set[opts.title.variant] || set[Object.keys(set)[0]]; };
   const SLIDE_TYPES = {
     title(b, page, ctx) {
-      const o = ctx.opts.title, v = COVERS[o.variant] || COVERS.classic, l = ctx.lesson;
+      const o = ctx.opts.title, v = coverOf(ctx.opts), l = ctx.lesson;
       v.draw(b, page, {
         title: l && l.title ? l.title : ctx.title,
         sub: [o.showLesson && l ? lessonLabel(l) : "", o.subtitle || ""].filter(Boolean).join("   ·   "),
@@ -252,7 +300,7 @@
     },
     goals(b, page, ctx) {
       const l = ctx.lesson; if (!l) return false;
-      b.text(page, 40, 28, 640, 50, "Today’s goals", { size: 32, bold: true, font: "Georgia", color: PAL.dark });
+      b.text(page, 40, 28, 640, 50, "Today’s goals", { size: 32, bold: true, font: HEAD, color: PAL.dark });
       const goals = (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean);
       b.text(page, 50, 95, 620, goals.length ? 180 : 40, goals.length ? goals.join("\n") : (l.title || ""), { size: 22, bullets: !!goals.length });
       if (l.materials && ctx.opts.goals.materials) { b.rect(page, 40, 295, 300, 90, PAL.white); b.text(page, 50, 300, 280, 80, "Materials\n" + l.materials, { size: 13, color: PAL.soft }); }
@@ -286,7 +334,7 @@
     const rows = r1 - r0 + 1, cols = c1 - c0 + 1, AW = 660, AH = withGroups ? 290 : 310, cw = Math.min(110, AW / cols), ch = Math.min(60, AH / rows);
     const ox = 30 + (AW - cw * cols) / 2, oy = (withGroups ? 76 : 68) + (AH - ch * rows) / 2, size = Math.max(7, Math.min(13, Math.floor(cw / 7.5)));
     const byId = new Map(S.students.map((st) => [st.id, st]));
-    b.text(page, 40, 14, 640, 40, withGroups ? "Seating chart — groups" : "Seating chart", { size: 28, bold: true, font: "Georgia", color: PAL.dark });
+    b.text(page, 40, 14, 640, 40, withGroups ? "Seating chart — groups" : "Seating chart", { size: 28, bold: true, font: HEAD, color: PAL.dark });
     if (ctx.lesson) b.text(page, 360, 22, 320, 28, lessonLabel(ctx.lesson), { size: 13, color: PAL.soft, align: "END" });
     S.keys.forEach((k, i) => {
       const [r, c] = k.split("-").map(Number), st = byId.get(S.seats[k]), g = S.groups[k];
@@ -302,10 +350,11 @@
   SLIDE_TYPES.seating = seatingSlide(false);
   SLIDE_TYPES.seatingGroups = seatingSlide(true);
   const TYPE_LABELS = { title: "Cover slide", goals: "Today’s goals", seating: "Seating chart", seatingGroups: "Seating chart — groups", calendar: "Class calendar" };
-  const HILITES = { amber: { label: "Amber", hex: PAL.amber }, green: { label: "Green", hex: "#bfe3bd" }, blue: { label: "Blue", hex: "#b9d7f2" }, pink: { label: "Pink", hex: "#f6c6d8" } };
+  const HILITES = { amber: { label: "Style default", get hex() { return PAL.amber; } }, green: { label: "Green", hex: "#bfe3bd" }, blue: { label: "Blue", hex: "#b9d7f2" }, pink: { label: "Pink", hex: "#f6c6d8" } };
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const defaultOpts = () => ({
     order: ["title", "goals", "seating", "seatingGroups", "calendar"].map((t) => ({ type: t, on: true })),
+    style: "classic", fonts: "brand",
     title: { variant: "classic", showCourse: true, showLesson: true, subtitle: "" },
     goals: { materials: true, homework: true },
     seating: { names: "full" },
@@ -315,10 +364,11 @@
   function getOpts(it) {
     const d = defaultOpts(), o = (it && it.source && it.source.options) || {}, out = clone(d);
     ["title", "goals", "seating", "calendar"].forEach((k) => Object.assign(out[k], o[k] || {}));
+    if (STYLES[o.style]) out.style = o.style; if (FONT_SETS[o.fonts]) out.fonts = o.fonts;
     if (Array.isArray(o.order)) { const seen = new Set(); out.order = o.order.filter((x) => TYPE_LABELS[x.type] && !seen.has(x.type) && seen.add(x.type)); d.order.forEach((x) => { if (!seen.has(x.type)) out.order.push(x); }); }
     return out;
   }
-  const bgFor = (type, opts) => (type === "title" ? (COVERS[opts.title.variant] || COVERS.classic).bg : PAL.cream);
+  const bgFor = (type, opts) => (type === "title" ? coverOf(opts).bg : PAL.cream);
 
   /** (Re)builds the generated slides of a Basic slideshow. First time: replaces the blank starter slide. Later: replaces the generated slides only. */
   async function buildBasic(it, opts) {
@@ -328,13 +378,15 @@
     const oldIds = it.source && it.source.slideIds ? it.source.slideIds : (pres.slides || []).map((s) => s.objectId);
     const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating(), opts };
     let warn = "";
-    const wantsImage = opts.order.some((x) => x.on && x.type === "title") && opts.title.variant === "textbook" && CM.textbook;
+    const wantsImage = opts.order.some((x) => x.on && x.type === "title") && (opts.title.variant === "textbook" || coverOf(opts).needsPicture) && CM.textbook;
+    applyStyle(opts); // palette + fonts for everything built below (sync from here to the request)
     const b = Builder(), made = [], byType = {}; let idx = 0;
     const url = wantsImage ? `https://drive.google.com/uc?export=download&id=${CM.textbook.fileId}` : "";
     if (wantsImage) ctx.image = { url, w: CM.textbook.w || 3, h: CM.textbook.h || 4 };
     opts.order.filter((x) => x.on).map((x) => x.type).forEach((type) => {
       const probe = Builder(), pid = sid("p");
       probe.slide(pid, idx, bgFor(type, opts));
+      if (DECO && type !== "title" && type !== "calendar") probe.rect(pid, 0, 0, 720, 5, PAL.accent);
       if (SLIDE_TYPES[type](probe, pid, ctx) === false) return;
       b.r.push(...probe.r); made.push(pid); byType[type] = pid; idx++;
     });
@@ -345,7 +397,7 @@
         if (ok) return send(b.r);
         warn = msg; // rebuild the same slides without the picture
         ctx.image = null; const nb = Builder(); let k = 0, m2 = [], bt2 = {};
-        opts.order.filter((x) => x.on).map((x) => x.type).forEach((type) => { const pr = Builder(), pid = sid("p"); pr.slide(pid, k, bgFor(type, opts)); if (SLIDE_TYPES[type](pr, pid, ctx) === false) return; nb.r.push(...pr.r); m2.push(pid); bt2[type] = pid; k++; });
+        opts.order.filter((x) => x.on).map((x) => x.type).forEach((type) => { const pr = Builder(), pid = sid("p"); pr.slide(pid, k, bgFor(type, opts)); if (DECO && type !== "title") pr.rect(pid, 0, 0, 720, 5, PAL.accent); if (SLIDE_TYPES[type](pr, pid, ctx) === false) return; nb.r.push(...pr.r); m2.push(pid); bt2[type] = pid; k++; });
         oldIds.forEach((id) => nb.r.push({ deleteObject: { objectId: id } })); made.length = 0; made.push(...m2); Object.keys(byType).forEach((k2) => delete byType[k2]); Object.assign(byType, bt2);
         return send(nb.r);
       });
@@ -363,7 +415,7 @@
     const ids = (pres.slides || []).map((x) => x.objectId), at = ids.indexOf(old);
     if (at < 0) return false; // the teacher deleted it — leave the deck alone
     const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating(), opts: getOpts(it) };
-    const b = Builder(), pid = sid("p"); b.slide(pid, at, bgFor(type, ctx.opts));
+    applyStyle(ctx.opts); const b = Builder(), pid = sid("p"); b.slide(pid, at, bgFor(type, ctx.opts)); if (DECO) b.rect(pid, 0, 0, 720, 5, PAL.accent);
     if (SLIDE_TYPES[type](b, pid, ctx) === false) return false;
     b.r.push({ deleteObject: { objectId: old } });
     await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
@@ -481,6 +533,9 @@
     band: ["#f6f5f1", [[0, 0, 100, 23, "#2f5233"], [8, 38, 70, 12, "#2f5233"], [8, 60, 22, 3, "#e0a526"]]],
     centered: ["#223d26", [[15, 30, 70, 12, "#f6f5f1"], [40, 52, 20, 3, "#e0a526"], [30, 78, 40, 6, "#f6f5f1"]]],
     textbook: ["#f6f5f1", [[8, 35, 45, 11, "#2f5233"], [8, 58, 18, 3, "#e0a526"], [62, 0, 38, 100, "#e9e4d3"], [70, 16, 22, 68, "#2f5233"]]],
+    modernPicture: ["#f6f6f3", [[8, 14, 16, 3, "#ff5a36"], [8, 30, 40, 12, "#14161a"], [8, 62, 12, 3, "#ff5a36"], [66, 0, 34, 100, "#2b3a55"]]],
+    modernDark: ["#14161a", [[8, 14, 16, 3, "#ff5a36"], [8, 30, 40, 12, "#f6f6f3"], [8, 62, 12, 3, "#ff5a36"], [66, 0, 34, 100, "#4a5a7a"]]],
+    modernType: ["#f6f6f3", [[8, 14, 16, 3, "#ff5a36"], [8, 28, 80, 16, "#14161a"], [8, 50, 50, 16, "#14161a"], [0, 88, 100, 12, "#14161a"]]],
     sidebar: ["#f6f5f1", [[0, 0, 28, 100, "#2f5233"], [6, 30, 16, 24, "#f6f5f1"], [36, 32, 54, 11, "#2f5233"], [36, 55, 30, 4, "#8a8472"]]],
   };
   const css2 = mk("style");
@@ -537,6 +592,14 @@
         tp.addEventListener("change", () => { st.tpl = tp.value; draw(); }); left.appendChild(f("Start from", tp));
       }
       if (st.tpl !== "basic") return;
+      const sty = mk("select"); Object.entries(STYLES).forEach(([k, v]) => sty.appendChild(opt(k, v.label))); sty.value = O.style;
+      sty.addEventListener("change", () => { O.style = sty.value; if (!coverSet(O)[O.title.variant]) O.title.variant = Object.keys(coverSet(O))[0]; draw(); });
+      left.appendChild(f("Style", sty));
+      if (O.style === "modern") {
+        const fo = mk("select"); Object.entries(FONT_SETS).forEach(([k, v]) => fo.appendChild(opt(k, v.label))); fo.value = O.fonts; fo.addEventListener("change", () => { O.fonts = fo.value; });
+        left.appendChild(f("Fonts (headings + text)", fo));
+        left.appendChild(mk("p", "hint", "Candela Deck and Graphik show only if Google Slides has them for your account; otherwise Slides substitutes Arial. “Lora + Inter” always works."));
+      }
       left.appendChild(mk("div", "cs-h", "Slides — click one to set it up"));
       O.order.forEach((x, i) => {
         const row = mk("div", `cs-slide${st.sel === x.type ? " sel" : ""}${x.on ? "" : " off"}`);
@@ -556,7 +619,7 @@
       if (st.sel === "title") {
         right.appendChild(mk("div", "cs-h", "Cover style"));
         const grid = mk("div", "cs-covers");
-        Object.entries(COVERS).forEach(([k, v]) => {
+        Object.entries(coverSet(O)).forEach(([k, v]) => {
           const card = mk("button", "cs-cover" + (O.title.variant === k ? " sel" : "")); card.type = "button";
           const th = mk("div", "cs-thumb"), pv = COVER_PREVIEW[k]; th.style.background = pv[0];
           pv[1].forEach(([x, y, w, h, col]) => { const i = mk("i"); i.style.cssText = `left:${x}%;top:${y}%;width:${w}%;height:${h}%;background:${col}`; th.appendChild(i); });
@@ -564,7 +627,7 @@
           grid.appendChild(card);
         });
         right.appendChild(grid);
-        if (O.title.variant === "textbook") {
+        if (O.title.variant === "textbook" || coverOf(O).needsPicture) {
           const box = mk("div"); box.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:10px;margin:0 0 12px";
           const cur = mk("div", "", CM.textbook ? `Picture for this course: ${CM.textbook.name}` : "No picture chosen for this course yet."); cur.style.fontWeight = "600";
           const holder = mk("div"); holder.style.marginTop = "8px";
