@@ -21,15 +21,16 @@
 
   // ---------- data (one small file per course) ----------
   const CM = {
-    items: [], calendar: null, courseId: null,
+    items: [], calendar: null, textbook: null, courseId: null,
     file: (id) => `classmaterial-${id}.json`,
     async load(courseId) {
       this.courseId = courseId;
       const d = await storage.loadFile(this.file(courseId));
       this.items = d && Array.isArray(d.items) ? d.items : [];
       this.calendar = d && d.calendar && typeof d.calendar === "object" ? d.calendar : null;
+      this.textbook = d && d.textbook && d.textbook.fileId ? d.textbook : null;
     },
-    async save() { if (this.courseId) await storage.saveFile(this.file(this.courseId), { items: this.items, calendar: this.calendar }); },
+    async save() { if (this.courseId) await storage.saveFile(this.file(this.courseId), { items: this.items, calendar: this.calendar, textbook: this.textbook }); },
     newId: () => `cm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };
 
@@ -90,6 +91,11 @@
         e.status = res.status; throw e;
       }
       return res.status === 204 ? null : res.json();
+    },
+    /** fetch() with the Google token, for non-JSON calls (file upload / download). */
+    async authed(url, init = {}) {
+      await this.connect();
+      return fetch(url, Object.assign({}, init, { headers: Object.assign({ Authorization: "Bearer " + this.token }, init.headers || {}) }));
     },
     api(path, opt) { return this.call("https://www.googleapis.com/drive/v3" + path, opt); },
     async folder(name, parent) {

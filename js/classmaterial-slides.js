@@ -167,6 +167,9 @@
         r.push({ createShape: { objectId: id, shapeType: "RECTANGLE", elementProperties: props(page, x, y, w, h) } });
         r.push({ updateShapeProperties: { objectId: id, shapeProperties: { shapeBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } }, outline: { propertyState: "NOT_RENDERED" } }, fields: "shapeBackgroundFill.solidFill.color,outline.propertyState" } });
       },
+      image(page, url, x, y, w, h) {
+        r.push({ createImage: { objectId: sid("i"), url, elementProperties: props(page, x, y, w, h) } });
+      },
       desk(page, x, y, w, h, fill, str, size, bold) {
         const id = sid("d");
         r.push({ createShape: { objectId: id, shapeType: "RECTANGLE", elementProperties: props(page, x, y, w, h) } });
@@ -226,13 +229,25 @@
       b.text(page, 230, 330, 450, 34, c.course, { size: 18, font: "Georgia", color: PAL.soft });
     } },
   };
+  COVERS.textbook = { label: "Textbook picture", bg: PAL.cream, draw(b, page, c) {
+    b.rect(page, 450, 0, 270, 405, "#e9e4d3");
+    b.text(page, 40, 44, 380, 30, c.course, { size: 18, font: "Georgia", color: PAL.soft });
+    b.text(page, 40, 120, 390, 140, c.title, { size: 38, bold: true, font: "Georgia", color: PAL.dark });
+    b.rect(page, 40, 272, 100, 4, "#e0a526");
+    b.text(page, 40, 290, 390, 60, c.sub, { size: 16, color: PAL.soft });
+    if (c.image) {
+      const W = 230, H = 330, sc = Math.min(W / c.image.w, H / c.image.h), w = c.image.w * sc, h = c.image.h * sc, x = 585 - w / 2, y = 202 - h / 2;
+      b.rect(page, x + 5, y + 5, w, h, "#c9c2ab"); // soft shadow
+      b.image(page, c.image.url, x, y, w, h);
+    }
+  } };
   const SLIDE_TYPES = {
     title(b, page, ctx) {
       const o = ctx.opts.title, v = COVERS[o.variant] || COVERS.classic, l = ctx.lesson;
       v.draw(b, page, {
         title: l && l.title ? l.title : ctx.title,
         sub: [o.showLesson && l ? lessonLabel(l) : "", o.subtitle || ""].filter(Boolean).join("   ·   "),
-        course: o.showCourse ? ctx.course : "", n: l ? String(l.n) : "",
+        course: o.showCourse ? ctx.course : "", n: l ? String(l.n) : "", image: ctx.image || null,
       });
     },
     goals(b, page, ctx) {
@@ -312,7 +327,11 @@
     const pres = await G.call(`${SLIDES}${it.fileId}?fields=slides.objectId`);
     const oldIds = it.source && it.source.slideIds ? it.source.slideIds : (pres.slides || []).map((s) => s.objectId);
     const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating(), opts };
+    let warn = "";
+    const wantsImage = opts.order.some((x) => x.on && x.type === "title") && opts.title.variant === "textbook" && CM.textbook;
     const b = Builder(), made = [], byType = {}; let idx = 0;
+    const url = wantsImage ? `https://drive.google.com/uc?export=download&id=${CM.textbook.fileId}` : "";
+    if (wantsImage) ctx.image = { url, w: CM.textbook.w || 3, h: CM.textbook.h || 4 };
     opts.order.filter((x) => x.on).map((x) => x.type).forEach((type) => {
       const probe = Builder(), pid = sid("p");
       probe.slide(pid, idx, bgFor(type, opts));
@@ -320,7 +339,18 @@
       b.r.push(...probe.r); made.push(pid); byType[type] = pid; idx++;
     });
     oldIds.forEach((id) => b.r.push({ deleteObject: { objectId: id } }));
-    await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
+    const send = (reqs) => G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: reqs } });
+    if (wantsImage) {
+      await withSharedImage(CM.textbook, async (ok, msg) => {
+        if (ok) return send(b.r);
+        warn = msg; // rebuild the same slides without the picture
+        ctx.image = null; const nb = Builder(); let k = 0, m2 = [], bt2 = {};
+        opts.order.filter((x) => x.on).map((x) => x.type).forEach((type) => { const pr = Builder(), pid = sid("p"); pr.slide(pid, k, bgFor(type, opts)); if (SLIDE_TYPES[type](pr, pid, ctx) === false) return; nb.r.push(...pr.r); m2.push(pid); bt2[type] = pid; k++; });
+        oldIds.forEach((id) => nb.r.push({ deleteObject: { objectId: id } })); made.length = 0; made.push(...m2); Object.keys(byType).forEach((k2) => delete byType[k2]); Object.assign(byType, bt2);
+        return send(nb.r);
+      });
+    } else await send(b.r);
+    if (warn) CMX.say(warn);
     it.source = { template: "basic", slideIds: made, byType, options: opts };
     it.updatedAt = new Date().toISOString();
     await CM.save();
@@ -352,6 +382,82 @@
     if (w) w.location = url; else window.open(url, "_blank");
   }
 
+  // ---------- picture library (a folder in your Google Drive) + the course's textbook picture ----------
+  const IMG_FOLDER = "Images";
+  const imgFolder = async () => G.folder(IMG_FOLDER, await G.folder("GradingGrid Class Material"));
+  const Pics = {
+    cache: new Map(),
+    async list() {
+      const f = await imgFolder();
+      const q = `'${f}' in parents and trashed=false and mimeType contains 'image/'`;
+      const r = await G.api(`/files?q=${encodeURIComponent(q)}&fields=files(id,name,appProperties)&orderBy=name&pageSize=100`);
+      return r.files || [];
+    },
+    async url(id) { // thumbnail as a blob, fetched with the token (the file itself stays private)
+      if (this.cache.has(id)) return this.cache.get(id);
+      const res = await G.authed(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`); if (!res.ok) throw new Error("Couldn't load a picture.");
+      const u = URL.createObjectURL(await res.blob()); this.cache.set(id, u); return u;
+    },
+    async upload(file) {
+      if (!/^image\/(png|jpe?g|gif|webp)$/.test(file.type)) throw new Error("Please choose a PNG, JPG, GIF or WebP picture.");
+      if (file.size > 8 * 1024 * 1024) throw new Error("That picture is over 8 MB. Please use a smaller one.");
+      const dim = await new Promise((ok) => { const i = new Image(), u = URL.createObjectURL(file); i.onload = () => { ok({ w: i.naturalWidth, h: i.naturalHeight }); URL.revokeObjectURL(u); }; i.onerror = () => ok({ w: 3, h: 4 }); i.src = u; });
+      const parent = await imgFolder(), bd = "ggo" + Date.now();
+      const meta = JSON.stringify({ name: file.name, parents: [parent], appProperties: { w: String(dim.w), h: String(dim.h) } });
+      const body = new Blob([`--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${bd}\r\nContent-Type: ${file.type}\r\n\r\n`, file, `\r\n--${bd}--`]);
+      const res = await G.authed("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,appProperties", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${bd}` }, body });
+      if (!res.ok) throw new Error(`Upload failed (${res.status}).`);
+      return res.json();
+    },
+    async remove(id) { await G.api(`/files/${id}`, { method: "PATCH", body: { trashed: true } }); this.cache.delete(id); },
+  };
+  /** Grid of the library's pictures. onPick(file) is called when one is chosen. */
+  function imageGrid(host, onPick) {
+    host.innerHTML = "";
+    const bar = mk("div", "cm-row"), note = mk("span", "result", ""), grid = mk("div"); grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px";
+    const up = mk("input"); up.type = "file"; up.accept = "image/png,image/jpeg,image/gif,image/webp"; up.style.display = "none";
+    const say = (t, bad) => { note.textContent = t || ""; note.style.color = bad ? "#b3261e" : ""; };
+    const load = async () => {
+      say("Loading pictures…"); grid.innerHTML = "";
+      try {
+        const files = await Pics.list(); say(files.length ? "" : "No pictures yet. Upload a textbook cover to get started.");
+        files.forEach((f) => {
+          const card = mk("div"); card.style.cssText = "border:1.5px solid var(--line);border-radius:8px;padding:6px;text-align:center;background:var(--card)";
+          if (CM.textbook && CM.textbook.fileId === f.id) card.style.borderColor = "var(--green)";
+          const im = mk("img"); im.style.cssText = "width:100%;height:120px;object-fit:contain;background:var(--paper);border-radius:4px"; im.alt = f.name; Pics.url(f.id).then((u) => { im.src = u; }, () => {});
+          card.append(im, mk("div", "cm-meta", f.name));
+          const row = mk("div"); row.style.cssText = "display:flex;gap:4px;justify-content:center;margin-top:4px";
+          row.append(btn(CM.textbook && CM.textbook.fileId === f.id ? "✓ In use" : "Use for this course", "btn btn-small " + (CM.textbook && CM.textbook.fileId === f.id ? "btn-primary" : "btn-ghost"), async () => {
+            CM.textbook = { fileId: f.id, name: f.name, w: Number((f.appProperties || {}).w) || 3, h: Number((f.appProperties || {}).h) || 4 };
+            await CM.save(); if (onPick) onPick(CM.textbook); load();
+          }), btn("🗑", "btn btn-ghost btn-small", async () => {
+            if (!confirm(`Move "${f.name}" to the Google Drive trash?`)) return;
+            try { await Pics.remove(f.id); if (CM.textbook && CM.textbook.fileId === f.id) { CM.textbook = null; await CM.save(); } load(); } catch (e) { say(e.message, true); }
+          }));
+          card.appendChild(row); grid.appendChild(card);
+        });
+      } catch (e) { say(e.message, true); }
+    };
+    bar.append(btn("⬆ Upload a picture", "btn btn-primary btn-small", () => up.click()), up, note);
+    up.addEventListener("change", async () => { const f = up.files[0]; up.value = ""; if (!f) return; say("Uploading…"); try { await Pics.upload(f); await load(); } catch (e) { say(e.message, true); } });
+    host.append(bar, grid);
+    if (G.connected()) load(); else { say(""); bar.appendChild(btn("Show my pictures", "btn btn-ghost btn-small", () => load())); }
+  }
+  CMX.views.images = { label: "Pictures", render(host) {
+    host.appendChild(mk("p", "hint", `Pictures live in your Google Drive (GradingGrid Class Material › ${IMG_FOLDER}). Choose one as this course’s textbook picture for the “Textbook picture” cover.`));
+    const cur = mk("p", "", CM.textbook ? `Textbook picture for this course: ${CM.textbook.name}` : "No textbook picture chosen for this course yet."); cur.style.fontWeight = "600"; host.appendChild(cur);
+    const g = mk("div"); host.appendChild(g); imageGrid(g, (t) => { cur.textContent = `Textbook picture for this course: ${t.name}`; });
+  } };
+
+  /** Lets Google's servers fetch the picture for a few seconds (Slides can only pull public URLs), then locks it again. */
+  async function withSharedImage(image, fn) {
+    let shared = false;
+    try { await G.call(`https://www.googleapis.com/drive/v3/files/${image.fileId}/permissions`, { method: "POST", body: { role: "reader", type: "anyone" } }); shared = true; }
+    catch (e) { return fn(false, "Your Google account doesn’t allow the textbook picture to be placed (link sharing is blocked). The slide was made without it."); }
+    try { return await fn(true); }
+    finally { try { await G.call(`https://www.googleapis.com/drive/v3/files/${image.fileId}/permissions/anyoneWithLink`, { method: "DELETE" }); } catch (e) {} }
+  }
+
   // ---------- creating + linking ----------
   function modal(title, fields, okLabel, onOk) {
     const ov = mk("div"); ov.id = "cm-modal"; const box = mk("div"); ov.appendChild(box); box.appendChild(mk("h3", "", title));
@@ -374,6 +480,7 @@
     classic: ["#2f5233", [[0, 74, 100, 26, "#223d26"], [8, 28, 70, 12, "#f6f5f1"], [8, 46, 40, 5, "#e6d9a8"]]],
     band: ["#f6f5f1", [[0, 0, 100, 23, "#2f5233"], [8, 38, 70, 12, "#2f5233"], [8, 60, 22, 3, "#e0a526"]]],
     centered: ["#223d26", [[15, 30, 70, 12, "#f6f5f1"], [40, 52, 20, 3, "#e0a526"], [30, 78, 40, 6, "#f6f5f1"]]],
+    textbook: ["#f6f5f1", [[8, 35, 45, 11, "#2f5233"], [8, 58, 18, 3, "#e0a526"], [62, 0, 38, 100, "#e9e4d3"], [70, 16, 22, 68, "#2f5233"]]],
     sidebar: ["#f6f5f1", [[0, 0, 28, 100, "#2f5233"], [6, 30, 16, 24, "#f6f5f1"], [36, 32, 54, 11, "#2f5233"], [36, 55, 30, 4, "#8a8472"]]],
   };
   const css2 = mk("style");
@@ -457,6 +564,13 @@
           grid.appendChild(card);
         });
         right.appendChild(grid);
+        if (O.title.variant === "textbook") {
+          const box = mk("div"); box.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:10px;margin:0 0 12px";
+          const cur = mk("div", "", CM.textbook ? `Picture for this course: ${CM.textbook.name}` : "No picture chosen for this course yet."); cur.style.fontWeight = "600";
+          const holder = mk("div"); holder.style.marginTop = "8px";
+          box.append(cur, btn(CM.textbook ? "Change picture…" : "Choose or upload a picture…", "btn btn-ghost btn-small", () => { imageGrid(holder, (t) => { cur.textContent = `Picture for this course: ${t.name}`; }); }));
+          box.appendChild(holder); right.appendChild(box);
+        }
         right.appendChild(check("Show the course name", O.title, "showCourse"));
         right.appendChild(check("Show the lesson / week / date line", O.title, "showLesson"));
         const sub = mk("input"); sub.type = "text"; sub.value = O.title.subtitle; sub.placeholder = "e.g. Unit 3 — Describing people"; sub.addEventListener("input", () => { O.title.subtitle = sub.value; });
