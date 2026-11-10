@@ -206,19 +206,21 @@
     const S = ctx.seating; if (!S) return false;
     if (withGroups && !S.keys.some((k) => S.groups[k])) return false; // no groups set up: skip this slide
     const pos = S.keys.map((k) => k.split("-").map(Number)), r0 = Math.min(...pos.map((p) => p[0])), r1 = Math.max(...pos.map((p) => p[0])), c0 = Math.min(...pos.map((p) => p[1])), c1 = Math.max(...pos.map((p) => p[1]));
-    const rows = r1 - r0 + 1, cols = c1 - c0 + 1, AW = 660, AH = withGroups ? 275 : 300, cw = Math.min(110, AW / cols), ch = Math.min(60, AH / rows);
-    const ox = 30 + (AW - cw * cols) / 2, oy = 70 + (AH - ch * rows) / 2, size = Math.max(7, Math.min(13, Math.floor(cw / 7.5)));
+    const rows = r1 - r0 + 1, cols = c1 - c0 + 1, AW = 660, AH = withGroups ? 262 : 285, cw = Math.min(110, AW / cols), ch = Math.min(60, AH / rows);
+    const ox = 30 + (AW - cw * cols) / 2, oy = (withGroups ? 76 : 68) + (AH - ch * rows) / 2, size = Math.max(7, Math.min(13, Math.floor(cw / 7.5)));
     const byId = new Map(S.students.map((st) => [st.id, st]));
     b.text(page, 40, 14, 640, 40, withGroups ? "Seating chart — groups" : "Seating chart", { size: 28, bold: true, font: "Georgia", color: PAL.dark });
     if (ctx.lesson) b.text(page, 360, 22, 320, 28, lessonLabel(ctx.lesson), { size: 13, color: PAL.soft, align: "END" });
     S.keys.forEach((k, i) => {
       const [r, c] = k.split("-").map(Number), st = byId.get(S.seats[k]), g = S.groups[k];
       const nm = st ? clip(st.name || "", 20) : "";
-      b.desk(page, ox + (c - c0) * cw + 2, oy + (r - r0) * ch + 2, cw - 4, ch - 4, withGroups && g ? hsl(Math.round((g * 137.508) % 360), 70, 78) : PAL.white, nm, size, false);
+      b.desk(page, ox + (c1 - c) * cw + 2, oy + (r1 - r) * ch + 2, // turned 180° so it reads from the students' side of the room
+         cw - 4, ch - 4, withGroups && g ? hsl(Math.round((g * 137.508) % 360), 70, 78) : PAL.white, nm, size, false);
     });
+    b.desk(page, 180, 376, 360, 22, "#e6e0cc", "FRONT OF CLASSROOM", 10, true);
     if (withGroups) {
       const gs = [...new Set(S.keys.map((k) => S.groups[k]).filter(Boolean))].sort((a, z) => a - z);
-      gs.forEach((g, i) => b.desk(page, 40 + i * 62, 372, 56, 20, hsl(Math.round((g * 137.508) % 360), 70, 78), `Group ${g}`, 9, true));
+      gs.forEach((g, i) => b.desk(page, 40 + i * 62, 52, 56, 18, hsl(Math.round((g * 137.508) % 360), 70, 78), `Group ${g}`, 9, true));
     }
   };
   SLIDE_TYPES.seating = seatingSlide(false);
