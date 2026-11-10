@@ -146,18 +146,18 @@
           r.push({ updateParagraphStyle: { objectId: id, textRange: { type: "ALL" }, style: { alignment: "CENTER" }, fields: "alignment" } });
         }
       },
-      table(page, x, y, widths, rows, hiRow) {
+      table(page, x, y, widths, rows, hiRow, H, fs) {
         const id = sid("tb"), W = widths.reduce((a, b) => a + b, 0);
-        r.push({ createTable: { objectId: id, elementProperties: props(page, x, y, W, rows.length * 22), rows: rows.length, columns: widths.length } });
+        r.push({ createTable: { objectId: id, elementProperties: props(page, x, y, W, H || rows.length * 22), rows: rows.length, columns: widths.length } });
         widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { objectId: id, columnIndices: [ci], tableColumnProperties: { columnWidth: pt(w) }, fields: "columnWidth" } }));
         rows.forEach((row, ri) => {
           const head = ri === 0, hi = ri === hiRow;
           const fill = head ? PAL.dark : hi ? PAL.amber : ri % 2 ? PAL.white : PAL.cream;
-          r.push({ updateTableCellProperties: { objectId: id, tableRange: { location: { rowIndex: ri, columnIndex: 0 }, rowSpan: 1, columnSpan: widths.length }, tableCellProperties: { tableCellBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } } }, fields: "tableCellBackgroundFill.solidFill.color" } });
+          r.push({ updateTableCellProperties: { objectId: id, tableRange: { location: { rowIndex: ri, columnIndex: 0 }, rowSpan: 1, columnSpan: widths.length }, tableCellProperties: { tableCellBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } }, contentAlignment: "MIDDLE" }, fields: "tableCellBackgroundFill.solidFill.color,contentAlignment" } });
           row.forEach((cell, ci) => {
             if (!cell) return; const loc = { rowIndex: ri, columnIndex: ci };
             r.push({ insertText: { objectId: id, cellLocation: loc, insertionIndex: 0, text: cell } });
-            style(id, { size: 10, bold: head || hi, color: head ? PAL.cream : PAL.ink }, { cellLocation: loc });
+            style(id, { size: head ? (fs || 10) + 1 : fs || 10, bold: head || hi, color: head ? PAL.cream : PAL.ink }, { cellLocation: loc });
           });
         });
       },
@@ -183,13 +183,12 @@
     },
     calendar(b, page, ctx) {
       const L = cal().lessons; if (!L.length) return false;
-      b.text(page, 40, 14, 640, 40, "Class calendar", { size: 28, bold: true, font: "Georgia", color: PAL.dark });
       const MAX = 14; let from = 0;
       const cur = ctx.lesson ? L.findIndex((x) => x.id === ctx.lesson.id) : -1;
       if (L.length > MAX) from = Math.max(0, Math.min(L.length - MAX, (cur < 0 ? 0 : cur) - 4));
       const part = L.slice(from, from + MAX);
-      const rows = [["#", "Week · Date", "What we do"]].concat(part.map((l) => [String(l.n), `Wk ${weekOf(l.date) || "?"} · ${dayLabel(l)}`, clip([l.title, (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ")].filter(Boolean).join(" — "), 95)]));
-      b.table(page, 30, 58, [36, 112, 512], rows, cur < 0 ? -1 : cur - from + 1);
+      const rows = [["#", "Week · Date", "Class calendar — what we do"]].concat(part.map((l) => [String(l.n), `Wk ${weekOf(l.date) || "?"} · ${dayLabel(l)}`, clip([l.title, (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ")].filter(Boolean).join(" — "), 90)]));
+      b.table(page, 0, 0, [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13);
     },
   };
   /** Reads the course's current seating chart + roster straight from storage, so every rebuild is up to date. */
