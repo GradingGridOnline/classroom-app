@@ -109,10 +109,12 @@
         const wk = mk("div", "cm-lw", weekOf(l.date) ? `Week ${weekOf(l.date)}` : "");
         const d = mk("input"); d.type = "date"; d.value = l.date || ""; if (l.sessionId && l.dateFromAttendance) { d.disabled = true; d.title = "Set in Attendance"; }
         d.addEventListener("change", () => { l.date = d.value; sortLessons(); saveSoon(); CMX.render(); });
-        const left = mk("div"); left.append(wk, d); row.appendChild(left);
-        const t = (k, ph, tag) => { const i = mk(tag || "input"); if (tag) i.rows = 3; i.placeholder = ph; i.value = l[k]; i.addEventListener("input", () => { l[k] = i.value; saveSoon(); }); return i; };
+        const left = mk("div"); left.append(wk, d);
+        const th = mk("label", "", ""); th.style.cssText = "display:flex;gap:6px;align-items:center;font-size:.78rem;margin-top:4px"; const tc = mk("input"); tc.type = "checkbox"; tc.checked = !!l.thick; tc.style.width = "auto";
+        tc.addEventListener("change", () => { l.thick = tc.checked; saveSoon(); }); th.append(tc, "Thick lines in calendar"); left.appendChild(th); row.appendChild(left);
+        const t = (k, ph, tag) => { const i = mk(tag || "input"); if (tag) i.rows = k === "homework" ? 2 : 3; i.placeholder = ph; i.value = l[k]; i.addEventListener("input", () => { l[k] = i.value; saveSoon(); }); return i; };
         const mid = mk("div"); mid.append(t("title", "Lesson title / topic"), t("goals", "Goals — one per line", "textarea")); row.appendChild(mid);
-        const right = mk("div"); right.append(t("materials", "Materials"), t("homework", "Homework")); row.appendChild(right);
+        const right = mk("div"); right.append(t("materials", "Materials"), t("homework", "Homework — appears in the calendar slide’s Homework column", "textarea")); row.appendChild(right);
         if (!l.sessionId) row.appendChild(btn("✕", "btn btn-ghost btn-small", () => { if (confirm(`Delete Lesson ${l.n}? Slideshows tied to it become unlinked.`)) { c.lessons = c.lessons.filter((x) => x !== l); CM.items.forEach((it) => { if (it.lessonId === l.id) it.lessonId = null; }); sortLessons(); saveSoon(); CMX.render(); } }));
         list.appendChild(row);
       });
@@ -196,7 +198,7 @@
           r.push({ updateParagraphStyle: { objectId: id, textRange: { type: "ALL" }, style: { alignment: "CENTER" }, fields: "alignment" } });
         }
       },
-      table(page, x, y, widths, rows, hiRow, H, fs, hiColor) {
+      table(page, x, y, widths, rows, hiRow, H, fs, hiColor, thick) {
         const id = sid("tb"), W = widths.reduce((a, b) => a + b, 0);
         r.push({ createTable: { objectId: id, elementProperties: props(page, x, y, W, H || rows.length * 22), rows: rows.length, columns: widths.length } });
         widths.forEach((w, ci) => r.push({ updateTableColumnProperties: { objectId: id, columnIndices: [ci], tableColumnProperties: { columnWidth: pt(w) }, fields: "columnWidth" } }));
@@ -204,6 +206,7 @@
           const head = ri === 0, hi = ri === hiRow;
           const fill = head ? PAL.dark : hi ? (hiColor || PAL.amber) : ri % 2 ? PAL.white : PAL.cream;
           r.push({ updateTableCellProperties: { objectId: id, tableRange: { location: { rowIndex: ri, columnIndex: 0 }, rowSpan: 1, columnSpan: widths.length }, tableCellProperties: { tableCellBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } }, contentAlignment: "MIDDLE" }, fields: "tableCellBackgroundFill.solidFill.color,contentAlignment" } });
+          if (thick && ri > 0 && thick[ri - 1]) ["TOP", "BOTTOM"].forEach((pos) => r.push({ updateTableBorderProperties: { objectId: id, tableRange: { location: { rowIndex: ri, columnIndex: 0 }, rowSpan: 1, columnSpan: widths.length }, borderPosition: pos, tableBorderProperties: { weight: pt(3.5), dashStyle: "SOLID", tableBorderFill: { solidFill: { color: { rgbColor: rgb(PAL.ink) } } } }, fields: "weight,dashStyle,tableBorderFill.solidFill.color" } }));
           row.forEach((cell, ci) => {
             if (!cell) return; const loc = { rowIndex: ri, columnIndex: ci };
             r.push({ insertText: { objectId: id, cellLocation: loc, insertionIndex: 0, text: cell } });
@@ -314,7 +317,7 @@
       const part = L.slice(from, from + MAX);
       const hw = !!ctx.opts.calendar.homework, one = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ");
       const rows = [["#", "Week · Date", "Class calendar — what we do"].concat(hw ? ["Homework"] : [])].concat(part.map((l) => [String(l.n), parse(l.date) ? `${weekOf(l.date) ? `Wk ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : "", clip([l.title, ctx.opts.calendar.goals ? one(l.goals) : ""].filter(Boolean).join(" — "), hw ? 62 : 90)].concat(hw ? [clip(one(l.homework), 48)] : [])));
-      b.table(page, 0, 0, hw ? [44, 128, 344, 204] : [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13, (HILITES[ctx.opts.calendar.highlight] || HILITES.amber).hex);
+      b.table(page, 0, 0, hw ? [44, 128, 344, 204] : [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13, (HILITES[ctx.opts.calendar.highlight] || HILITES.amber).hex, part.map((l) => !!l.thick));
     },
   };
   /** Reads the course's current seating chart + roster straight from storage, so every rebuild is up to date. */
@@ -416,7 +419,7 @@
     const ids = (pres.slides || []).map((x) => x.objectId), at = ids.indexOf(old);
     if (at < 0) return false; // the teacher deleted it — leave the deck alone
     const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating(), opts: getOpts(it) };
-    applyStyle(ctx.opts); const b = Builder(), pid = sid("p"); b.slide(pid, at, bgFor(type, ctx.opts)); if (DECO) b.rect(pid, 0, 0, 720, 5, PAL.accent);
+    applyStyle(ctx.opts); const b = Builder(), pid = sid("p"); b.slide(pid, at, bgFor(type, ctx.opts)); if (DECO && type !== "calendar") b.rect(pid, 0, 0, 720, 5, PAL.accent);
     if (SLIDE_TYPES[type](b, pid, ctx) === false) return false;
     b.r.push({ deleteObject: { objectId: old } });
     await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
@@ -429,7 +432,7 @@
     const url = `https://docs.google.com/presentation/d/${it.fileId}/present`;
     try {
       const bt = (it.source && it.source.byType) || {};
-      if (bt.seating || bt.seatingGroups) { CMX.say("Refreshing the seating chart…"); for (const t of ["seating", "seatingGroups"]) if (bt[t]) await refreshType(it, t); CMX.say(""); }
+      if (bt.seating || bt.seatingGroups || bt.calendar) { CMX.say("Refreshing seating and calendar…"); try { if (await syncAttendance()) await CM.save(); } catch (e) {} for (const t of ["seating", "seatingGroups", "calendar"]) if (bt[t]) await refreshType(it, t); CMX.say(""); }
     }
     catch (e) { CMX.say("Couldn't refresh the seating chart (" + e.message + ") — presenting as it was."); }
     if (w) w.location = url; else window.open(url, "_blank");
