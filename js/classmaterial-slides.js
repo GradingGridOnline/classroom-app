@@ -312,8 +312,9 @@
       const cur = ctx.lesson ? L.findIndex((x) => x.id === ctx.lesson.id) : -1;
       if (L.length > MAX) from = Math.max(0, Math.min(L.length - MAX, (cur < 0 ? 0 : cur) - 4));
       const part = L.slice(from, from + MAX);
-      const rows = [["#", "Week · Date", "Class calendar — what we do"]].concat(part.map((l) => [String(l.n), parse(l.date) ? `${weekOf(l.date) ? `Wk ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : "", clip([l.title, ctx.opts.calendar.goals ? (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ") : ""].filter(Boolean).join(" — "), 90)]));
-      b.table(page, 0, 0, [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13, (HILITES[ctx.opts.calendar.highlight] || HILITES.amber).hex);
+      const hw = !!ctx.opts.calendar.homework, one = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ");
+      const rows = [["#", "Week · Date", "Class calendar — what we do"].concat(hw ? ["Homework"] : [])].concat(part.map((l) => [String(l.n), parse(l.date) ? `${weekOf(l.date) ? `Wk ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : "", clip([l.title, ctx.opts.calendar.goals ? one(l.goals) : ""].filter(Boolean).join(" — "), hw ? 62 : 90)].concat(hw ? [clip(one(l.homework), 48)] : [])));
+      b.table(page, 0, 0, hw ? [44, 128, 344, 204] : [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13, (HILITES[ctx.opts.calendar.highlight] || HILITES.amber).hex);
     },
   };
   /** Reads the course's current seating chart + roster straight from storage, so every rebuild is up to date. */
@@ -358,7 +359,7 @@
     title: { variant: "classic", showCourse: true, showLesson: true, subtitle: "" },
     goals: { materials: true, homework: true },
     seating: { names: "full" },
-    calendar: { goals: true, highlight: "amber" },
+    calendar: { goals: true, homework: false, highlight: "amber" },
   });
   /** Options saved with a slideshow, filled in with defaults for anything missing (so adding options later is safe). */
   function getOpts(it) {
@@ -649,6 +650,7 @@
       } else if (st.sel === "calendar") {
         right.appendChild(mk("p", "hint", "A full-page table of the class calendar. The lesson this slideshow is for is highlighted."));
         right.appendChild(check("Include each lesson’s goals next to its title", O.calendar, "goals"));
+        right.appendChild(check("Add a Homework column", O.calendar, "homework"));
         const hs = mk("select"); Object.entries(HILITES).forEach(([k, v]) => hs.appendChild(opt(k, v.label))); hs.value = O.calendar.highlight; hs.addEventListener("change", () => { O.calendar.highlight = hs.value; });
         right.appendChild(f("Highlight color", hs));
       }
