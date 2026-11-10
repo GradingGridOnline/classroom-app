@@ -203,21 +203,28 @@
     } catch (e) { return null; }
   }
   const hsl = (h, sat, l) => { sat /= 100; l /= 100; const a = sat * Math.min(l, 1 - l), f = (n) => { const k = (n + h / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, "0"); }; return `#${f(0)}${f(8)}${f(4)}`; };
-  SLIDE_TYPES.seating = function (b, page, ctx) {
+  const seatingSlide = (withGroups) => function (b, page, ctx) {
     const S = ctx.seating; if (!S) return false;
+    if (withGroups && !S.keys.some((k) => S.groups[k])) return false; // no groups set up: skip this slide
     const pos = S.keys.map((k) => k.split("-").map(Number)), r0 = Math.min(...pos.map((p) => p[0])), r1 = Math.max(...pos.map((p) => p[0])), c0 = Math.min(...pos.map((p) => p[1])), c1 = Math.max(...pos.map((p) => p[1]));
-    const rows = r1 - r0 + 1, cols = c1 - c0 + 1, AW = 660, AH = 300, cw = Math.min(110, AW / cols), ch = Math.min(60, AH / rows);
+    const rows = r1 - r0 + 1, cols = c1 - c0 + 1, AW = 660, AH = withGroups ? 275 : 300, cw = Math.min(110, AW / cols), ch = Math.min(60, AH / rows);
     const ox = 30 + (AW - cw * cols) / 2, oy = 70 + (AH - ch * rows) / 2, size = Math.max(7, Math.min(13, Math.floor(cw / 7.5)));
     const byId = new Map(S.students.map((st) => [st.id, st]));
-    b.text(page, 40, 14, 640, 40, "Seating chart", { size: 28, bold: true, font: "Georgia", color: PAL.dark });
+    b.text(page, 40, 14, 640, 40, withGroups ? "Seating chart — groups" : "Seating chart", { size: 28, bold: true, font: "Georgia", color: PAL.dark });
     if (ctx.lesson) b.text(page, 360, 22, 320, 28, lessonLabel(ctx.lesson), { size: 13, color: PAL.soft, align: "END" });
     S.keys.forEach((k, i) => {
       const [r, c] = k.split("-").map(Number), st = byId.get(S.seats[k]), g = S.groups[k];
       const nm = st ? clip(st.name || "", 20) : "";
-      b.desk(page, ox + (c - c0) * cw + 2, oy + (r - r0) * ch + 2, cw - 4, ch - 4, g ? hsl(Math.round((g * 137.508) % 360), 70, 78) : PAL.white, nm, size, false);
+      b.desk(page, ox + (c - c0) * cw + 2, oy + (r - r0) * ch + 2, cw - 4, ch - 4, withGroups && g ? hsl(Math.round((g * 137.508) % 360), 70, 78) : PAL.white, nm, size, false);
     });
+    if (withGroups) {
+      const gs = [...new Set(S.keys.map((k) => S.groups[k]).filter(Boolean))].sort((a, z) => a - z);
+      gs.forEach((g, i) => b.desk(page, 40 + i * 62, 372, 56, 20, hsl(Math.round((g * 137.508) % 360), 70, 78), `Group ${g}`, 9, true));
+    }
   };
-  const BASIC = ["title", "goals", "seating", "calendar"];
+  SLIDE_TYPES.seating = seatingSlide(false);
+  SLIDE_TYPES.seatingGroups = seatingSlide(true);
+  const BASIC = ["title", "goals", "seating", "seatingGroups", "calendar"];
 
   /** (Re)builds the generated slides of a Basic slideshow. First time: replaces the blank starter slide. Later: replaces the generated slides only. */
   async function buildBasic(it) {
@@ -257,7 +264,10 @@
   async function present(it) {
     const w = window.open("", "_blank"); // opened inside the click so the browser allows it
     const url = `https://docs.google.com/presentation/d/${it.fileId}/present`;
-    try { if (it.source && it.source.byType && it.source.byType.seating) { CMX.say("Refreshing the seating chart…"); await refreshType(it, "seating"); CMX.say(""); } }
+    try {
+      const bt = (it.source && it.source.byType) || {};
+      if (bt.seating || bt.seatingGroups) { CMX.say("Refreshing the seating chart…"); for (const t of ["seating", "seatingGroups"]) if (bt[t]) await refreshType(it, t); CMX.say(""); }
+    }
     catch (e) { CMX.say("Couldn't refresh the seating chart (" + e.message + ") — presenting as it was."); }
     if (w) w.location = url; else window.open(url, "_blank");
   }
