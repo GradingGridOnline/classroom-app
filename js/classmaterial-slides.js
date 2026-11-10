@@ -22,14 +22,43 @@
   }
   /** Week number counted from the week (Mon–Sun) that contains the term start. */
   function weekOf(dateStr) {
-    const c = cal(), s = parse(c.start), d = parse(dateStr); if (!s || !d) return "";
+    const c = cal(), d = parse(dateStr), first = c.lessons.map((l) => l.date).filter(Boolean).sort()[0], s = parse(c.start) || parse(first); if (!s || !d) return "";
     const mon = new Date(s); mon.setDate(s.getDate() - ((s.getDay() + 6) % 7));
     return Math.floor((d - mon) / 604800000) + 1;
   }
-  const sortLessons = () => { const L = cal().lessons; L.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999")); L.forEach((l, i) => { l.n = i + 1; }); };
+  const sortLessons = () => {
+    const L = cal().lessons, linked = L.some((l) => l.sessionId);
+    L.sort(linked ? (a, b) => (a.sessionId ? a.sn : 1e6) - (b.sessionId ? b.sn : 1e6) || (a.date || "9999").localeCompare(b.date || "9999") : (a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+    L.forEach((l, i) => { l.n = l.sessionId ? l.sn : i + 1; });
+  };
+  const linked = () => cal().lessons.some((l) => l.sessionId);
+  /** Makes the calendar follow the Attendance module: one lesson per attendance class meeting. Content you wrote is kept. */
+  async function syncAttendance() {
+    let sessions = null;
+    if (window.AttendanceModule && AttendanceModule.currentCourseId === CM.courseId && Array.isArray(AttendanceModule.sessions)) sessions = AttendanceModule.sessions;
+    else { try { const d = await storage.loadFile(`attendance-${CM.courseId}.json`); if (d && Array.isArray(d.sessions)) sessions = d.sessions; } catch (e) {} }
+    if (!sessions || !sessions.length) return false;
+    const c = cal(), before = JSON.stringify(c.lessons);
+    const bySession = new Map(c.lessons.filter((l) => l.sessionId).map((l) => [l.sessionId, l]));
+    const loose = c.lessons.filter((l) => !l.sessionId), used = new Set();
+    const out = sessions.slice().sort((a, b) => (a.number || 0) - (b.number || 0)).map((ss, i) => {
+      let l = bySession.get(ss.id);
+      if (!l) { // first time: adopt a lesson already planned for that date (or at that position), so nothing written is lost
+        l = loose.find((x) => !used.has(x) && ss.date && x.date === ss.date);
+        if (!l && loose[i] && !used.has(loose[i])) l = loose[i];
+        if (l) used.add(l);
+      }
+      if (!l) l = { id: uid(), title: "", goals: "", materials: "", homework: "" };
+      l.sessionId = ss.id; l.sn = ss.number || i + 1; l.dateFromAttendance = !!ss.date; if (ss.date) l.date = ss.date; else if (l.date === undefined) l.date = "";
+      return l;
+    });
+    const keep = loose.filter((x) => !used.has(x) && (x.title || x.goals || x.materials || x.homework)); // planned lessons with no matching class stay at the end
+    c.lessons = [...out, ...keep]; sortLessons();
+    return JSON.stringify(c.lessons) !== before;
+  }
   const lessonById = (id) => cal().lessons.find((l) => l.id === id);
   function dayLabel(l) { const d = parse(l.date); return d ? `${DAYS[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}` : "no date"; }
-  const lessonLabel = (l) => `Lesson ${l.n} · Week ${weekOf(l.date) || "?"} · ${dayLabel(l)}`;
+  const lessonLabel = (l) => (parse(l.date) ? `Lesson ${l.n} · ${weekOf(l.date) ? `Week ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : `Lesson ${l.n}`);
   /** Makes a lesson for every meeting date in the term (keeps what you already wrote for dates that still exist). */
   function generate() {
     const c = cal(), s = parse(c.start), e = parse(c.end);
@@ -48,9 +77,11 @@
   const saveSoon = () => { clearTimeout(saveT); saveT = setTimeout(() => CM.save().catch((e) => CMX.say(e.message)), 700); };
 
   // ---------- the calendar screen ----------
+  let syncing = false;
   function renderCalendar(host) {
     const c = cal();
-    host.appendChild(mk("p", "hint", "Plan each lesson here. Slideshows tied to a lesson show it highlighted on their Calendar slide."));
+    if (!syncing) { syncing = true; syncAttendance().then((changed) => { syncing = false; if (changed) { saveSoon(); CMX.render(); } }, () => { syncing = false; }); }
+    host.appendChild(mk("p", "hint", linked() ? "This calendar follows the Attendance module: one lesson for each class meeting there. Change the number of classes or the dates in Attendance; plan each lesson here." : "Plan each lesson here. Slideshows tied to a lesson show it highlighted on their Calendar slide."));
     const setup = mk("div", "cm-row cm-setup");
     const field = (label, el) => { const l = mk(el.tagName === "DIV" ? "div" : "label", "", label); l.style.cssText = "display:flex;flex-direction:column;font-size:.78rem;gap:2px"; l.appendChild(el); setup.appendChild(l); return el; };
     const date = (k) => { const i = mk("input"); i.type = "date"; i.value = c[k]; i.addEventListener("change", () => { c[k] = i.value; saveSoon(); }); return i; };
@@ -64,7 +95,7 @@
     setup.appendChild(btn("Make lessons from these dates", "btn btn-primary btn-small", () => {
       try { if (c.lessons.length && !confirm("Rebuild the lesson list from these dates? Lessons you wrote on dates that still meet are kept.")) return; generate(); saveSoon(); CMX.render(); } catch (e) { CMX.say(e.message); }
     }));
-    host.appendChild(setup);
+    if (!linked()) host.appendChild(setup);
     host.appendChild(mk("span", "result cm-note", ""));
 
     const list = mk("div"); host.appendChild(list);
@@ -75,17 +106,17 @@
       c.lessons.forEach((l) => {
         const row = mk("div", "cm-lesson" + (l.date === today ? " today" : ""));
         row.appendChild(mk("div", "cm-ln", `Lesson ${l.n}`));
-        const wk = mk("div", "cm-lw", `Week ${weekOf(l.date) || "?"}`);
-        const d = mk("input"); d.type = "date"; d.value = l.date;
+        const wk = mk("div", "cm-lw", weekOf(l.date) ? `Week ${weekOf(l.date)}` : "");
+        const d = mk("input"); d.type = "date"; d.value = l.date || ""; if (l.sessionId && l.dateFromAttendance) { d.disabled = true; d.title = "Set in Attendance"; }
         d.addEventListener("change", () => { l.date = d.value; sortLessons(); saveSoon(); CMX.render(); });
         const left = mk("div"); left.append(wk, d); row.appendChild(left);
         const t = (k, ph, tag) => { const i = mk(tag || "input"); if (tag) i.rows = 3; i.placeholder = ph; i.value = l[k]; i.addEventListener("input", () => { l[k] = i.value; saveSoon(); }); return i; };
         const mid = mk("div"); mid.append(t("title", "Lesson title / topic"), t("goals", "Goals — one per line", "textarea")); row.appendChild(mid);
         const right = mk("div"); right.append(t("materials", "Materials"), t("homework", "Homework")); row.appendChild(right);
-        row.appendChild(btn("✕", "btn btn-ghost btn-small", () => { if (confirm(`Delete Lesson ${l.n}? Slideshows tied to it become unlinked.`)) { c.lessons = c.lessons.filter((x) => x !== l); CM.items.forEach((it) => { if (it.lessonId === l.id) it.lessonId = null; }); sortLessons(); saveSoon(); CMX.render(); } }));
+        if (!l.sessionId) row.appendChild(btn("✕", "btn btn-ghost btn-small", () => { if (confirm(`Delete Lesson ${l.n}? Slideshows tied to it become unlinked.`)) { c.lessons = c.lessons.filter((x) => x !== l); CM.items.forEach((it) => { if (it.lessonId === l.id) it.lessonId = null; }); sortLessons(); saveSoon(); CMX.render(); } }));
         list.appendChild(row);
       });
-      list.appendChild(btn("+ Add a lesson", "btn btn-ghost btn-small", () => { c.lessons.push({ id: uid(), n: 0, date: "", title: "", goals: "", materials: "", homework: "" }); sortLessons(); saveSoon(); CMX.render(); }));
+      if (!linked()) list.appendChild(btn("+ Add a lesson", "btn btn-ghost btn-small", () => { c.lessons.push({ id: uid(), n: 0, date: "", title: "", goals: "", materials: "", homework: "" }); sortLessons(); saveSoon(); CMX.render(); }));
     };
     draw();
   }
@@ -187,7 +218,7 @@
       const cur = ctx.lesson ? L.findIndex((x) => x.id === ctx.lesson.id) : -1;
       if (L.length > MAX) from = Math.max(0, Math.min(L.length - MAX, (cur < 0 ? 0 : cur) - 4));
       const part = L.slice(from, from + MAX);
-      const rows = [["#", "Week · Date", "Class calendar — what we do"]].concat(part.map((l) => [String(l.n), `Wk ${weekOf(l.date) || "?"} · ${dayLabel(l)}`, clip([l.title, (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ")].filter(Boolean).join(" — "), 90)]));
+      const rows = [["#", "Week · Date", "Class calendar — what we do"]].concat(part.map((l) => [String(l.n), parse(l.date) ? `${weekOf(l.date) ? `Wk ${weekOf(l.date)} · ` : ""}${dayLabel(l)}` : "", clip([l.title, (l.goals || "").split("\n").map((x) => x.trim()).filter(Boolean).join(" · ")].filter(Boolean).join(" — "), 90)]));
       b.table(page, 0, 0, [48, 150, 522], rows, cur < 0 ? -1 : cur - from + 1, 405, 13);
     },
   };
@@ -228,6 +259,7 @@
 
   /** (Re)builds the generated slides of a Basic slideshow. First time: replaces the blank starter slide. Later: replaces the generated slides only. */
   async function buildBasic(it) {
+    try { if (await syncAttendance()) await CM.save(); } catch (e) {}
     const pres = await G.call(`${SLIDES}${it.fileId}?fields=slides.objectId`);
     const oldIds = it.source && it.source.slideIds ? it.source.slideIds : (pres.slides || []).map((s) => s.objectId);
     const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating() };
