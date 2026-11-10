@@ -136,6 +136,16 @@
         r.push({ createShape: { objectId: id, shapeType: "RECTANGLE", elementProperties: props(page, x, y, w, h) } });
         r.push({ updateShapeProperties: { objectId: id, shapeProperties: { shapeBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } }, outline: { propertyState: "NOT_RENDERED" } }, fields: "shapeBackgroundFill.solidFill.color,outline.propertyState" } });
       },
+      desk(page, x, y, w, h, fill, str, size, bold) {
+        const id = sid("d");
+        r.push({ createShape: { objectId: id, shapeType: "RECTANGLE", elementProperties: props(page, x, y, w, h) } });
+        r.push({ updateShapeProperties: { objectId: id, shapeProperties: { shapeBackgroundFill: { solidFill: { color: { rgbColor: rgb(fill) } } }, outline: { outlineFill: { solidFill: { color: { rgbColor: rgb("#8a8472") } } }, weight: pt(0.75) }, contentAlignment: "MIDDLE" }, fields: "shapeBackgroundFill.solidFill.color,outline.outlineFill.solidFill.color,outline.weight,contentAlignment" } });
+        if (str) {
+          r.push({ insertText: { objectId: id, insertionIndex: 0, text: str } });
+          style(id, { size: size || 10, bold: !!bold, color: PAL.ink });
+          r.push({ updateParagraphStyle: { objectId: id, textRange: { type: "ALL" }, style: { alignment: "CENTER" }, fields: "alignment" } });
+        }
+      },
       table(page, x, y, widths, rows, hiRow) {
         const id = sid("tb"), W = widths.reduce((a, b) => a + b, 0);
         r.push({ createTable: { objectId: id, elementProperties: props(page, x, y, W, rows.length * 22), rows: rows.length, columns: widths.length } });
@@ -182,26 +192,74 @@
       b.table(page, 30, 58, [36, 112, 512], rows, cur < 0 ? -1 : cur - from + 1);
     },
   };
-  const BASIC = ["title", "goals", "calendar"];
+  /** Reads the course's current seating chart + roster straight from storage, so every rebuild is up to date. */
+  async function loadSeating() {
+    try {
+      const [sd, rd] = await Promise.all([storage.loadFile(`seating-${CM.courseId}.json`), storage.loadFile(`roster-${CM.courseId}.json`)]);
+      if (!sd) return null;
+      const keys = Object.keys(sd.active || {}).filter((k) => sd.active[k]);
+      if (!keys.length) return null;
+      return { keys, seats: sd.seats || {}, groups: sd.groups || {}, students: (rd && rd.students) || [] };
+    } catch (e) { return null; }
+  }
+  const hsl = (h, sat, l) => { sat /= 100; l /= 100; const a = sat * Math.min(l, 1 - l), f = (n) => { const k = (n + h / 30) % 12; return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, "0"); }; return `#${f(0)}${f(8)}${f(4)}`; };
+  SLIDE_TYPES.seating = function (b, page, ctx) {
+    const S = ctx.seating; if (!S) return false;
+    const pos = S.keys.map((k) => k.split("-").map(Number)), r0 = Math.min(...pos.map((p) => p[0])), r1 = Math.max(...pos.map((p) => p[0])), c0 = Math.min(...pos.map((p) => p[1])), c1 = Math.max(...pos.map((p) => p[1]));
+    const rows = r1 - r0 + 1, cols = c1 - c0 + 1, AW = 660, AH = 300, cw = Math.min(110, AW / cols), ch = Math.min(60, AH / rows);
+    const ox = 30 + (AW - cw * cols) / 2, oy = 70 + (AH - ch * rows) / 2, size = Math.max(7, Math.min(13, Math.floor(cw / 7.5)));
+    const byId = new Map(S.students.map((st) => [st.id, st]));
+    b.text(page, 40, 14, 640, 40, "Seating chart", { size: 28, bold: true, font: "Georgia", color: PAL.dark });
+    if (ctx.lesson) b.text(page, 360, 22, 320, 28, lessonLabel(ctx.lesson), { size: 13, color: PAL.soft, align: "END" });
+    S.keys.forEach((k, i) => {
+      const [r, c] = k.split("-").map(Number), st = byId.get(S.seats[k]), g = S.groups[k];
+      const nm = st ? clip(st.name || "", 20) : "";
+      b.desk(page, ox + (c - c0) * cw + 2, oy + (r - r0) * ch + 2, cw - 4, ch - 4, g ? hsl(Math.round((g * 137.508) % 360), 70, 78) : PAL.white, nm, size, false);
+    });
+  };
+  const BASIC = ["title", "goals", "seating", "calendar"];
 
   /** (Re)builds the generated slides of a Basic slideshow. First time: replaces the blank starter slide. Later: replaces the generated slides only. */
   async function buildBasic(it) {
     const pres = await G.call(`${SLIDES}${it.fileId}?fields=slides.objectId`);
     const oldIds = it.source && it.source.slideIds ? it.source.slideIds : (pres.slides || []).map((s) => s.objectId);
-    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null };
-    const b = Builder(), made = []; let idx = 0;
+    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating() };
+    const b = Builder(), made = [], byType = {}; let idx = 0;
     BASIC.forEach((type) => {
       const probe = Builder(), pid = sid("p");
       const dark = type === "title";
       probe.slide(pid, idx, dark ? PAL.dark : PAL.cream);
       if (SLIDE_TYPES[type](probe, pid, ctx) === false) return;
-      b.r.push(...probe.r); made.push(pid); idx++;
+      b.r.push(...probe.r); made.push(pid); byType[type] = pid; idx++;
     });
     oldIds.forEach((id) => b.r.push({ deleteObject: { objectId: id } }));
     await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
-    it.source = { template: "basic", slideIds: made };
+    it.source = { template: "basic", slideIds: made, byType };
     it.updatedAt = new Date().toISOString();
     await CM.save();
+  }
+
+  /** Rebuilds just one generated slide (e.g. the seating chart) in place, leaving everything else alone. */
+  async function refreshType(it, type) {
+    const old = it.source && it.source.byType && it.source.byType[type]; if (!old) return false;
+    const pres = await G.call(`${SLIDES}${it.fileId}?fields=slides.objectId`);
+    const ids = (pres.slides || []).map((x) => x.objectId), at = ids.indexOf(old);
+    if (at < 0) return false; // the teacher deleted it — leave the deck alone
+    const ctx = { title: it.title, course: CMX.courseTitle(), lesson: it.lessonId ? lessonById(it.lessonId) : null, seating: await loadSeating() };
+    const b = Builder(), pid = sid("p"); b.slide(pid, at, PAL.cream);
+    if (SLIDE_TYPES[type](b, pid, ctx) === false) return false;
+    b.r.push({ deleteObject: { objectId: old } });
+    await G.call(`${SLIDES}${it.fileId}:batchUpdate`, { method: "POST", body: { requests: b.r } });
+    it.source.byType[type] = pid; it.source.slideIds = it.source.slideIds.map((x) => (x === old ? pid : x));
+    await CM.save(); return true;
+  }
+  /** Present: refresh the seating chart first so it matches today's real chart, then start the slideshow. */
+  async function present(it) {
+    const w = window.open("", "_blank"); // opened inside the click so the browser allows it
+    const url = `https://docs.google.com/presentation/d/${it.fileId}/present`;
+    try { if (it.source && it.source.byType && it.source.byType.seating) { CMX.say("Refreshing the seating chart…"); await refreshType(it, "seating"); CMX.say(""); } }
+    catch (e) { CMX.say("Couldn't refresh the seating chart (" + e.message + ") — presenting as it was."); }
+    if (w) w.location = url; else window.open(url, "_blank");
   }
 
   // ---------- creating + linking ----------
@@ -239,6 +297,7 @@
   CMX.itemMeta = (it) => { const l = it.lessonId ? lessonById(it.lessonId) : null; return l ? ` · ${lessonLabel(l)}` : ""; };
   CMX.itemActions = (it, acts) => {
     if (it.kind !== "slides") return;
+    acts.appendChild(btn("▶ Present", "btn btn-primary btn-small", () => present(it)));
     acts.appendChild(btn("Lesson…", "btn btn-ghost btn-small", () => {
       sortLessons();
       modal("Tie this slideshow to a lesson", [{ key: "lesson", label: "Lesson", options: lessonOptions(), value: it.lessonId || "" }], "Save", (v) => {
