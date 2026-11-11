@@ -1060,7 +1060,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const out = [mk("span", `qts-badge${stale ? " qts-stale" : ""}`, stale ? "Update available" : "Library: up to date")];
       const btn = (label, fn) => { const b = mk("button", "btn btn-ghost btn-small", label); b.type = "button"; b.addEventListener("click", async () => { try { const m = await fn(); if (m) { say(m); rerender(); } } catch (e) { say(`Couldn't do that: ${e.message}`); } }); return b; };
       if (stale) out.push(btn("Update (re-grade)", () => updateOne(ref)));
-      out.push(btn("Make my own copy", async () => (confirm(`Make “${t.name}” its own copy? Library changes will no longer reach it, and it can't rejoin.`) ? makeOwn(ref) : "")));
+      out.push(btn("Unlink", async () => (confirm(`Unlink “${t.name}” from its template? Template changes will no longer reach it. (You can link it again in Class Material → Quiz Library.)`) ? makeOwn(ref) : "")));
       return out;
     },
     /** A line for the quiz editor: which Library item this is and how many courses use it. */

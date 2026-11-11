@@ -104,6 +104,24 @@
     return `“${item.name}” copied to this course. It stays linked to the template.`;
   }
 
+  /** Links an own quiz to a template: its questions become the template's (answers kept and regraded). */
+  async function linkToTemplate(r, c) {
+    const lib = await c.libLoad(true);
+    if (!lib.items.length) throw new Error("there are no templates yet");
+    if (r.d.qr) throw new Error("its QR code is open — close it first");
+    const pick = await c.dialog((box, done) => {
+      box.appendChild(mk("h3", "", `Link “${r.d.name}” to a template`));
+      box.appendChild(mk("p", "hint", `This quiz's questions are replaced by the template's, and it then follows the template's edits.${r.d.answers ? ` Its ${r.d.answers} student answer(s) are kept and regraded.` : ""}`));
+      const s = mk("select"); lib.items.forEach((it) => { const o = mk("option", "", it.name); o.value = it.id; s.appendChild(o); }); box.appendChild(s);
+      const acts = mk("div", "qts-actions"), no = mk("button", "btn btn-ghost", "Cancel"), go = mk("button", "btn btn-primary", "Link");
+      no.type = go.type = "button"; no.addEventListener("click", () => done(null)); go.addEventListener("click", () => done(s.value)); acts.append(no, go); box.appendChild(acts);
+    });
+    if (!pick) return "";
+    const item = c.itemById(pick);
+    await c.applyUpdate(r, item);
+    return `Linked to “${item.name}”.`;
+  }
+
   // ---------- editing in another course ----------
   async function editElsewhere(row) {
     if (row.courseId === live()) { openEditor(row.toolId, row.id); return ""; }
@@ -181,7 +199,8 @@
           b("Copy to course…", act(host, () => copyQuiz(r, model))),
           it ? null : b("Save as template", act(host, async () => { const x = await c.addToLibrary(r); return `“${x.name}” is now a template, and this quiz is linked to it.`; }), "Puts this quiz in Templates and links it, so edits go to every copy."),
           stale ? b("Update (re-grade)", act(host, () => c.updateOne(r))) : null,
-          it ? b("Make my own copy", act(host, async () => { if (!confirm("Unlink this quiz from its template? Template edits will no longer reach it, and it can't rejoin.")) return ""; await c.makeOwn(r); return "Unlinked: this quiz is now its own copy."; })) : null,
+          it ? b("Unlink", act(host, async () => { if (!confirm("Unlink this quiz from its template? Template edits will no longer reach it. (You can link it again later.)")) return ""; await c.makeOwn(r); return "Unlinked: this quiz is now its own copy."; }), "Stop following the template")
+             : b("Link…", act(host, () => linkToTemplate(r, c)), "Link this quiz to a template so it follows the template's edits"),
           b("Delete", act(host, async () => { if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR Code → Close QR Code)"); if (!confirm(`Delete “${d.name}” from this course?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers, which will be lost.` : ""}`)) return ""; await c.courseRemove(r.courseId, r.toolId, r.id); rebuildTabs(); return "Deleted."; })),
           ex.length ? c.menuButton("Export", () => ex) : null)];
     })));
