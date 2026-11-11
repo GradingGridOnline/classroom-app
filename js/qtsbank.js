@@ -345,7 +345,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   async function applyUpdate(ref, item) {
     const probe = await fullOf(ref);
     if (!probe) throw new Error("That item no longer exists.");
-    if (probe.quiz && probe.quiz.token) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR Code → Close QR Code)");
+    if (probe.quiz && probe.quiz.token) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR / Forms → Close)");
     let students = null;
     if (!live(ref.courseId) && probe.quiz && (probe.quiz.submissions || []).length) {
       const r = await storage.loadFile(`roster-${ref.courseId}.json`);
@@ -631,7 +631,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     await libLoad(true);
     const item = itemById(row.d.libId);
     if (!item) throw new Error("the Library item no longer exists");
-    if (row.d.qr) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR Code → Close QR Code)");
+    if (row.d.qr) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR / Forms → Close)");
     if (row.d.answers > 0 || row.d.edited) {
       if (!confirm(`Update “${row.d.name}”${row.courseName ? ` (${row.courseName})` : ""} to the newest version of “${item.name}”?${await impactText(row, item)}`)) return "";
     }
@@ -761,7 +761,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
           await editCourseTest(r, (t) => { t.name = v.trim(); }); return "Renamed.";
         }) },
         { label: "Delete…", onClick: run(async () => {
-          if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR Code → Close QR Code)");
+          if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR / Forms → Close)");
           if (!confirm(`Delete “${d.name}” from ${r.courseName}?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers/scores, which will be lost.` : ""}`)) return "";
           await courseRemove(r.courseId, r.toolId, r.id); return "Deleted.";
         }) });

@@ -28,6 +28,9 @@
   const typeName = (q) => (q.type === "mc" ? "Multiple choice" : q.type === "multi" ? "Multiple select" : q.type === "para" ? "Long answer" : "Fill in the blank"); // Research Survey ("survey") and Formative Survey
   const r2 = (n) => Math.round(n * 100) / 100;
   const editing = new Map(); // toolId -> testId being edited
+  /** The answers the quiz currently "shows": all forms combined, or just the chosen form (quiz.view). */
+  const viewSubs = (q) => (q.view && q.view !== "all" ? q.submissions.filter((x) => x.form === q.view) : q.submissions);
+  window.QuizViewSubs = viewSubs;
   const viewOf = new Map(); // toolId -> "build" | "results" ("review" opens Results in Edit mode)
   const resultMode = new Map(); // testId -> "view" | "edit": the one Results screen has two modes
   window.QuizBankUI = { open(toolId, testId, view) { editing.set(toolId, testId); viewOf.set(toolId, view || "build"); } };
@@ -130,6 +133,13 @@
       if (!Array.isArray(q.submissions)) q.submissions = [];
       if (!Array.isArray(q.removed)) q.removed = []; // attempts the teacher deleted ("sid|attempt|time"): Get Responses won't bring them back
       if (typeof q.token !== "string") q.token = null;
+      // Forms: each QR code is one form with its own token and its own answers (submission.form).
+      if (!Array.isArray(q.forms)) q.forms = [];
+      q.forms = q.forms.filter((f) => f && typeof f === "object" && f.id).map((f) => ({ id: f.id, name: String(f.name || "Form"), token: typeof f.token === "string" && f.token ? f.token : null, open: f.open === true && !!f.token, createdAt: f.createdAt || "" }));
+      if (!q.forms.length && (q.token || q.submissions.length)) q.forms.push({ id: "f1", name: "Form 1", token: q.token || null, open: !!q.token, createdAt: "" }); // older quizzes: everything so far is "Form 1"
+      q.submissions.forEach((s) => { if (!s.form || !q.forms.some((f) => f.id === s.form)) s.form = q.forms.length ? q.forms[0].id : ""; });
+      { const openF = q.forms.filter((f) => f.open); q.token = openF.length ? openF[openF.length - 1].token : null; }
+      if (q.view !== "all" && !q.forms.some((f) => f.id === q.view)) q.view = "all";
       q.sections.forEach((s) => {
         if (!Array.isArray(s.questions)) s.questions = [];
         if (!Array.isArray(s.notes)) s.notes = [];
@@ -306,14 +316,14 @@
       test.maxPoints = this.quizTotal(quiz);
       if (isSurveyKind(quiz.kind)) { test.rows = []; test.maxPoints = 0; this._matchTestRows(test); return; } // surveys are not scored
       const bySid = new Map();
-      quiz.submissions.forEach((s) => {
+      (quiz.view && quiz.view !== "all" ? quiz.submissions.filter((x) => x.form === quiz.view) : quiz.submissions).forEach((s) => {
         if (!bySid.has(s.sid)) bySid.set(s.sid, []);
         bySid.get(s.sid).push(s);
       });
       const rule = quiz.settings.attemptRule;
       test.rows = [];
       bySid.forEach((list, sid) => {
-        list.sort((a, b) => a.attempt - b.attempt);
+        list.sort((a, b) => (a.attempt - b.attempt) || String(a.at || "").localeCompare(String(b.at || "")));
         const scores = list.map((s) => this.gradeQuizSubmission(quiz, this.quizEffectiveAnswers(s)));
         const score = rule === "latest" ? scores[scores.length - 1] : rule === "first" ? scores[0] : Math.max(...scores);
         const named = list.find((s) => s.name);
@@ -336,10 +346,12 @@
       }
       return new Error((error && error.message) || "Something went wrong.");
     },
-    token() {
-      const b = new Uint8Array(16);
+    /** A short code (8 characters, no look-alike letters) so the link and QR code stay small. */
+    token(long) {
+      if (long) { const b = new Uint8Array(16); crypto.getRandomValues(b); return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join(""); }
+      const A = "abcdefghjkmnpqrstuvwxyz23456789", b = new Uint8Array(8);
       crypto.getRandomValues(b);
-      return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      return Array.from(b, (x) => A[x % A.length]).join("");
     },
     urlFor(token) {
       return new URL(`quizform.html?c=${encodeURIComponent(token)}`, location.href).href;
@@ -373,54 +385,67 @@
       };
       return { title: test.name, config, people };
     },
-    async create(toolId, testId) {
+    /** Opens a new form (a new QR code) on a quiz. Returns { url, form }. */
+    async create(toolId, testId, name) {
       const quiz = ScoringModule.quizOf(toolId, testId);
       const { title, config, people } = this.build(toolId, testId);
-      if (quiz.kind === "formative") archiveRun(quiz); // a new QR code starts a new run; the earlier answers are kept as a saved run
-      const token = this.token();
-      const { error } = await this.client().from("quiz_forms").insert({ token, title, config, people });
+      if (quiz.kind === "formative" && !quiz.forms.some((f) => f.open)) archiveRun(quiz); // a new QR code starts a new run; the earlier answers are kept as a saved run
+      let token = this.token(), error = null;
+      for (let i = 0; i < 4; i++) {
+        ({ error } = await this.client().from("quiz_forms").insert({ token, title, config, people }));
+        if (!error) break;
+        if (/23505|duplicate/i.test(`${error.code} ${error.message}`)) { token = this.token(); continue; } // code already taken: try another
+        if (/23514|check constraint|too short|length|violates/i.test(`${error.code} ${error.message}`)) { token = this.token(true); continue; } // an older table that only accepts long codes
+        break;
+      }
       if (error) throw this.explain(error);
-      quiz.token = token;
-      return this.urlFor(token);
+      const form = { id: newId("form"), name: (name || "").trim() || `Form ${quiz.forms.length + 1}`, token, open: true, createdAt: new Date().toISOString() };
+      quiz.forms.push(form);
+      ScoringModule.normalizeQuiz(ScoringModule.findTest(toolId, testId));
+      return { url: this.urlFor(token), form };
     },
-    /** Re-publishes the questions/settings/roster, copies answers (keeping the teacher's edits), grades. Returns { responses, students, expected, missing }. */
-    async sync(toolId, testId) {
+    /** Re-publishes the questions/settings/roster to every open form (or one), copies answers (keeping the teacher's edits), grades. Returns { responses, students, expected, missing }. */
+    async sync(toolId, testId, onlyFormId) {
       const quiz = ScoringModule.quizOf(toolId, testId);
-      if (!quiz.token) throw new Error("This quiz's QR code is closed.");
+      const forms = quiz.forms.filter((f) => f.open && f.token && (!onlyFormId || f.id === onlyFormId));
+      if (!forms.length) throw new Error("This quiz has no open QR code.");
       const { title, config, people } = this.build(toolId, testId);
       const c = this.client();
-      const up = await c.from("quiz_forms").update({ title, config, people }).eq("token", quiz.token);
-      if (up.error) throw this.explain(up.error);
-      const { data, error } = await c.from("quiz_responses").select("respondent, payload, submitted_at, attempt").eq("token", quiz.token);
-      if (error) throw this.explain(error);
       const nameOf = new Map(people.map((p) => [p.sid, p.name]));
-      const known = new Map(quiz.submissions.map((s) => [`${s.sid}|${s.attempt}`, s]));
+      const known = new Map(quiz.submissions.map((s) => [`${s.form}|${s.sid}|${s.attempt}`, s]));
       const gone = new Set(quiz.removed || []);
-      (data || []).forEach((r) => {
-        const attempt = Number(r.attempt) || 1;
-        if (gone.has(`${r.respondent}|${attempt}|${r.submitted_at}`)) return;
-        const k = `${r.respondent}|${attempt}`;
-        const rec = known.get(k) || { sid: r.respondent, attempt, overrides: {} };
-        rec.name = nameOf.get(r.respondent) || rec.name || "";
-        rec.answers = (r.payload && r.payload.answers) || {};
-        rec.at = r.submitted_at;
-        known.set(k, rec); // teacher edits (overrides) are kept
-      });
+      for (const f of forms) {
+        const up = await c.from("quiz_forms").update({ title, config, people }).eq("token", f.token);
+        if (up.error) throw this.explain(up.error);
+        const { data, error } = await c.from("quiz_responses").select("respondent, payload, submitted_at, attempt").eq("token", f.token);
+        if (error) throw this.explain(error);
+        (data || []).forEach((r) => {
+          const attempt = Number(r.attempt) || 1;
+          if (gone.has(`${r.respondent}|${attempt}|${r.submitted_at}`)) return;
+          const k = `${f.id}|${r.respondent}|${attempt}`;
+          const rec = known.get(k) || { sid: r.respondent, attempt, overrides: {}, form: f.id };
+          rec.name = nameOf.get(r.respondent) || rec.name || "";
+          rec.answers = (r.payload && r.payload.answers) || {};
+          rec.at = r.submitted_at;
+          known.set(k, rec); // teacher edits (overrides) are kept
+        });
+      }
       quiz.submissions = [...known.values()];
       ScoringModule.regradeQuiz(toolId, testId);
-      const done = new Set(quiz.submissions.map((s) => s.sid));
+      const shown = viewSubs(quiz), done = new Set(shown.map((s) => s.sid));
       return {
-        responses: quiz.submissions.length, students: done.size, expected: people.length,
+        responses: shown.length, students: done.size, expected: people.length,
         missing: people.filter((p) => !done.has(p.sid)).map((p) => p.name || p.sid),
       };
     },
-    /** Deletes one student's attempt: from this quiz (scores are re-calculated) and, if the QR code is open, from the server so the attempt no longer counts against them. Returns { serverCleared }. */
+    /** Deletes one student's attempt: from this quiz (scores are re-calculated) and, if its form is open, from the server so the attempt no longer counts against them. Returns { serverCleared }. */
     async removeAttempt(toolId, testId, sub) {
       const quiz = ScoringModule.quizOf(toolId, testId);
-      let serverCleared = !quiz.token;
-      if (quiz.token) {
+      const form = quiz.forms.find((f) => f.id === sub.form);
+      let serverCleared = !(form && form.open);
+      if (form && form.open) {
         try {
-          const { error } = await this.client().from("quiz_responses").delete().eq("token", quiz.token).eq("respondent", sub.sid).eq("attempt", sub.attempt);
+          const { error } = await this.client().from("quiz_responses").delete().eq("token", form.token).eq("respondent", sub.sid).eq("attempt", sub.attempt);
           serverCleared = !error;
         } catch (e) { serverCleared = false; }
         if (!serverCleared && sub.at) quiz.removed.push(`${sub.sid}|${sub.attempt}|${sub.at}`);
@@ -429,13 +454,15 @@
       ScoringModule.regradeQuiz(toolId, testId);
       return { serverCleared };
     },
-    /** Closes the QR code and deletes server copies; graded answers stay in this app. */
-    async close(toolId, testId) {
+    /** Closes one form's QR code (or all open ones) and deletes the server copies; graded answers stay in this app. */
+    async close(toolId, testId, formId) {
       const quiz = ScoringModule.quizOf(toolId, testId);
-      if (!quiz.token) return;
-      const { error } = await this.client().from("quiz_forms").delete().eq("token", quiz.token);
-      if (error) throw this.explain(error);
-      quiz.token = null;
+      for (const f of quiz.forms.filter((x) => x.open && x.token && (!formId || x.id === formId))) {
+        const { error } = await this.client().from("quiz_forms").delete().eq("token", f.token);
+        if (error) throw this.explain(error);
+        f.open = false; f.token = null;
+      }
+      ScoringModule.normalizeQuiz(ScoringModule.findTest(toolId, testId));
     },
   };
   window.QuizFormsModule = QuizForms;
@@ -503,7 +530,7 @@
         rows: [], scores: {}, unmatched: [],
       };
       if (item.quiz) {
-        test.quiz = { ...JSON.parse(JSON.stringify(item.quiz)), token: null, submissions: [] };
+        test.quiz = { ...JSON.parse(JSON.stringify(item.quiz)), token: null, submissions: [], forms: [], view: "all", runs: undefined };
         ScoringModule.normalizeQuiz(test);
       }
       cfg.tests.push(test);
@@ -565,7 +592,7 @@
       if (lose && !confirm("Switching to a survey stops scoring: the answer key and points are kept but ignored, and students' scores are hidden until you switch back. Continue?")) { typeSel.value = quiz.kind; return; }
       ScoringModule.setQuizKind(tool.id, test.id, to);
       viewOf.set(tool.id, "build");
-      if (quiz.token) alert("This item's QR code is open: click Get Responses in the list to publish the new type to students.");
+      if (quiz.token) alert("This item's QR code is open: use Results → Get Responses in the list to publish the new type to students.");
       rerender();
     });
     left.appendChild(typeSel);
@@ -574,6 +601,14 @@
     left.appendChild(button("Print", "btn btn-ghost btn-small", () => window.QuizPrint && QuizPrint.open(quiz, test.name)));
     left.appendChild(button("Export quiz template", "btn btn-ghost btn-small", () => exportTemplate(test, quiz))).title = "A CSV of this quiz laid out for Excel (an empty quiz gives an example sheet showing what to type where). Fill it in and use “Upload quiz contents” to make a new quiz from it.";
     left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
+    if (current === "results" && quiz.forms.length) { // which form's answers to show (and send to Main Scores)
+      left.appendChild(h("label", "", "Showing:"));
+      const vs = h("select");
+      [["all", `All forms combined (${quiz.forms.length})`], ...quiz.forms.map((f) => [f.id, `${f.name}${f.open ? " — QR open" : ""} (${quiz.submissions.filter((x) => x.form === f.id).length})`])].forEach(([id, text]) => { const o = h("option", "", text); o.value = id; if (id === (quiz.view || "all")) o.selected = true; vs.appendChild(o); });
+      vs.title = "Choose one form's answers, or all forms together. This also decides which answers count in Main Scores.";
+      vs.addEventListener("change", () => { quiz.view = vs.value; ScoringModule.regradeQuiz(tool.id, test.id); flush(); rerender(); });
+      left.appendChild(vs);
+    }
     bar.appendChild(left);
     bar.appendChild(h("span", "count-badge", isSurveyKind(quiz.kind) ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
     return bar;
@@ -1097,7 +1132,7 @@
   /** Every student with more than one entry, one after another; a dialog appears for each conflicting answer. */
   async function combineAllDuplicates(tool, container, test, quiz) {
     const count = new Map();
-    quiz.submissions.forEach((x) => count.set(x.sid, (count.get(x.sid) || 0) + 1));
+    viewSubs(quiz).forEach((x) => count.set(x.sid, (count.get(x.sid) || 0) + 1));
     const dupes = [...count.entries()].filter(([, n]) => n > 1);
     if (!dupes.length) { alert("No student has more than one entry."); return; }
     const big = dupes.filter(([, n]) => n > 2).length;
@@ -1124,7 +1159,7 @@
     });
     if (mode === "edit") {
       const count = new Map();
-      quiz.submissions.forEach((x) => count.set(x.sid, (count.get(x.sid) || 0) + 1));
+      viewSubs(quiz).forEach((x) => count.set(x.sid, (count.get(x.sid) || 0) + 1));
       const n = [...count.values()].filter((c) => c > 1).length;
       const b = button(`Combine all duplicate entries${n ? ` (${n})` : ""}`, "btn btn-ghost btn-small", () => combineAllDuplicates(tool, container, test, quiz));
       b.disabled = n === 0;
@@ -1142,7 +1177,7 @@
       const total = ScoringModule.quizTotal(quiz);
       const qs = allQuestions(quiz).map((x) => x.q);
       const by = new Map();
-      quiz.submissions.forEach((x) => { if (!by.has(x.sid)) by.set(x.sid, []); by.get(x.sid).push(x); });
+      viewSubs(quiz).forEach((x) => { if (!by.has(x.sid)) by.set(x.sid, []); by.get(x.sid).push(x); });
       const rule = quiz.settings.attemptRule;
       const counted = [];
       by.forEach((list) => {
@@ -1161,7 +1196,7 @@
       const names = (pick) => counted.filter((c) => c.sc === pick).map((c) => c.x.name || c.x.sid).slice(0, 4).join(", ");
       const rows = [
         ["Students counted", String(n)],
-        ["Total entries", `${quiz.submissions.length}${quiz.submissions.length > n ? ` (${quiz.submissions.length - n} extra)` : ""}`],
+        ["Total entries", `${viewSubs(quiz).length}${viewSubs(quiz).length > n ? ` (${viewSubs(quiz).length - n} extra)` : ""}`],
         ["Counted attempt", rule === "latest" ? "Latest" : rule === "first" ? "First" : "Best"],
         ["Maximum points", f(total)],
         ["High score", `${f(scores[n - 1])}${pct(scores[n - 1])} — ${names(scores[n - 1])}`],
@@ -1199,8 +1234,8 @@
     container.appendChild(section);
     body.appendChild(h("p", "hint", "● green = correct, ✕ red = incorrect. Change any student's answer in its box, or fix an answer in the \"Answer key\" row — scores update instantly. Edited answers get a yellow outline and are kept when you Get Responses again."));
 
-    if (quiz.submissions.length === 0) {
-      body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
+    if (viewSubs(quiz).length === 0) {
+      body.appendChild(h("p", "hint", "No answers yet. Use QR / Forms in the Tests & Quizzes list to launch a QR code, then Results → Get Responses."));
       return;
     }
     const stats = statsBox(quiz);
@@ -1275,7 +1310,7 @@
     const rows = [];
     let lastSid = null;
     let prevSid = null;
-    const sorted = [...quiz.submissions].sort(studentOrder);
+    const sorted = [...viewSubs(quiz)].sort(studentOrder);
     const entryCount = new Map();
     sorted.forEach((x) => entryCount.set(x.sid, (entryCount.get(x.sid) || 0) + 1));
     sorted.forEach((s) => {
@@ -1404,7 +1439,7 @@
   }
 
   // ---------- CSV export ----------
-  const sortedSubs = (quiz) => [...quiz.submissions].sort(studentOrder);
+  const sortedSubs = (quiz) => [...viewSubs(quiz)].sort(studentOrder);
   const allQuestions = (quiz) => {
     const out = [];
     quiz.sections.forEach((sec) => sec.questions.forEach((q) => out.push({ q, sec })));
@@ -1488,7 +1523,7 @@
   /** Tallies per question (long form): every option or distinct typed answer, how many chose it, and % (plus % correct for graded types). */
   function summaryTallies(quiz) {
     return allQuestions(quiz).map(({ q, sec }, i) => {
-      const answers = quiz.submissions.map((s) => ScoringModule.quizEffectiveAnswers(s)[q.id]).map((a) => (a === undefined || a === null ? "" : a));
+      const answers = viewSubs(quiz).map((s) => ScoringModule.quizEffectiveAnswers(s)[q.id]).map((a) => (a === undefined || a === null ? "" : a));
       const answered = answers.filter((a) => a !== "");
       const items = [];
       if (q.type === "multi") {
@@ -1764,7 +1799,7 @@
     body.appendChild(h("p", "hint", "Each time you launch a new QR code, the earlier answers are saved as a run. Compare runs below to see what changed. The current run is saved automatically when you launch the next QR code, or now with the button."));
     const bar = h("div", "qz-actions");
     bar.appendChild(button("Save current answers as a run", "btn btn-primary btn-small", () => {
-      if (quiz.token) { alert("Close the QR code first (Test & Quiz Bank → QR Code → Close QR Code), so no more answers arrive."); return; }
+      if (quiz.token) { alert("Close the QR code first (Test & Quiz Bank → QR / Forms → Close), so no more answers arrive."); return; }
       if (!quiz.submissions.length) { alert("There are no current answers to save."); return; }
       archiveRun(quiz); rerender();
     }));
@@ -1828,8 +1863,8 @@
     section.classList.add("qz-sec-review");
     container.appendChild(section);
     if (quiz.kind === "formative") renderFormativeRuns(body, tool, container, test, quiz);
-    if (quiz.submissions.length === 0) {
-      body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
+    if (viewSubs(quiz).length === 0) {
+      body.appendChild(h("p", "hint", "No answers yet. Use QR / Forms in the Tests & Quizzes list to launch a QR code, then Results → Get Responses."));
       return;
     }
     const bar = h("div", "qz-actions");
@@ -1837,7 +1872,7 @@
     body.appendChild(bar);
 
     // summary
-    body.appendChild(h("h4", "", `${quiz.kind === "formative" ? "Current run — summary" : "Summary"} (${quiz.submissions.length} response${quiz.submissions.length === 1 ? "" : "s"})`));
+    body.appendChild(h("h4", "", `${quiz.kind === "formative" ? "Current run — summary" : "Summary"} (${viewSubs(quiz).length} response${viewSubs(quiz).length === 1 ? "" : "s"})`));
     summaryTallies(quiz).forEach((t) => {
       const box = h("div", "category-manage-item");
       box.style.marginBottom = "10px";
@@ -1920,8 +1955,8 @@
     section.classList.add("qz-sec-review");
     container.appendChild(section);
 
-    if (quiz.submissions.length === 0) {
-      body.appendChild(h("p", "hint", "No answers yet. Launch the QR code from the Tests & Quizzes list, then click Get Responses."));
+    if (viewSubs(quiz).length === 0) {
+      body.appendChild(h("p", "hint", "No answers yet. Use QR / Forms in the Tests & Quizzes list to launch a QR code, then Results → Get Responses."));
       return;
     }
     body.appendChild(h("p", "hint", "Click a column heading (Student, Attempt, Time, Score or a question) to sort. Hover over a symbol to see the student's answer. To change an answer, fix the answer key or combine entries, switch to Edit mode above."));
@@ -1986,7 +2021,7 @@
     const tbody = h("tbody");
     const correctCount = qs.map(() => 0);
     let lastSid = null;
-    const scoreOf = new Map(quiz.submissions.map((x) => [x, ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x))]));
+    const scoreOf = new Map(viewSubs(quiz).map((x) => [x, ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x))]));
     const sortValue = (x) => {
       if (sort.key === "attempt") return x.attempt;
       if (sort.key === "time") { const t = timeOf(x); return t === null ? 0 : t; }
@@ -1998,7 +2033,7 @@
       }
       return 0;
     };
-    const ordered = [...quiz.submissions].sort((a, b) => {
+    const ordered = [...viewSubs(quiz)].sort((a, b) => {
       if (sort.key === "name") return sort.dir * studentOrder(a, b);
       // other columns: larger-first when sorted "▲" for score/questions is unnatural, so ▲ = smallest first, except questions (▲ = correct first)
       const d = sortValue(a) - sortValue(b);
@@ -2039,7 +2074,7 @@
     ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
-    const count = quiz.submissions.length;
+    const count = viewSubs(quiz).length;
     qs.forEach((q, i) => ftr.appendChild(h("td", "", `${Math.round((100 * correctCount[i]) / count)}%`)));
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
@@ -2075,6 +2110,8 @@
       list.setAttribute("role", "menu");
       list.style.setProperty("--qz-menu-c", accent);
       items.forEach((it) => {
+        if (it === "-") { list.appendChild(h("hr")); return; }
+        if (it.heading) { const hd = h("div", "hint", it.heading); hd.style.cssText = "padding:4px 10px 0;font-size:.75rem;font-weight:700;"; list.appendChild(hd); return; }
         const b = h("button", "btn btn-ghost btn-small qz-menu-item", it.label);
         b.type = "button";
         b.setAttribute("role", "menuitem");
@@ -2240,21 +2277,12 @@
       const tr = mains[i];
       if (!tr) return;
       const courseId = RosterModule.currentCourseId;
-      const shareBtn = button("Add to courses…", "btn btn-ghost btn-small qz-act-share", guard(async () => {
-        const msg = await QTSBank.addToCourses(courseId, tool.id, t);
-        if (msg) { say(msg); rerender(); }
-      }));
       const statusBtns = window.QTSBank && t.quiz ? QTSBank.statusButtons(courseId, tool.id, t, say, rerender) : [];
-      if (!t.quiz) {
-        const only = h("div", "qz-actions");
-        only.appendChild(shareBtn);
-        tr.children[5].insertBefore(only, tr.children[5].firstChild);
-        return;
-      }
+      if (!t.quiz) return;
       const quiz = ScoringModule.normalizeQuiz(t);
       const go = (view) => () => { editing.set(tool.id, t.id); if (view === "results" || view === "review") { resultMode.set(t.id, view === "review" ? "edit" : "view"); view = "results"; } viewOf.set(tool.id, view); rerender(); };
-      const students = new Set(quiz.submissions.map((x) => x.sid)).size;
-      tr.children[4].textContent = quiz.token ? "QR open" : "";
+      const students = new Set(viewSubs(quiz).map((x) => x.sid)).size;
+      { const nOpen = quiz.forms.filter((f) => f.open).length; tr.children[4].textContent = nOpen > 1 ? `QR open (${nOpen} forms)` : nOpen ? "QR open" : ""; }
       const maxCell = tr.children[1];
       maxCell.textContent = "";
       const isSurvey = isSurveyKind(quiz.kind);
@@ -2265,63 +2293,71 @@
 
       const group = h("div", "qz-actions");
       group.appendChild(button(t.libId ? "Edit Questions" : "Edit this Quiz's Questions", "btn btn-primary btn-small", go("build")));
-      const qrItems = !quiz.token
-        ? [{
-          label: "Launch QR Code",
-          onClick: guard(async () => {
-            say("Creating QR code…");
-            const url = await QuizForms.create(tool.id, t.id);
-            flush();
-            say(`QR code for "${t.name}" is open.`);
-            rerender();
-            openQr(url + (window.QRStyles ? QRStyles.query(quiz.style) : ""));
-          }),
-        }]
-        : [
-          { label: "Show QR Code", onClick: () => openQr(QuizForms.urlFor(quiz.token) + (window.QRStyles ? QRStyles.query(quiz.style) : "")) },
-          {
-            label: "Get Responses",
-            onClick: guard(async () => {
-              say("Getting responses…");
-              const r = await QuizForms.sync(tool.id, t.id);
-              flush();
-              say(`${t.name}: ${r.responses} attempt(s) from ${r.students} of ${r.expected} student(s) collected and graded.` + (r.missing.length ? ` Not yet: ${r.missing.slice(0, 12).join(", ")}${r.missing.length > 12 ? "…" : ""}.` : ""));
-              rerender();
-            }),
-          },
-          {
-            label: "Close QR Code",
-            onClick: guard(async () => {
-              if (!confirm("Close the QR code? Click Get Responses first if you haven't — the server's copies of the answers are deleted on close.")) return;
-              await QuizForms.close(tool.id, t.id);
-              flush();
-              say(`QR code for "${t.name}" closed. Graded results are kept.`);
-              rerender();
-            }),
-          },
-        ];
-      group.appendChild(menuButton("QR Code", "#c2571a", qrItems));
+      const styleQ = () => (window.QRStyles ? QRStyles.query(quiz.style) : "");
+      const openForms = quiz.forms.filter((f) => f.open && f.token);
+      // QR / Forms: each form is its own QR code (and link) with its own answers.
+      const qrItems = [];
+      if (openForms.length) qrItems.push({ heading: "Open forms" });
+      openForms.forEach((f) => {
+        qrItems.push({ label: `Show QR code — ${f.name}`, onClick: () => openQr(QuizForms.urlFor(f.token) + styleQ()) });
+        qrItems.push({ label: `Copy link — ${f.name}`, onClick: guard(async () => { await navigator.clipboard.writeText(QuizForms.urlFor(f.token)); say(`Link for “${f.name}” copied: ${QuizForms.urlFor(f.token)}`); }) });
+      });
+      const newForm = guard(async () => {
+        const nm = prompt("Name for this form (for example “Period 2” or “Retake”):", `Form ${quiz.forms.length + 1}`);
+        if (nm === null) return;
+        say("Creating QR code…");
+        const r = await QuizForms.create(tool.id, t.id, nm);
+        flush();
+        say(`QR code for “${t.name}” — ${r.form.name} is open.`);
+        rerender();
+        openQr(r.url + styleQ());
+      });
+      qrItems.push(openForms.length ? "-" : null);
+      qrItems.push({ label: quiz.forms.length ? "＋ New form (new QR code)…" : "Launch QR Code…", onClick: newForm });
+      if (quiz.forms.length) {
+        qrItems.push("-", { heading: "Forms" });
+        quiz.forms.forEach((f) => {
+          qrItems.push({ label: `Rename — ${f.name}${f.open ? "" : " (closed)"}`, onClick: () => { const nm = prompt("Form name:", f.name); if (nm && nm.trim()) { f.name = nm.trim(); flush(); rerender(); } } });
+          if (f.open) qrItems.push({ label: `Close — ${f.name}`, onClick: guard(async () => {
+            if (!confirm(`Close “${f.name}”? Its link and QR code stop working and the server's copies of its answers are deleted, so use Results → Get Responses first. Answers already collected stay here.`)) return;
+            await QuizForms.close(tool.id, t.id, f.id); flush(); say(`“${f.name}” closed. Its answers are kept.`); rerender();
+          }) });
+        });
+      }
+      group.appendChild(menuButton("QR / Forms", "#c2571a", qrItems.filter(Boolean)));
+
+      // Results: open them, fetch new answers, re-grade, and choose which form's answers to show.
+      const resItems = [{ label: `Results (${students})`, onClick: go("results") }];
+      if (openForms.length) resItems.push({
+        label: openForms.length > 1 ? "Get Responses (all open forms)" : "Get Responses",
+        onClick: guard(async () => {
+          say("Getting responses…");
+          const r = await QuizForms.sync(tool.id, t.id);
+          flush();
+          say(`${t.name}: ${r.responses} attempt(s) from ${r.students} of ${r.expected} student(s) collected${isSurvey ? "" : " and graded"}.` + (r.missing.length ? ` Not yet: ${r.missing.slice(0, 12).join(", ")}${r.missing.length > 12 ? "…" : ""}.` : ""));
+          rerender();
+        }),
+      });
+      if (!isSurvey) resItems.push({
+        label: "Re-Calculate Results",
+        onClick: guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Results for "${t.name}" re-calculated.`); rerender(); }),
+      });
+      if (quiz.forms.length) {
+        resItems.push("-", { heading: "Show answers from (also used by Main Scores)" });
+        [["all", `All forms combined`], ...quiz.forms.map((f) => [f.id, f.name])].forEach(([id, label]) => {
+          resItems.push({ label: `${(quiz.view || "all") === id ? "✓ " : "\u2003"}${label}`, onClick: () => { quiz.view = id; ScoringModule.regradeQuiz(tool.id, t.id); flush(); rerender(); } });
+        });
+      }
+      group.appendChild(menuButton("Results", "#0f7d73", resItems));
+
       if (window.QRStyles) {
         QRStyles.ensureLoaded().catch(() => {});
         group.appendChild(QRStyles.menuButton(() => quiz.style || null, (st) => { quiz.style = st || null; flush(); }, say, "btn btn-ghost btn-small qz-menu-btn"));
       }
-      group.appendChild(isSurvey
-        ? button(`Show Results (${students})`, "btn btn-ghost btn-small qz-menu-btn", go("results"))
-        : menuButton("Results", "#0f7d73", [
-          { label: `Results (${students})`, onClick: go("results") },
-          {
-            label: "Re-Calculate Results",
-            onClick: guard(async () => {
-              ScoringModule.regradeQuiz(tool.id, t.id);
-              flush();
-              say(`Results for "${t.name}" re-calculated.`);
-              rerender();
-            }),
-          },
-        ]));
-      group.appendChild(button("Print", "btn btn-ghost btn-small qz-menu-btn", () => window.QuizPrint && QuizPrint.open(quiz, t.name)));
-      group.appendChild(menuButton("Export CSV", "#4a5568", exportItems(t, quiz)));
-      group.appendChild(shareBtn);
+      group.appendChild(menuButton("More", "#4a5568", [
+        { label: "Print", onClick: () => window.QuizPrint && QuizPrint.open(quiz, t.name) },
+        "-", ...exportItems(t, quiz).map((it) => ({ ...it, label: `Export: ${it.label}` })),
+      ]));
       statusBtns.forEach((b) => group.appendChild(b));
       // Keep the bank's own Delete button (same behavior); drop Details / Re-match for quizzes.
       const actions = tr.children[5];

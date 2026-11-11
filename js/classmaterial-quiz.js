@@ -201,7 +201,7 @@
           stale ? b("Update (re-grade)", act(host, () => c.updateOne(r))) : null,
           it ? b("Unlink", act(host, async () => { if (!confirm("Unlink this quiz from its template? Template edits will no longer reach it. (You can link it again later.)")) return ""; await c.makeOwn(r); return "Unlinked: this quiz is now its own copy."; }), "Stop following the template")
              : b("Link…", act(host, () => linkToTemplate(r, c)), "Link this quiz to a template so it follows the template's edits"),
-          b("Delete", act(host, async () => { if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR Code → Close QR Code)"); if (!confirm(`Delete “${d.name}” from this course?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers, which will be lost.` : ""}`)) return ""; await c.courseRemove(r.courseId, r.toolId, r.id); rebuildTabs(); return "Deleted."; })),
+          b("Delete", act(host, async () => { if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR / Forms → Close)"); if (!confirm(`Delete “${d.name}” from this course?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers, which will be lost.` : ""}`)) return ""; await c.courseRemove(r.courseId, r.toolId, r.id); rebuildTabs(); return "Deleted."; })),
           ex.length ? c.menuButton("Export", () => ex) : null)];
     })));
 
