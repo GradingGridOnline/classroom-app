@@ -2197,7 +2197,7 @@
     container.appendChild(section);
 
     const hint = body.querySelector("p.hint");
-    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or build a quiz (questions with text) an Answer Collection (just question numbers and options, to match a paper test sheet) or a Survey (a quiz with no scoring) and collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
+    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or manage the quizzes, answer collections and surveys of this course (new ones are made in Class Material → Quiz Library). Collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
 
     const create = (kind, label) => () => {
       const count = tests.filter((t) => t.quiz).length + 1;
@@ -2220,15 +2220,9 @@
       } catch (err) { alert(`Couldn't make the quiz: ${err.message}`); return; }
       rerender();
     });
+    // Quizzes are made in Class Material → Quiz Library; this tool only manages them (and feeds Main Scores).
     const btns = body.querySelector(".panel-toolbar-buttons");
-    if (btns) {
-      { const ex = button("Export quiz template", "btn btn-ghost", () => QuizSheet.example("standard")); ex.title = "Downloads an example sheet (CSV) showing what to type where. Fill it in (in Excel too) and upload it."; btns.insertBefore(ex, btns.firstChild); }
-      { const up = button("Upload quiz contents", "btn btn-ghost", upload); up.title = "Make a new quiz from a filled-in CSV or Excel sheet (see “Export quiz template”)."; btns.insertBefore(up, btns.firstChild); }
-      btns.insertBefore(button("+ New Formative Survey", "btn btn-ghost", create("formative", "Formative Survey")), btns.firstChild);
-      btns.insertBefore(button("+ New Research Survey", "btn btn-ghost", create("survey", "Research Survey")), btns.firstChild);
-      btns.insertBefore(button("+ New Answer Collection", "btn btn-ghost", create("answers", "Answer Collection")), btns.firstChild);
-      btns.insertBefore(button("+ New Quiz", "btn btn-ghost", create("standard", "Quiz")), btns.firstChild);
-    }
+    if (btns) btns.appendChild(button("Open Quiz Library", "btn btn-ghost", () => { window.showTab("classmaterial"); if (window.ClassMaterial && ClassMaterial.show) ClassMaterial.show("quiz"); }));
 
     // status line for the QR buttons
     const statKey = `${tool.id}|bank`;
