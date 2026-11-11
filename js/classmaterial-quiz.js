@@ -181,7 +181,7 @@
     const refresh = b("Refresh", () => { model = null; draw(host); });
     const rows = model.rows.filter((r) => r.d.kind !== "test");
     const itemName = (id) => { const it = c.itemById(id); return it ? it.name : ""; };
-    const sourceCell = (r) => { const it = r.d.libId && c.itemById(r.d.libId); return !it ? "Own" : `Template: ${it.name}${c.isStale(r.d, it) ? " — update available" : ""}`; };
+    const sourceCell = (r) => { const it = r.d.libId && c.itemById(r.d.libId); return !it ? "Not linked" : `Template: ${it.name}${c.isStale(r.d, it) ? " — update available" : ""}`; };
 
     // ---- 1. this course ----
     const mine = rows.filter((r) => r.courseId === cid);
