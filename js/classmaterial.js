@@ -176,15 +176,22 @@
     busy = ""; render();
   }
 
-  let view = "materials";
+  let view = "materials", section = "slides";
+  const SECTIONS = [["quiz", "Quiz Library"], ["slides", "Slideshows"], ["worksheets", "Worksheets"]];
   function render() {
     panel.innerHTML = "";
     if (!CM.courseId) { panel.appendChild(mk("p", "hint", "Open a course to see its class material.")); return; }
+    const top = mk("div", "cm-row cm-sections");
+    SECTIONS.forEach(([k, label]) => { const b = btn(label, `btn ${section === k ? "btn-primary" : "btn-ghost"}`, () => { section = k; render(); }); b.setAttribute("aria-pressed", String(section === k)); top.appendChild(b); });
+    panel.appendChild(top);
+    const body = mk("div"); panel.appendChild(body);
+    if (section === "quiz") { if (API.quizLibrary) API.quizLibrary(body); else body.appendChild(mk("p", "hint", "The Quiz Library isn't available.")); return; }
+    if (section === "worksheets") { body.appendChild(mk("p", "hint", "Worksheets will be built later.")); return; }
     const views = Object.assign({ materials: { label: "Materials" } }, API.views);
     const seg = mk("div", "cm-row");
     Object.entries(views).forEach(([k, v]) => { const b = btn(v.label, `btn btn-small ${view === k ? "btn-primary" : "btn-ghost"}`, () => { view = k; render(); }); b.setAttribute("aria-pressed", String(view === k)); seg.appendChild(b); });
-    if (Object.keys(views).length > 1) panel.appendChild(seg);
-    const host = mk("div"); panel.appendChild(host);
+    if (Object.keys(views).length > 1) body.appendChild(seg);
+    const host = mk("div"); body.appendChild(host);
     if (view !== "materials" && views[view]) { views[view].render(host); return; }
     renderMaterials(host);
   }
@@ -259,7 +266,7 @@
   };
   tabBtn.addEventListener("click", () => window.showTab("classmaterial"));
   // Other files (classmaterial-slides.js) plug in through this object.
-  const API = { views: {}, newSlideshow: null, itemMeta: null, itemActions: null, afterMaterials: null };
-  Object.assign(API, { render, run, say, ensureLoaded, G, CM, KINDS, mk, btn, courseTitle, createItem, fmt, courseFolder });
+  const API = { views: {}, newSlideshow: null, itemMeta: null, itemActions: null, afterMaterials: null, quizLibrary: null };
+  Object.assign(API, { show(k) { section = k; render(); }, render, run, say, ensureLoaded, G, CM, KINDS, mk, btn, courseTitle, createItem, fmt, courseFolder });
   window.ClassMaterial = API;
 })();

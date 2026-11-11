@@ -24,6 +24,7 @@
   if (!reportBtn || !reportPanel) return;
   const tabBtn = mk("button", "tab-btn", "Quiz Library"); tabBtn.id = "tab-qts-btn";
   (document.getElementById("tab-journal-btn") || reportBtn).after(tabBtn);
+  tabBtn.style.display = "none"; // the Quiz Library now lives inside Class Material (js/classmaterial-quiz.js)
   const panel = mk("div", "tab-panel"); panel.id = "qts-panel"; panel.hidden = true;
   reportPanel.after(panel);
 
@@ -959,7 +960,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   const tbanner = mk("div"); tbanner.hidden = true;
   tbanner.style.cssText = "margin:0 0 16px;padding:12px 16px;border:2px solid #c2571a;border-radius:8px;background:color-mix(in srgb, #c2571a 14%, var(--card));";
   const tbText = mk("div"); tbText.style.fontWeight = "700";
-  const tbHint = mk("div", "hint", "You're editing a Library item (no students here). Saving updates it in every course that uses it; courses with student answers show “Update available”.");
+  const tbHint = mk("div", "hint", "You're editing a template (no students here). Saving updates every course quiz linked to it; courses with student answers show “Update available”.");
   const tbBar = mk("div", "panel-toolbar-buttons"); tbBar.style.marginTop = "10px";
   const tbStatus = mk("p", "result"); tbStatus.style.margin = "8px 0 0";
   const tbBtn = (label, cls, fn) => { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); tbBar.appendChild(b); return b; };
@@ -988,15 +989,17 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   async function closeTpl(save) {
     if (!tedit) return;
     if (save && !(await saveTpl())) return;
-    const { cid } = tedit; tedit = null;
+    const { cid, back } = tedit; tedit = null;
     CoursesModule.courses = CoursesModule.courses.filter((c) => !c.editingTemplateId);
     tbanner.hidden = true; el.tabRosterBtn.style.display = "";
-    await showCourses();
+    const home = back && CoursesModule.courses.find((c) => c.id === back);
+    if (home) { await openCourseDetail(home); window.showTab("classmaterial"); if (window.ClassMaterial && ClassMaterial.show) ClassMaterial.show("quiz"); }
+    else await showCourses();
     ["roster", "seating", "attendance", "scoring", "reportcard"].forEach((p) => { try { Promise.resolve(storage.deleteFile(`${p}-${cid}.json`)).catch(() => {}); } catch (e) {} });
     invalidate();
   }
-  tbBtn("Save to Template", "btn btn-primary btn-small", () => saveTpl());
-  tbBtn("Save & Close", "btn btn-ghost btn-small", () => closeTpl(true));
+  tbBtn("Save template", "btn btn-primary btn-small", () => saveTpl());
+  tbBtn("Save & back to Quiz Library", "btn btn-ghost btn-small", () => closeTpl(true));
   tbBtn("Close without saving", "btn btn-ghost btn-small", () => { if (confirm("Close without saving? Changes since your last save will be lost.")) closeTpl(false); });
   if (typeof el !== "undefined" && el.backToCoursesBtn) el.backToCoursesBtn.addEventListener("click", (e) => { if (!tedit) return; e.stopImmediatePropagation(); closeTpl(true); }, true);
   async function openTplEditor(row) {
@@ -1011,9 +1014,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     await storage.saveFile(`scoring-${cid}.json`, { categories: [], records: {}, weights: {}, presentationMigrated: true, tools: [{ id: toolId, type: "testbank", name: "Test & Quiz Bank", config: { tests: [test] } }] });
     const course = { id: cid, name: `Library: ${item.name}`, periodId: null, archived: false, templateId: null, editingTemplateId: "qts" };
     CoursesModule.courses.push(course);
-    tedit = { cid, id: item.id };
+    const back = ScoringModule.currentCourseId && !isTmp(ScoringModule.currentCourseId) ? ScoringModule.currentCourseId : null;
+    tedit = { cid, id: item.id, back };
     await openCourseDetail(course);
-    tbText.textContent = `Editing Library item “${item.name}”`; tbStatus.textContent = ""; tbanner.hidden = false;
+    tbText.textContent = `Editing template “${item.name}”`; tbStatus.textContent = ""; tbanner.hidden = false;
     el.tabRosterBtn.style.display = "none";
     window.QuizBankUI.open(toolId, item.id);
     showTab("scoring");
@@ -1072,21 +1076,20 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       return p;
     },
     buildSection(tool, container) {
-      const { section, body } = makePresSection("Quiz Library — all quizzes, tests & surveys");
+      const { section, body } = makePresSection("Quiz Library");
       section.classList.add("qz-sec-shared");
-      const host = mk("div");
-      body.appendChild(host);
-      const view = makeView(host, { toolId: tool.id, rerender: () => renderScoringToolView(tool, container) });
-      const msg = pendingMsg; pendingMsg = "";
-      view.refresh(msg);
+      body.appendChild(mk("p", "hint", "The Quiz Library has moved to the Class Material tab: this course's quizzes, all quizzes, and templates."));
+      const go = mk("button", "btn btn-ghost", "Open Quiz Library"); go.type = "button";
+      go.addEventListener("click", () => { window.showTab("classmaterial"); if (window.ClassMaterial && ClassMaterial.show) ClassMaterial.show("quiz"); });
+      body.appendChild(go);
       const cid = ScoringModule.currentCourseId;
-      if (firstLoad) { firstLoad = false; libEnsure().then(() => ctxRerender()).catch(() => {}); }
+      if (firstLoad) { firstLoad = false; libEnsure().catch(() => {}); }
       if (cid && Date.now() - (lastSync.get(cid) || 0) > 20000) {
         lastSync.set(cid, Date.now());
-        syncPass(null, cid).then((r) => { if (r.updated) ctxRerender(); }).catch(() => {});
+        syncPass(null, cid).then((r) => { if (r.updated) { try { renderScoringToolView(tool, container); } catch (e) {} } }).catch(() => {});
       }
-      function ctxRerender() { try { renderScoringToolView(tool, container); } catch (e) {} }
       return section;
     },
+    core: { addDialog, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, updateOne, updateAll, makeOwn, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, useStatus, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
   };
 })();
