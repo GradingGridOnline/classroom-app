@@ -135,8 +135,9 @@
       if (typeof q.token !== "string") q.token = null;
       // Forms: each QR code is one form with its own token and its own answers (submission.form).
       if (!Array.isArray(q.forms)) q.forms = [];
-      q.forms = q.forms.filter((f) => f && typeof f === "object" && f.id).map((f) => ({ id: f.id, name: String(f.name || "Form"), token: typeof f.token === "string" && f.token ? f.token : null, open: f.open === true && !!f.token, createdAt: f.createdAt || "" }));
-      if (!q.forms.length && (q.token || q.submissions.length)) q.forms.push({ id: "f1", name: "Form 1", token: q.token || null, open: !!q.token, createdAt: "" }); // older quizzes: everything so far is "Form 1"
+      q.forms = q.forms.filter((f) => f && typeof f === "object" && f.id); // (objects are tidied in place so references held by the UI stay valid)
+      q.forms.forEach((f) => { f.name = String(f.name || "Form"); f.token = typeof f.token === "string" && f.token ? f.token : null; f.open = f.open === true && !!f.token; f.counts = f.counts !== false; f.createdAt = f.createdAt || ""; });
+      if (!q.forms.length && (q.token || q.submissions.length)) q.forms.push({ id: "f1", name: "Form 1", token: q.token || null, open: !!q.token, counts: true, createdAt: "" }); // older quizzes: everything so far is "Form 1"
       q.submissions.forEach((s) => { if (!s.form || !q.forms.some((f) => f.id === s.form)) s.form = q.forms.length ? q.forms[0].id : ""; });
       { const openF = q.forms.filter((f) => f.open); q.token = openF.length ? openF[openF.length - 1].token : null; }
       if (q.view !== "all" && !q.forms.some((f) => f.id === q.view)) q.view = "all";
@@ -316,7 +317,7 @@
       test.maxPoints = this.quizTotal(quiz);
       if (isSurveyKind(quiz.kind)) { test.rows = []; test.maxPoints = 0; this._matchTestRows(test); return; } // surveys are not scored
       const bySid = new Map();
-      (quiz.view && quiz.view !== "all" ? quiz.submissions.filter((x) => x.form === quiz.view) : quiz.submissions).forEach((s) => {
+      quiz.submissions.filter((x) => { const f = quiz.forms.find((y) => y.id === x.form); return !f || f.counts !== false; }).forEach((s) => { // only forms marked "counts toward scores"
         if (!bySid.has(s.sid)) bySid.set(s.sid, []);
         bySid.get(s.sid).push(s);
       });
@@ -399,7 +400,7 @@
         break;
       }
       if (error) throw this.explain(error);
-      const form = { id: newId("form"), name: (name || "").trim() || `Form ${quiz.forms.length + 1}`, token, open: true, createdAt: new Date().toISOString() };
+      const form = { id: newId("form"), name: (name || "").trim() || `Form ${quiz.forms.length + 1}`, token, open: true, counts: true, createdAt: new Date().toISOString() };
       quiz.forms.push(form);
       ScoringModule.normalizeQuiz(ScoringModule.findTest(toolId, testId));
       return { url: this.urlFor(token), form };
@@ -605,7 +606,7 @@
       left.appendChild(h("label", "", "Showing:"));
       const vs = h("select");
       [["all", `All forms combined (${quiz.forms.length})`], ...quiz.forms.map((f) => [f.id, `${f.name}${f.open ? " — QR open" : ""} (${quiz.submissions.filter((x) => x.form === f.id).length})`])].forEach(([id, text]) => { const o = h("option", "", text); o.value = id; if (id === (quiz.view || "all")) o.selected = true; vs.appendChild(o); });
-      vs.title = "Choose one form's answers, or all forms together. This also decides which answers count in Main Scores.";
+      vs.title = "Choose one form's answers, or all forms together. (Which forms count toward scores is set on each form's row in the Tests & Quizzes list.)";
       vs.addEventListener("change", () => { quiz.view = vs.value; ScoringModule.regradeQuiz(tool.id, test.id); flush(); rerender(); });
       left.appendChild(vs);
     }
@@ -1410,6 +1411,7 @@
     ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
     ftr.appendChild(h("td"));
+    if (multiForm) ftr.appendChild(h("td"));
     const pctCells = qs.map(() => { const td = h("td"); td.style.textAlign = "center"; ftr.appendChild(td); return td; });
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
@@ -1964,6 +1966,28 @@
     const total = ScoringModule.quizTotal(quiz);
     const colors = ["#1f6fb5", "#2e8b57", "#b8860b", "#a23b72"];
     const qs = [];
+    if (quiz.forms.length > 1) { // one row per student, one column per form
+      const shownForms = quiz.forms.filter((f) => viewSubs(quiz).some((x) => x.form === f.id));
+      body.appendChild(h("h4", "", "By student — all forms"));
+      body.appendChild(h("p", "hint", "Each student's score(s) on every form (several attempts are separated by “·”). Forms marked “not counted” are in grey. The full answers are in the table below."));
+      const w0 = h("div", "attendance-table-wrap"), t0 = h("table", "attendance-table");
+      const hr = h("tr"); hr.appendChild(h("th", "", "Student")); shownForms.forEach((f) => hr.appendChild(h("th", "", f.name + (f.counts === false ? " (not counted)" : ""))));
+      const th0 = h("thead"); th0.appendChild(hr); t0.appendChild(th0);
+      const tb0 = h("tbody"), byS = new Map();
+      viewSubs(quiz).forEach((x) => { if (!byS.has(x.sid)) byS.set(x.sid, []); byS.get(x.sid).push(x); });
+      [...byS.values()].sort((a, b) => studentOrder(a[0], b[0])).forEach((list) => {
+        const tr = h("tr"), nt = h("td", "", list[0].name || "(not on roster)"); nt.appendChild(h("div", "hint", list[0].sid)); tr.appendChild(nt);
+        shownForms.forEach((f) => {
+          const mine = list.filter((x) => x.form === f.id).sort((a, b) => (a.attempt - b.attempt));
+          const td = h("td", "", mine.length ? mine.map((x) => String(ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x)))).join(" · ") + ` / ${total}` : "—");
+          td.style.cssText = "white-space:nowrap;text-align:center;" + (f.counts === false ? "opacity:.5;" : "");
+          tr.appendChild(td);
+        });
+        tb0.appendChild(tr);
+      });
+      t0.appendChild(tb0); w0.appendChild(t0); body.appendChild(w0);
+      body.appendChild(h("h4", "", "All answers"));
+    }
     const wrap = h("div", "attendance-table-wrap");
     const table = h("table", "attendance-table qz-res");
     wrap.appendChild(table);
@@ -1982,7 +2006,9 @@
         renderScoringToolView(tool, container);
       });
     };
-    [["name", "Student"], ["attempt", "Attempt"], ["time", "Time"], ["score", "Score"]].forEach(([key, label]) => {
+    const multiForm = quiz.forms.length > 1;
+    const formName = (x) => { const f = quiz.forms.find((y) => y.id === x.form); return f ? f.name : ""; };
+    [["name", "Student"], ...(multiForm ? [["form", "Form"]] : []), ["attempt", "Attempt"], ["time", "Time"], ["score", "Score"]].forEach(([key, label]) => {
       const th = h("th");
       th.rowSpan = 2;
       sortable(th, key, label);
@@ -2035,6 +2061,7 @@
     };
     const ordered = [...viewSubs(quiz)].sort((a, b) => {
       if (sort.key === "name") return sort.dir * studentOrder(a, b);
+      if (sort.key === "form") return sort.dir * (formName(a).localeCompare(formName(b)) || studentOrder(a, b));
       // other columns: larger-first when sorted "▲" for score/questions is unnatural, so ▲ = smallest first, except questions (▲ = correct first)
       const d = sortValue(a) - sortValue(b);
       const flip = sort.key.startsWith("q:") ? -1 : 1;
@@ -2048,6 +2075,7 @@
       nameTd.appendChild(h("div", "hint", s.sid));
       nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.appendChild(nameTd);
+      if (multiForm) { const ft = h("td", "", formName(s)); ft.style.whiteSpace = "nowrap"; if (!((quiz.forms.find((y) => y.id === s.form) || {}).counts !== false)) { ft.title = "This form is not counting toward scores"; ft.textContent += " (not counted)"; } tr.appendChild(ft); }
       tr.appendChild(h("td", "", String(s.attempt)));
       const timeTd = h("td", "", fmtTime(s.at));
       timeTd.style.whiteSpace = "nowrap";
@@ -2294,61 +2322,63 @@
       const group = h("div", "qz-actions");
       group.appendChild(button(t.libId ? "Edit Questions" : "Edit this Quiz's Questions", "btn btn-primary btn-small", go("build")));
       const styleQ = () => (window.QRStyles ? QRStyles.query(quiz.style) : "");
-      const openForms = quiz.forms.filter((f) => f.open && f.token);
-      // QR / Forms: each form is its own QR code (and link) with its own answers.
-      const qrItems = [];
-      if (openForms.length) qrItems.push({ heading: "Open forms" });
-      openForms.forEach((f) => {
-        qrItems.push({ label: `Show QR code — ${f.name}`, onClick: () => openQr(QuizForms.urlFor(f.token) + styleQ()) });
-        qrItems.push({ label: `Copy link — ${f.name}`, onClick: guard(async () => { await navigator.clipboard.writeText(QuizForms.urlFor(f.token)); say(`Link for “${f.name}” copied: ${QuizForms.urlFor(f.token)}`); }) });
-      });
       const newForm = guard(async () => {
         const nm = prompt("Name for this form (for example “Period 2” or “Retake”):", `Form ${quiz.forms.length + 1}`);
         if (nm === null) return;
         say("Creating QR code…");
         const r = await QuizForms.create(tool.id, t.id, nm);
         flush();
-        say(`QR code for “${t.name}” — ${r.form.name} is open.`);
+        say(`“${r.form.name}” is open for “${t.name}”.`);
         rerender();
         openQr(r.url + styleQ());
       });
-      qrItems.push(openForms.length ? "-" : null);
-      qrItems.push({ label: quiz.forms.length ? "＋ New form (new QR code)…" : "Launch QR Code…", onClick: newForm });
-      if (quiz.forms.length) {
-        qrItems.push("-", { heading: "Forms" });
-        quiz.forms.forEach((f) => {
-          qrItems.push({ label: `Rename — ${f.name}${f.open ? "" : " (closed)"}`, onClick: () => { const nm = prompt("Form name:", f.name); if (nm && nm.trim()) { f.name = nm.trim(); flush(); rerender(); } } });
-          if (f.open) qrItems.push({ label: `Close — ${f.name}`, onClick: guard(async () => {
-            if (!confirm(`Close “${f.name}”? Its link and QR code stop working and the server's copies of its answers are deleted, so use Results → Get Responses first. Answers already collected stay here.`)) return;
-            await QuizForms.close(tool.id, t.id, f.id); flush(); say(`“${f.name}” closed. Its answers are kept.`); rerender();
-          }) });
-        });
-      }
-      group.appendChild(menuButton("QR / Forms", "#c2571a", qrItems.filter(Boolean)));
-
-      // Results: open them, fetch new answers, re-grade, and choose which form's answers to show.
-      const resItems = [{ label: `Results (${students})`, onClick: go("results") }];
-      if (openForms.length) resItems.push({
-        label: openForms.length > 1 ? "Get Responses (all open forms)" : "Get Responses",
-        onClick: guard(async () => {
-          say("Getting responses…");
-          const r = await QuizForms.sync(tool.id, t.id);
-          flush();
-          say(`${t.name}: ${r.responses} attempt(s) from ${r.students} of ${r.expected} student(s) collected${isSurvey ? "" : " and graded"}.` + (r.missing.length ? ` Not yet: ${r.missing.slice(0, 12).join(", ")}${r.missing.length > 12 ? "…" : ""}.` : ""));
-          rerender();
-        }),
+      group.appendChild(button(quiz.forms.length ? "＋ New form" : "＋ Launch QR form", "btn btn-ghost btn-small", newForm));
+      group.appendChild(button(quiz.forms.length > 1 ? `Results: all forms (${students})` : `Results (${students})`, "btn btn-ghost btn-small", () => { quiz.view = "all"; flush(); go("results")(); }));
+      if (!isSurvey && quiz.forms.length) group.appendChild(button("Re-grade", "btn btn-ghost btn-small", guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Results for "${t.name}" re-calculated (only forms marked “counts toward scores”).`); rerender(); })));
+      // One row per form, right under the quiz: its own QR code, answers and controls.
+      let after = tr;
+      quiz.forms.forEach((f) => {
+        const fr = h("tr", "qz-formrow"), td = h("td"); td.colSpan = 6; fr.appendChild(td);
+        td.style.cssText = "padding:6px 8px 6px 28px;background:rgba(127,127,127,.09);border-left:4px solid #c2571a;";
+        const line = h("div"); line.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;";
+        const mine = quiz.submissions.filter((x) => x.form === f.id), ppl = new Set(mine.map((x) => x.sid)).size;
+        const nameB = h("strong", "", `↳ ${f.name}`); nameB.style.minWidth = "9rem";
+        const chip = h("span", "count-badge", f.open ? "QR open" : "closed"); if (f.open) chip.style.cssText = "background:#1e9e4a;color:#fff;";
+        line.append(nameB, chip, h("span", "hint", `${ppl} student${ppl === 1 ? "" : "s"} · ${mine.length} attempt${mine.length === 1 ? "" : "s"}`));
+        if (!isSurvey) {
+          const lab = h("label"); lab.style.cssText = "display:inline-flex;gap:4px;align-items:center;font-size:.85rem;";
+          const cb = h("input"); cb.type = "checkbox"; cb.checked = f.counts !== false;
+          cb.title = "Untick to leave this form's answers out of the scores that go to Main Scores.";
+          cb.addEventListener("change", () => { f.counts = cb.checked; ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`“${f.name}” ${f.counts ? "now counts toward" : "no longer counts toward"} scores.`); rerender(); });
+          lab.append(cb, document.createTextNode("Counts toward scores")); line.appendChild(lab);
+        }
+        const sp = h("span"); sp.style.flex = "1"; line.appendChild(sp);
+        const fb = (label, fn, title) => { const x = button(label, "btn btn-ghost btn-small", fn); if (title) x.title = title; line.appendChild(x); };
+        if (f.open) {
+          fb("Show QR", () => openQr(QuizForms.urlFor(f.token) + styleQ()));
+          fb("Copy link", guard(async () => { await navigator.clipboard.writeText(QuizForms.urlFor(f.token)); say(`Link copied: ${QuizForms.urlFor(f.token)}`); }));
+          fb("Get responses", guard(async () => {
+            say("Getting responses…");
+            const r = await QuizForms.sync(tool.id, t.id, f.id); flush();
+            const here = new Set(quiz.submissions.filter((x) => x.form === f.id).map((x) => x.sid));
+            say(`${f.name}: ${here.size} student(s) have answered${r.expected ? ` of ${r.expected}` : ""}${isSurvey ? "" : "; graded"}.`); rerender();
+          }));
+        }
+        if (!isSurvey) fb("Re-grade", guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Re-calculated.`); rerender(); }), "Grade this quiz's answers again with the current answer key.");
+        fb("Results", () => { quiz.view = f.id; flush(); go("results")(); }, "See only this form's answers");
+        fb("Rename", () => { const nm = prompt("Form name:", f.name); if (nm && nm.trim()) { f.name = nm.trim(); flush(); rerender(); } });
+        if (f.open) fb("Close", guard(async () => {
+          if (!confirm(`Close “${f.name}”? Its link and QR code stop working and the server's copies of its answers are deleted, so use Get responses first. Answers already collected stay here.`)) return;
+          await QuizForms.close(tool.id, t.id, f.id); flush(); say(`“${f.name}” closed. Its answers are kept.`); rerender();
+        }));
+        else fb("Delete form", guard(async () => {
+          if (!confirm(`Delete “${f.name}” and its ${mine.length} saved attempt(s)? This cannot be undone.`)) return;
+          quiz.forms = quiz.forms.filter((x) => x !== f); quiz.submissions = quiz.submissions.filter((x) => x.form !== f.id);
+          ScoringModule.normalizeQuiz(t); ScoringModule.regradeQuiz(tool.id, t.id); flush(); rerender();
+        }));
+        td.appendChild(line);
+        after.after(fr); after = fr;
       });
-      if (!isSurvey) resItems.push({
-        label: "Re-Calculate Results",
-        onClick: guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Results for "${t.name}" re-calculated.`); rerender(); }),
-      });
-      if (quiz.forms.length) {
-        resItems.push("-", { heading: "Show answers from (also used by Main Scores)" });
-        [["all", `All forms combined`], ...quiz.forms.map((f) => [f.id, f.name])].forEach(([id, label]) => {
-          resItems.push({ label: `${(quiz.view || "all") === id ? "✓ " : "\u2003"}${label}`, onClick: () => { quiz.view = id; ScoringModule.regradeQuiz(tool.id, t.id); flush(); rerender(); } });
-        });
-      }
-      group.appendChild(menuButton("Results", "#0f7d73", resItems));
 
       if (window.QRStyles) {
         QRStyles.ensureLoaded().catch(() => {});
