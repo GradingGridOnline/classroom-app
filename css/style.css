@@ -2247,10 +2247,12 @@ textarea {
 }
 [data-theme="tron-legacy"] .desk-grouped.desk-empty,
 [data-theme="tron-legacy"] .desk-grouped.desk-occupied {
-  background: var(--card);
-  border-color: hsl(var(--group-hue), 95%, 62%);
+  /* solid neon-dark fill in the group's hue (readable with the theme's light text), bright rim + glow */
+  background: linear-gradient(160deg, hsl(var(--group-hue), 88%, 36%), hsl(var(--group-hue), 90%, 26%));
+  color: #f4fcff;
+  border-color: hsl(var(--group-hue), 100%, 68%);
   border-width: 2px;
-  box-shadow: 0 0 6px hsl(var(--group-hue), 95%, 62%), 0 0 16px hsl(var(--group-hue), 95%, 55%);
+  box-shadow: 0 0 6px hsl(var(--group-hue), 95%, 62%), 0 0 14px hsla(var(--group-hue), 95%, 55%, 0.6), inset 0 0 10px hsla(var(--group-hue), 100%, 70%, 0.25);
 }
 
 [data-theme="tron-legacy"] .bank-card {
