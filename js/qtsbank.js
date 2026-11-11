@@ -1021,7 +1021,8 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     el.tabRosterBtn.style.display = "none";
     window.QuizBankUI.open(toolId, item.id);
     showTab("scoring");
-    if (typeof renderScoring === "function") renderScoring();
+    if (typeof showScoringMode === "function") showScoringMode(toolId); // straight into the Test & Quiz Bank's editor
+    else if (typeof renderScoring === "function") renderScoring();
     return "";
   }
 
