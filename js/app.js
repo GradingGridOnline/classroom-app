@@ -1368,7 +1368,10 @@ function buildSeatingPrintSheet() {
   // fixed A4-landscape-minus-margins measurements, since a print page's
   // size is known ahead of time. Approximate but self-consistent.
   const PRINT_GRID_WIDTH_PX = 1026; // page width (297mm) minus 0.5in left/right padding, at 96dpi — see .seating-print-sheet in style.css
-  const PRINT_GRID_HEIGHT_PX = 460; // ~ budget left after heading/front-label/boxes/excluded-list
+  // ~ budget left after the top row, front label and bottom row. With nothing in the bottom sections
+  // (4-9) that row isn't printed, so its height (17mm + gap) goes to the desks instead of staying blank.
+  const bottomRow = buildSeatingPrintBottom(course);
+  const PRINT_GRID_HEIGHT_PX = bottomRow ? 460 : 460 + 68;
   const deskWidth = PRINT_GRID_WIDTH_PX / SeatingModule.cols;
   const deskHeight = PRINT_GRID_HEIGHT_PX / SeatingModule.rows;
   const deskSize = Math.min(deskWidth, deskHeight);
@@ -1467,7 +1470,6 @@ function buildSeatingPrintSheet() {
   sheet.appendChild(frontLabel);
 
   // Sections 3-8 (below "Front of Classroom").
-  const bottomRow = buildSeatingPrintBottom(course);
   if (bottomRow) sheet.appendChild(bottomRow);
 
   return sheet;
