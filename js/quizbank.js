@@ -31,6 +31,7 @@
   /** The answers the quiz currently "shows": all forms combined, or just the chosen form (quiz.view). */
   const viewSubs = (q) => (q.view && q.view !== "all" ? q.submissions.filter((x) => x.form === q.view) : q.submissions);
   window.QuizViewSubs = viewSubs;
+  const formsOpen = new Map(); // quiz id → forms shown (default) or folded away
   const viewOf = new Map(); // toolId -> "build" | "results" ("review" opens Results in Edit mode)
   const resultMode = new Map(); // testId -> "view" | "edit": the one Results screen has two modes
   window.QuizBankUI = { open(toolId, testId, view) { editing.set(toolId, testId); viewOf.set(toolId, view || "build"); } };
@@ -2337,10 +2338,21 @@
       if (!isSurvey && quiz.forms.length) group.appendChild(button("Re-grade", "btn btn-ghost btn-small", guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Results for "${t.name}" re-calculated (only forms marked “counts toward scores”).`); rerender(); })));
       // One row per form, right under the quiz: its own QR code, answers and controls.
       let after = tr;
-      quiz.forms.forEach((f) => {
-        const fr = h("tr", "qz-formrow"), td = h("td"); td.colSpan = 6; fr.appendChild(td);
-        td.style.cssText = "padding:6px 8px 6px 28px;background:rgba(127,127,127,.09);border-left:4px solid #c2571a;";
-        const line = h("div"); line.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;";
+      const formRows = [];
+      if (quiz.forms.length) { // fold the forms into their quiz
+        const isOpen = () => formsOpen.get(t.id) !== false;
+        const tog = h("button", "btn btn-ghost btn-small", "");
+        tog.type = "button"; tog.style.cssText = "display:block;margin:4px 0 0;padding:1px 8px;font-size:.78rem;";
+        const paint = () => { tog.textContent = `${isOpen() ? "▾" : "▸"} ${quiz.forms.length} form${quiz.forms.length === 1 ? "" : "s"}`; tog.setAttribute("aria-expanded", String(isOpen())); tog.title = isOpen() ? "Hide this quiz's forms" : "Show this quiz's forms"; formRows.forEach((r) => { r.hidden = !isOpen(); }); tr.classList.toggle("qz-has-forms-open", isOpen()); };
+        tog.addEventListener("click", () => { formsOpen.set(t.id, !isOpen()); paint(); });
+        tr.children[0].appendChild(tog);
+        setTimeout(paint, 0);
+        tr.style.cssText += "border-left:4px solid #c2571a;";
+      }
+      quiz.forms.forEach((f, fi) => {
+        const fr = h("tr", "qz-formrow"), td = h("td"); td.colSpan = 6; fr.appendChild(td); formRows.push(fr);
+        td.style.cssText = `padding:6px 8px 6px 14px;background:rgba(127,127,127,.09);border-left:4px solid #c2571a;${fi === quiz.forms.length - 1 ? "border-bottom:2px solid #c2571a;" : ""}`;
+        const line = h("div"); line.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-left:34px;padding-left:12px;border-left:2px dotted rgba(127,127,127,.6);";
         const mine = quiz.submissions.filter((x) => x.form === f.id), ppl = new Set(mine.map((x) => x.sid)).size;
         const nameB = h("strong", "", `↳ ${f.name}`); nameB.style.minWidth = "9rem";
         const chip = h("span", "count-badge", f.open ? "QR open" : "closed"); if (f.open) chip.style.cssText = "background:#1e9e4a;color:#fff;";
