@@ -982,6 +982,7 @@ const ScoringModule = {
     if (typeof ts.peerInstructions !== "string") ts.peerInstructions = "";
     if (typeof ts.emailSubject !== "string") ts.emailSubject = "";
     if (typeof ts.emailMessage !== "string") ts.emailMessage = "";
+    ts.deliveries = window.DeliveryLog ? DeliveryLog.clean(ts.deliveries) : Array.isArray(ts.deliveries) ? ts.deliveries : []; // emailed / printed log
     ts.peerHighestScore = Math.max(1, Math.min(10, Math.round(Number(ts.peerHighestScore) || 10)));
     return project;
   },

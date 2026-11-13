@@ -6743,6 +6743,15 @@ function printPresentationPages(pages, title) {
   window.print();
 }
 
+/** The people (or groups) a printed/emailed report is for, as text lines for the delivery log. */
+function presentationRecipientLines(project, kind) {
+  const entries = project.roster.filter((e) => e.group);
+  if (kind === "students") return entries.map((e) => `${e.name || "(unnamed)"} (Group ${e.group})`);
+  const groups = [...new Set(entries.map((e) => e.group))].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  return groups.map((g) => `Group ${g}: ${entries.filter((e) => e.group === g).map((e) => e.name || "(unnamed)").join(", ")}`);
+}
+const PRESENTATION_REPORT_KINDS = [["comments", "Comments"], ["groups", "Group Score Pages"], ["students", "Student Score Pages"]];
+
 /** Prints one of the three reports. kind: "comments" | "groups" | "students". Returns a message if there's nothing to print. */
 function printPresentationReport(tool, project, kind) {
   const built = buildPresentationReportPages(tool, project, kind);
@@ -6875,10 +6884,13 @@ function buildPresentationPrintSection(tool, project) {
     btn.textContent = label;
     btn.addEventListener("click", () => {
       status.textContent = printPresentationReport(tool, project, kind);
+      if (!status.textContent) { DeliveryLog.record(project.templateSettings.deliveries, { kind, method: "print", recipients: presentationRecipientLines(project, kind) }); printLog.refresh(); }
     });
     buttons.appendChild(btn);
   });
   block.appendChild(buttons);
+  const printLog = DeliveryLog.indicator(project.templateSettings.deliveries, { kinds: PRESENTATION_REPORT_KINDS, method: "print", title: "Printed so far (recorded when the print window opens)" });
+  block.appendChild(printLog);
   return block;
 }
 
@@ -7014,7 +7026,7 @@ function fillEmailTemplate(template, values) {
  * student in the project's groups. testAddress: if given, only the first
  * email is sent, to that address. Progress is reported through `status`.
  */
-async function emailPresentationReports(tool, project, kind, targetStudentId, testAddress, status) {
+async function emailPresentationReports(tool, project, kind, targetStudentId, testAddress, status, onDelivered) {
   if (typeof html2canvas === "undefined" || !window.jspdf) {
     status.textContent = "The PDF tools didn't load — check your internet connection and reload the page.";
     return;
@@ -7070,6 +7082,7 @@ async function emailPresentationReports(tool, project, kind, targetStudentId, te
 
   const pdfs = new Map(); // page -> bytes
   const failures = [];
+  const sentTo = [];
   let sent = 0;
   try {
     for (const job of jobs) {
@@ -7096,6 +7109,7 @@ async function emailPresentationReports(tool, project, kind, targetStudentId, te
           })
         );
         sent++;
+        sentTo.push(`${job.entry.name || "(unnamed)"} — ${job.to}${kind === "students" ? "" : ` (Group ${job.entry.group})`}`);
       } catch (err) {
         failures.push(`${job.entry.name || "(unnamed)"}: ${err.message}`);
         if (/allowed this app to send email/.test(err.message)) break; // no point trying the rest
@@ -7105,6 +7119,7 @@ async function emailPresentationReports(tool, project, kind, targetStudentId, te
   } finally {
     stage.remove();
   }
+  if (sentTo.length) { DeliveryLog.record(project.templateSettings.deliveries, { kind, method: "email", recipients: sentTo, test: !!test }); if (onDelivered) onDelivered(); }
 
   status.textContent =
     `Sent ${sent} email(s)` +
@@ -7208,7 +7223,7 @@ function buildPresentationEmailSection(tool, project) {
       const all = buttons.querySelectorAll("button");
       all.forEach((b) => (b.disabled = true));
       try {
-        await emailPresentationReports(tool, project, kind, recipientSelect.value, testInput.value, status);
+        await emailPresentationReports(tool, project, kind, recipientSelect.value, testInput.value, status, () => emailLog.refresh());
       } catch (err) {
         status.textContent = `Couldn't send: ${err.message}`;
       }
@@ -7217,6 +7232,8 @@ function buildPresentationEmailSection(tool, project) {
     buttons.appendChild(btn);
   });
   block.appendChild(buttons);
+  const emailLog = DeliveryLog.indicator(project.templateSettings.deliveries, { kinds: PRESENTATION_REPORT_KINDS, method: "email", title: "Emailed so far" });
+  block.appendChild(emailLog);
   return block;
 }
 
