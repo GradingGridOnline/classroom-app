@@ -41,11 +41,11 @@ function buildPresStudentTable(tool, project, container, columns) {
     const cell = (text, cls) => { const td = document.createElement("td"); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
     cell(`Group ${entry.group}`);
     cell(entry.name || "(unnamed)");
-    rubricCols.forEach((c) => cell(fmt(ScoringModule.getPresentationValue(tool.id, project.id, entry.group, c.entryId) === "" ? null : Number(ScoringModule.getPresentationValue(tool.id, project.id, entry.group, c.entryId)))));
+    rubricCols.forEach((c) => { const v = ScoringModule.getPresentationValue(tool.id, project.id, entry.group, c.entryId); cell(String(v).toUpperCase() === "E" ? "E" : fmt(v === "" ? null : Number(v))); });
     if (peerCol) {
       const mine = peerAverages[entry.studentId];
       const raw = ScoringModule.getPresentationValue(tool.id, project.id, entry.group, "peer");
-      cell(mine ? fmt(mine.avg) : raw === "" ? "—" : `${fmt(Number(raw))} (group)`);
+      cell(mine ? fmt(mine.avg) : raw === "" ? "—" : String(raw).toUpperCase() === "E" ? "E" : `${fmt(Number(raw))} (group)`);
     }
     const groupSum = ScoringModule.computePresentationSum(tool.id, project.id, entry.group);
     cell(fmt(groupSum), "attendance-stat-cell");
@@ -64,7 +64,7 @@ function buildPresStudentTable(tool, project, container, columns) {
     sel.addEventListener("change", () => { ScoringModule.setPresentationAbsenceOverride(tool.id, project.id, entry.studentId, sel.value); renderScoringToolView(tool, container); });
     ovTd.appendChild(sel); tr.appendChild(ovTd);
     const total = ScoringModule.computePresentationStudentSum(tool.id, project.id, entry.studentId);
-    cell(total === null ? "—" : maxMode ? `${fmt(total)}/${project.totalColumn.maxPoints}` : fmt(total), "attendance-stat-cell");
+    cell(total === null ? "—" : maxMode ? `${fmt(total)}/${(ScoringModule.presentationTotalColumn(tool.id, project.id, entry.group) || project.totalColumn).maxPoints}` : fmt(total), "attendance-stat-cell");
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);

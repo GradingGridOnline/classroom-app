@@ -709,11 +709,12 @@ const ScoringModule = {
     const split = column.type !== "test" && cfg.subRows.length > 0;
     if (!split) {
       if (lineId !== undefined && !this.isTableCellOn(toolId, lineId, column.id)) return 0;
+      if (lineId !== undefined && this.isTableCellExempt(toolId, lineId, column.id)) return 0; // "E": exempt, so its value is left out of the total
       return column.maxPoints || 0;
     }
     const boxes = lineId === undefined
       ? cfg.subRows.length
-      : cfg.subRows.filter((sub) => this.isTableCellOn(toolId, lineId, column.id, sub.id)).length;
+      : cfg.subRows.filter((sub) => this.isTableCellOn(toolId, lineId, column.id, sub.id) && !this.isTableCellExempt(toolId, lineId, column.id, sub.id)).length;
     return (column.maxPoints || 0) * boxes;
   },
 
@@ -737,7 +738,12 @@ const ScoringModule = {
     return cfg.values[`${lineId}|${columnId}`] || "";
   },
 
-  /** value: "" (blank) or a number. In "max" mode the number must also be from 0 up to the column's maximum (when one is set). subId (optional) is a sub-row. Throws on anything else. */
+  /** True if the box holds "E" (exempt): no score is needed, and its maximum is left out of that line's total. */
+  isTableCellExempt(toolId, lineId, columnId, subId) {
+    return String(this.getTableValue(toolId, lineId, columnId, subId)).toUpperCase() === "E";
+  },
+
+  /** value: "" (blank), "E" (exempt) or a number. In "max" mode the number must also be from 0 up to the column's maximum (when one is set). subId (optional) is a sub-row. Throws on anything else. */
   setTableValue(toolId, lineId, columnId, value, subId) {
     const cfg = this.getTableConfig(toolId);
     if (!cfg) return;
@@ -750,8 +756,9 @@ const ScoringModule = {
       delete store[key];
       return;
     }
+    if (trimmed.toUpperCase() === "E") { store[key] = "E"; return; }
     const num = Number(trimmed);
-    if (Number.isNaN(num)) throw new Error("Enter a number.");
+    if (Number.isNaN(num)) throw new Error('Enter a number, or "E" for exempt.');
     if (cfg.mode === "max") {
       const max = column ? column.maxPoints || 0 : 0;
       if (num < 0 || (max > 0 && num > max)) {
@@ -1234,6 +1241,7 @@ const ScoringModule = {
       delete project.values[key];
       return;
     }
+    if (trimmed.toUpperCase() === "E") { project.values[key] = "E"; return; } // exempt: left out of this group's total
     const num = Number(trimmed);
     const column = this.presentationColumns(toolId, projectId).find((c) => c.entryId === entryId);
     const max = column ? column.points : 0;
@@ -1259,20 +1267,27 @@ const ScoringModule = {
     let total = 0;
     let anyScore = false;
     let max = 0;
+    let fullMax = 0; // the maximum if nothing were exempt
     columns.forEach((col) => {
       const score = scoreOf(col);
+      if (score === "E") { // exempt: this column is left out of both the score and the maximum
+        if (weighted) { if (col.weight > 0) fullMax += col.weight; } else fullMax += col.points;
+        return;
+      }
       if (score !== null && score !== undefined) anyScore = true;
       const value = score === null || score === undefined ? 0 : score;
       if (weighted) {
         if (!(col.weight > 0)) return;
         max += col.weight;
+        fullMax += col.weight;
         if (col.points > 0) total += (value / col.points) * col.weight;
       } else {
         max += col.points;
+        fullMax += col.points;
         total += value;
       }
     });
-    return { total: anyScore ? total : null, max };
+    return { total: anyScore ? total : null, max, fullMax };
   },
 
   /** The sum of a project's rubric weights, for the check that they add up to 100: { total, anySet }. */
@@ -1291,10 +1306,28 @@ const ScoringModule = {
     const result = this._weightedTotal(columns, (col) => {
       const raw = project.values[`${group}|${col.entryId}`];
       if (raw === undefined) return null;
+      if (String(raw).toUpperCase() === "E") return "E";
       const num = Number(raw);
       return Number.isNaN(num) ? null : num;
     });
     return result.total === null ? 0 : result.total;
+  },
+
+  /** True if this group is exempt ("E") from the rubric/column with this entryId. */
+  isPresentationExempt(project, group, entryId) {
+    return String(project.values[`${group}|${entryId}`] || "").toUpperCase() === "E";
+  },
+
+  /** The Total Score column's settings for ONE group: the same, except that in "max" mode the maximum shrinks by the share of the total that this group is exempt from. */
+  presentationTotalColumn(toolId, projectId, group) {
+    const project = this.getPresentationProject(toolId, projectId);
+    if (!project) return null;
+    const tc = project.totalColumn;
+    if (!tc || tc.mode !== "max" || !(tc.maxPoints > 0)) return tc;
+    const columns = this.presentationColumns(toolId, projectId);
+    const r = this._weightedTotal(columns, (col) => (this.isPresentationExempt(project, group, col.entryId) ? "E" : null));
+    if (!(r.fullMax > 0) || r.max === r.fullMax) return tc;
+    return { ...tc, maxPoints: Math.round(tc.maxPoints * (r.max / r.fullMax) * 100) / 100 };
   },
 
   /** The attendance code (P, A, L, E, …) a student has on the class date chosen for this project ("" if none). */
@@ -1776,7 +1809,8 @@ const ScoringModule = {
       }
       return groupValue(entry.group, col);
     };
-    const totalFor = (entry) => this._weightedTotal(columns, (col) => scoreFor(entry, col)).total;
+    const exemptFor = (entry, col) => this.isPresentationExempt(project, entry.group, col.entryId);
+    const totalFor = (entry) => this._weightedTotal(columns, (col) => (exemptFor(entry, col) ? "E" : scoreFor(entry, col))).total;
     const average = (values) => {
       const present = values.filter((v) => v !== null);
       return present.length > 0 ? present.reduce((sum, v) => sum + v, 0) / present.length : null;
@@ -1801,7 +1835,7 @@ const ScoringModule = {
     rows.push({
       label: totalLabel,
       score: totalScore,
-      max: this._weightedTotal(columns, () => null).max,
+      max: this._weightedTotal(columns, (col) => (exemptFor(target, col) ? "E" : null)).max,
       classAverage: average(roster.map((entry) => totalFor(entry))),
       isTotal: true,
     });
@@ -1816,7 +1850,7 @@ const ScoringModule = {
     if (!entry || !entry.group) return null;
     const sum = this.computePresentationStudentSum(tool.id, projectId, studentId);
     if (sum === null) return null;
-    return this._totalContribution(project, sum);
+    return this._totalContribution({ ...project, totalColumn: this.presentationTotalColumn(tool.id, projectId, entry.group) }, sum);
   },
 
   // ----- Test & Quiz Bank tool (type "testbank") -----
@@ -2117,7 +2151,7 @@ const ScoringModule = {
         if (!entry || !entry.group) return;
         const sum = this.computePresentationStudentSum(toolId, projectId, studentId);
         if (sum === null) return;
-        const pPoints = this._scaleToItem(sum, project.totalColumn, item);
+        const pPoints = this._scaleToItem(sum, this.presentationTotalColumn(toolId, projectId, entry.group), item);
         if (pPoints === null) return;
         sources.push({ key: toolId, label, weight, points: pPoints });
         return;

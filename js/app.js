@@ -4160,7 +4160,7 @@ function makeTrackerInput(tool, cfg, container, lineId, col, subId, locked) {
   }
   if (cfg.mode === "max" && col.maxPoints > 0) {
     input.placeholder = `/${col.maxPoints}`;
-    input.title = `Out of ${col.maxPoints}`;
+    input.title = `Out of ${col.maxPoints}. Type E if exempt (it is left out of the total).`;
   }
   input.addEventListener("change", async () => {
     try {
@@ -4211,7 +4211,7 @@ function buildTablePreviewRows(tool, cfg, container, lineId, label) {
       const text = document.createElement("span");
       text.textContent = !boxOn
         ? "off"
-        : num === null ? "—" : String(Math.round(num * 100) / 100) + (maxMode && colMax > 0 ? `/${colMax}` : "");
+        : num === null ? (hasSubRows && col.type !== "test" && cfg.subRows.every((sb) => ScoringModule.isTableCellExempt(tool.id, lineId, col.id, sb.id)) ? "E" : "—") : String(Math.round(num * 100) / 100) + (maxMode && colMax > 0 ? `/${colMax}` : "");
       if (col.type === "test" && (trackerChoosing(tool) || !boxOn)) {
         // A quiz/test box has no typing in it, but can still be switched off.
         const wrap = document.createElement("div");
@@ -4906,7 +4906,7 @@ function buildPresentationScoresPage(tool, cfg, container) {
         input.value = ScoringModule.getPresentationValue(tool.id, cfg.id, group, col.entryId);
         if (col.points > 0) {
           input.placeholder = `/${col.points}`;
-          input.title = `Out of ${col.points}`;
+          input.title = `Out of ${col.points}. Type E if exempt (it is left out of the total).`;
         }
         input.addEventListener("change", () => {
           try {
@@ -4929,9 +4929,10 @@ function buildPresentationScoresPage(tool, cfg, container) {
         totalTd.textContent = "—";
       } else {
         const shown = Math.round(sum * 100) / 100;
+        const tcol = ScoringModule.presentationTotalColumn(tool.id, cfg.id, group) || cfg.totalColumn;
         totalTd.textContent =
-          cfg.totalColumn.mode === "max" && cfg.totalColumn.maxPoints > 0
-            ? `${shown}/${cfg.totalColumn.maxPoints}`
+          tcol.mode === "max" && tcol.maxPoints > 0
+            ? `${shown}/${tcol.maxPoints}`
             : String(shown);
       }
       tr.appendChild(totalTd);
