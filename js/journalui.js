@@ -306,6 +306,8 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-grid label { font-family:var(--font-heading); font-size:.54rem; letter-spacing:.2em; text-transform:uppercase; color:#7fb0bc; gap:5px; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl :is(input, select) { border-radius:0; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body { max-height:380px; overflow:auto; padding:12px 14px 14px; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-screen.jr-pad-alt { display:flex; flex-direction:column; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-alt-body { flex:1; min-height:0; max-height:none; padding:16px 22px 18px; animation:jr-wipe-in .28s ease-out; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body h4 { margin:12px 0 6px; font-family:var(--font-heading); font-size:.58rem; font-weight:400; letter-spacing:.24em; text-transform:uppercase; color:#4fe0ff; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .hint { color:#9fd8e3; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.8rem; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .jr-bar { font-family:"Share Tech Mono",ui-monospace,monospace; color:#bff3ff; }
@@ -584,7 +586,7 @@
   // ---------- the full-entry window ----------
   function openEntry(id) {
     if (isPad()) { // the data pad opens the entry on its own screen, full size, instead of a pop-up
-      padSel = id; padFull = true; editingId = null; creating = false; render();
+      padSel = id; padFull = true; editingId = null; creating = false; padCtl = "filter"; render();
       const w = panel.querySelector(".jr-pad"); if (w) w.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -618,6 +620,7 @@
 
   // ---------- the book: two pages showing, page-turn buttons on either side ----------
   function startNew() {
+    padCtl = "filter";
     creating = true; editingId = null; spread = null; focusId = null; render();
     const bw = panel.querySelector(".jr-bookwrap"); if (bw) bw.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -729,13 +732,15 @@
   const padCatsShut = (() => { try { return new Set(JSON.parse(localStorage.getItem("ggo-journal-pad-shut")) || []); } catch (e) { return new Set(); } })();
   let padCtl = (() => { try { const v = localStorage.getItem("ggo-journal-pad-ctl"); return ["filter", "stats", "settings"].includes(v) ? v : "filter"; } catch (e) { return "filter"; } })();
   /** The control screen under the main screen: Sort & filter, Stats or Export (picked with the three bars). */
-  function padControls(sorted, pinned, filterBar) {
-    if (padCtl === "filter") { filterBar.classList.add("jr-pad-ctl"); return filterBar; }
-    const box = mk("div", "jr-sf jr-pad-ctl");
-    const top = mk("div", "jr-sf-top");
-    top.appendChild(mk("b", "", padCtl === "stats" ? "Stats · Entry counts & timeline" : "Settings · Journal & export"));
+  function padControls(sorted, pinned, filterBar) { filterBar.classList.add("jr-pad-ctl"); return filterBar; }
+  /** Stats or Settings, shown on the main screen in place of the index and entry (same size, scrolls inside). */
+  function padAltScreen(sorted, pinned) {
+    const box = mk("div", "jr-pad-screen jr-pad-alt");
+    const top = mk("div", "jr-pad-dethead");
+    top.appendChild(mk("span", "jr-pad-dlabel", padCtl === "stats" ? "Stats · Entry counts & timeline" : "Settings · Journal & export"));
+    top.appendChild(btn("◂ Journal", "jr-pad-back", () => { padCtl = "filter"; try { localStorage.setItem("ggo-journal-pad-ctl", "filter"); } catch (e) {} render(); }));
     box.appendChild(top);
-    const body = mk("div", "jr-pad-ctl-body");
+    const body = mk("div", "jr-pad-ctl-body jr-pad-alt-body");
     if (padCtl === "stats") body.appendChild(countsBody());
     else {
       body.appendChild(mk("h4", "", "Journal settings"));
@@ -765,6 +770,21 @@
     const full = padFull || writing;
     const mode = displayMode;
 
+    function padFoot(open) {
+    const foot = mk("div", "jr-stage-foot");
+    // the three bars pick what the main screen shows: the journal, Stats or Settings
+    const bars = mk("span", "jr-sf-bars jr-pad-bars"); bars.setAttribute("role", "tablist"); bars.setAttribute("aria-label", "Control screen");
+    [["filter", "Control"], ["stats", "Stats"], ["settings", "Settings"]].forEach(([k, label]) => {
+      const b = mk("button", `jr-pad-bar${padCtl === k ? " on" : ""}`); b.type = "button";
+      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(padCtl === k)); b.title = { filter: "Control: the journal, with sort & filter below", stats: "Stats: entry counts & timeline on the screen", settings: "Settings: journal settings and CSV export on the screen" }[k];
+      b.append(mk("i"), mk("span", "", label));
+      b.addEventListener("click", () => { padCtl = k; try { localStorage.setItem("ggo-journal-pad-ctl", k); } catch (e) {} render(); });
+      bars.appendChild(b);
+    });
+    foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? (openPinned ? `Pinned ${pinned.indexOf(open) + 1} of ${pinned.length}` : `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}`) : `${sorted.length} entries`));
+    // the control screen under the main screen: sort & filter, as part of the pad
+    return foot;
+    }
     const head = mk("div", "jr-stage-head");
     head.append(mk("span", "", "Data pad · Teaching log"), mk("span", "", `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}${pinned.length ? ` · ${pinned.length} pinned` : ""}`));
     const screen = mk("div", `jr-pad-screen${full ? " jr-pad-full" : ""}`);
@@ -818,6 +838,14 @@
     const det = mk("div", "jr-pad-detail");
     const dh = mk("div", "jr-pad-dethead");
     if (full && !writing) dh.appendChild(btn("◂ Index", "jr-pad-back", () => { padFull = false; render(); }));
+    if (padCtl !== "filter") { // Stats / Settings replace the journal on the main screen
+      wrap.append(head);
+      if (command) wrap.append(command);
+      wrap.append(padAltScreen(sorted, pinned));
+      if (controls) wrap.append(controls);
+      wrap.append(padFoot(null));
+      return wrap;
+    }
     const where = open ? (openPinned ? `Pinned · P${pinned.indexOf(open) + 1}` : `Entry ${String(sorted.indexOf(open) + 1).padStart(2, "0")} / ${String(sorted.length).padStart(2, "0")}`) : "Data log";
     dh.appendChild(mk("span", "jr-pad-dlabel", creating ? "New entry" : editingId ? "Editing" : where));
     if (!full && open) dh.appendChild(btn("Expand ▸", "jr-pad-back", () => { padFull = true; render(); }));
@@ -833,23 +861,11 @@
     det.appendChild(body);
     screen.append(list, det);
 
-    const foot = mk("div", "jr-stage-foot");
-    // the three bars pick what the control screen shows
-    const bars = mk("span", "jr-sf-bars jr-pad-bars"); bars.setAttribute("role", "tablist"); bars.setAttribute("aria-label", "Control screen");
-    [["filter", "Control"], ["stats", "Stats"], ["settings", "Settings"]].forEach(([k, label]) => {
-      const b = mk("button", `jr-pad-bar${padCtl === k ? " on" : ""}`); b.type = "button";
-      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(padCtl === k)); b.title = { filter: "Control: sort & filter", stats: "Stats: entry counts & timeline", settings: "Settings: journal settings and CSV export" }[k];
-      b.append(mk("i"), mk("span", "", label));
-      b.addEventListener("click", () => { padCtl = k; try { localStorage.setItem("ggo-journal-pad-ctl", k); } catch (e) {} render(); });
-      bars.appendChild(b);
-    });
-    foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? (openPinned ? `Pinned ${pinned.indexOf(open) + 1} of ${pinned.length}` : `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}`) : `${sorted.length} entries`));
-    // the control screen under the main screen: sort & filter, as part of the pad
     wrap.append(head);
     if (command) wrap.append(command);
     wrap.append(screen);
     if (controls) { controls.classList.add("jr-pad-ctl"); wrap.append(controls); }
-    wrap.append(foot);
+    wrap.append(padFoot(open));
     leadId = open ? open.id : null;
     return wrap;
   }
@@ -952,6 +968,7 @@
       const chip = btn(t.name, "jr-chip" + (on ? " on" : ""), () => {
         tagFilter = new Set([...tagFilter].filter((x) => x.toLowerCase() !== t.name.toLowerCase()));
         if (!on) tagFilter.add(t.name);
+        if (isPad()) padCtl = "filter"; // on the data pad, show the journal listing that tag's entries
         spread = null; const y = window.scrollY; render(); window.scrollTo({ top: y });
       });
       chip.setAttribute("aria-pressed", String(on));
