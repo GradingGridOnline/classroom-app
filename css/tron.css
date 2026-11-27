@@ -1,0 +1,287 @@
+/* ===== Tron: Legacy — menus & motion =====
+   Extra layer for the Tron: Legacy theme only, loaded after motion.css.
+   - Main tabs: dark light-panel band, uppercase labels, a glowing underline
+     that traces in from the center, and a light pulse that runs along the
+     band's edge every few seconds.
+   - Section header bars: dark glass with a bright cyan edge instead of a
+     solid fill.
+   - Drop-down menus: black glass with a glowing cyan frame and orange corner
+     brackets; they "rez in" top-to-bottom and their items arrive one by one.
+   - Buttons: a light streak sweeps across on hover.
+   - Switching tabs: the panel rezzes in with a quick top-to-bottom wipe.
+   - Page: the title boots up with a brief flicker; a perspective floor grid
+     glides toward you at the bottom of the screen.
+   Everything here stops for people whose device asks for reduced motion. */
+
+[data-theme="tron-legacy"] {
+  --tron-cyan: #00d9ff;
+  --tron-cyan-hot: #aef4ff;
+  --tron-glass: rgba(4, 10, 14, 0.96);
+  scrollbar-color: #1f6f80 #0a1116;
+}
+[data-theme="tron-legacy"] ::selection { background: var(--tron-cyan); color: #001014; }
+
+/* ----- Title: boot flicker + steady glow ----- */
+[data-theme="tron-legacy"] .header h1 {
+  letter-spacing: 0.08em;
+  color: var(--tron-cyan-hot);
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.8), 0 0 18px rgba(0, 217, 255, 0.35);
+  animation: tron-boot 1.1s steps(1, end) both;
+}
+[data-theme="tron-legacy"] .header {
+  padding-bottom: 14px;
+  background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.7) 15%, rgba(0, 217, 255, 0.7) 85%, transparent) bottom / 100% 1px no-repeat;
+}
+
+/* ----- Main course tabs (Roster, Seating Chart, ...) ----- */
+[data-theme="tron-legacy"] .main-tab-row {
+  background:
+    linear-gradient(90deg, transparent, rgba(220, 252, 255, 0.95) 45%, #fff 50%, rgba(0, 217, 255, 0.9) 55%, transparent) -20% 100% / 180px 2px no-repeat,
+    linear-gradient(to bottom, #04080b, #0a141a);
+  border-top: 1px solid rgba(0, 217, 255, 0.25);
+  border-bottom: 2px solid var(--tron-cyan);
+  box-shadow: 0 2px 14px rgba(0, 217, 255, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+  flex-wrap: wrap;
+  animation: tron-pulse-run 7s linear 1.2s infinite;
+}
+[data-theme="tron-legacy"] .main-tab-row .tab-btn {
+  position: relative;
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-right: 6px;
+  padding: 18px 14px 15px;
+  border-bottom: 0;
+  color: #6fa6b3;
+}
+[data-theme="tron-legacy"] .main-tab-row .tab-btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--tron-cyan);
+  box-shadow: 0 0 8px var(--tron-cyan), 0 0 16px rgba(0, 217, 255, 0.6);
+  transform: scaleX(0);
+  opacity: 0.45;
+  transition: transform 0.3s cubic-bezier(.2, .8, .2, 1), opacity 0.2s ease;
+}
+[data-theme="tron-legacy"] .main-tab-row .tab-btn:hover { color: var(--ink); }
+[data-theme="tron-legacy"] .main-tab-row .tab-btn:hover::after { transform: scaleX(0.6); }
+[data-theme="tron-legacy"] .main-tab-row .tab-btn-active {
+  color: #fff;
+  background: linear-gradient(to top, rgba(0, 217, 255, 0.18), rgba(0, 217, 255, 0) 80%);
+}
+[data-theme="tron-legacy"] .main-tab-row .tab-btn-active::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+/* ----- Sub-tab rows ----- */
+[data-theme="tron-legacy"] .tab-row:not(.main-tab-row) { border-bottom-color: rgba(0, 217, 255, 0.3); }
+[data-theme="tron-legacy"] .tab-row:not(.main-tab-row) .tab-btn { letter-spacing: 0.04em; }
+[data-theme="tron-legacy"] .tab-row:not(.main-tab-row):not(.level-tab-row) .tab-btn-active {
+  color: var(--tron-cyan-hot);
+  box-shadow: 0 7px 10px -7px var(--tron-cyan);
+}
+
+/* ----- 3rd/4th-level outlined tabs: glowing frames ----- */
+[data-theme="tron-legacy"] .level-tab-row .tab-btn-active {
+  box-shadow: 0 -5px 14px -6px var(--level-outline);
+  text-shadow: 0 0 6px var(--level-outline);
+}
+[data-theme="tron-legacy"] .level-panel {
+  box-shadow: 0 8px 18px -10px var(--level-outline), inset 0 0 24px -12px var(--level-outline);
+}
+
+/* ----- Section header bars: dark glass with a lit edge ----- */
+[data-theme="tron-legacy"] :is(
+  .attendance-settings-header,
+  #course-section .section-header:not(:has(#course-detail-title)),
+  #course-section summary > .section-header,
+  .unseated-panel > h3,
+  .banks-section > h3,
+  .group-list-section > h3,
+  #mapping-panel > h3,
+  #settings-section .settings-block > h3,
+  #printcard-view > .attendance-settings-block > h4,
+  #reportcard-email-section > h4,
+  #journal-panel .settings-section > h3,
+  .pres-section > .pres-section-head,
+  .qts-sec-head
+) {
+  background:
+    linear-gradient(100deg, transparent 30%, rgba(174, 244, 255, 0.22) 45%, transparent 60%) -150% 0 / 60% 100% no-repeat,
+    linear-gradient(90deg, rgba(0, 217, 255, 0.24), rgba(0, 217, 255, 0.05) 55%, rgba(0, 217, 255, 0.02)),
+    #071116;
+  border: 1px solid rgba(0, 217, 255, 0.4);
+  border-left: 4px solid var(--tron-cyan);
+  border-radius: 0;
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.16), inset 0 0 18px rgba(0, 217, 255, 0.06);
+  color: #e8fdff;
+  animation: tron-sweep 1.4s ease-out 0.15s both;
+}
+[data-theme="tron-legacy"] :is(
+  .attendance-settings-header h3,
+  #course-section .section-header h2,
+  .unseated-panel > h3,
+  .banks-section > h3,
+  .group-list-section > h3,
+  #mapping-panel > h3,
+  #settings-section .settings-block > h3,
+  #printcard-view > .attendance-settings-block > h4,
+  #reportcard-email-section > h4,
+  #journal-panel .settings-section > h3
+) {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #e8fdff;
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.7);
+}
+[data-theme="tron-legacy"] .pres-section { border-color: rgba(0, 217, 255, 0.4); }
+
+/* ----- Drop-down menus ----- */
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list) {
+  background: var(--tron-glass) !important;
+  border: 1px solid var(--tron-cyan) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 0 0 1px rgba(0, 217, 255, 0.12), 0 0 18px rgba(0, 217, 255, 0.4), inset 0 0 22px rgba(0, 217, 255, 0.07) !important;
+}
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list):not([hidden]) {
+  animation: tron-rez 0.22s cubic-bezier(.2, .8, .2, 1);
+}
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::before,
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+}
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::before {
+  top: -2px;
+  left: -2px;
+  border-top: 2px solid var(--marker);
+  border-left: 2px solid var(--marker);
+}
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::after {
+  bottom: -2px;
+  right: -2px;
+  border-bottom: 2px solid var(--marker);
+  border-right: 2px solid var(--marker);
+}
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button) {
+  border-radius: 0 !important;
+  animation: tron-item-in 0.2s ease-out both;
+}
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(2) { animation-delay: 0.03s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(3) { animation-delay: 0.06s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(4) { animation-delay: 0.09s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(5) { animation-delay: 0.12s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(6) { animation-delay: 0.15s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(n+7) { animation-delay: 0.18s; }
+[data-theme="tron-legacy"] :is(.theme-item, .qts-menu > button, .qz-menu-item):hover {
+  background: linear-gradient(90deg, rgba(0, 217, 255, 0.28), rgba(0, 217, 255, 0.04)) !important;
+  box-shadow: inset 3px 0 0 var(--tron-cyan);
+  color: #fff;
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.8);
+}
+
+/* ----- Buttons: light streak on hover ----- */
+[data-theme="tron-legacy"] :is(.btn-primary, .btn-ghost) {
+  background-image: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.3) 50%, transparent 65%);
+  background-size: 250% 100%;
+  background-position: 130% 0;
+  background-repeat: no-repeat;
+  transition: background-position 0.55s ease, background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease, box-shadow 0.25s ease, filter 0.22s ease;
+}
+[data-theme="tron-legacy"] :is(.btn-primary, .btn-ghost):not(:disabled):hover { background-position: -30% 0; }
+[data-theme="tron-legacy"] .btn-ghost { border-color: rgba(0, 217, 255, 0.35); }
+
+/* ----- Course list: lit edge on hover ----- */
+[data-theme="tron-legacy"] .course-item:hover {
+  background: linear-gradient(90deg, rgba(0, 217, 255, 0.12), transparent 60%), var(--card);
+  box-shadow: inset 3px 0 0 var(--tron-cyan);
+}
+
+/* ----- Switching tabs: rez-in wipe (replaces the plain fade) ----- */
+[data-theme="tron-legacy"] :is(.tab-panel, .scoring-mode-view):not([hidden]) {
+  animation: tron-panel-rez 0.32s cubic-bezier(.2, .8, .2, 1);
+}
+
+/* ----- Card corner brackets grow in on load ----- */
+[data-theme="tron-legacy"] .card::before,
+[data-theme="tron-legacy"] .card::after {
+  animation: tron-bracket 0.6s cubic-bezier(.2, .8, .2, 1) 0.2s both;
+}
+
+/* ----- Perspective floor grid at the bottom of the screen ----- */
+[data-theme="tron-legacy"] body::after {
+  content: "";
+  position: fixed;
+  left: -50%;
+  right: -50%;
+  bottom: -10vh;
+  height: 55vh;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, rgba(0, 217, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 217, 255, 0.22) 1px, transparent 1px);
+  background-size: 60px 60px;
+  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+  mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+  transform-origin: 50% 100%;
+  transform: perspective(420px) rotateX(62deg);
+  animation: tron-floor 9s linear infinite;
+}
+
+/* ----- Keyframes ----- */
+@keyframes tron-boot {
+  0% { opacity: 0; }
+  12% { opacity: 0.9; }
+  16% { opacity: 0.15; }
+  26% { opacity: 1; }
+  30% { opacity: 0.4; }
+  40%, 100% { opacity: 1; }
+}
+@keyframes tron-pulse-run {
+  0% { background-position: -20% 100%, 0 0; }
+  45%, 100% { background-position: 120% 100%, 0 0; }
+}
+@keyframes tron-sweep {
+  from { background-position: -150% 0, 0 0, 0 0; }
+  to { background-position: 250% 0, 0 0, 0 0; }
+}
+@keyframes tron-rez {
+  from { clip-path: inset(-30px -30px 100% -30px); opacity: 0.5; }
+  to { clip-path: inset(-30px -30px -30px -30px); opacity: 1; }
+}
+@keyframes tron-item-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tron-panel-rez {
+  from { clip-path: inset(0 0 100% 0); opacity: 0.3; }
+  to { clip-path: inset(-40px -40px -40px -40px); opacity: 1; }
+}
+@keyframes tron-bracket {
+  from { width: 0; height: 0; opacity: 0; }
+  to { width: 16px; height: 16px; opacity: 1; }
+}
+@keyframes tron-floor {
+  from { transform: perspective(420px) rotateX(62deg) translateY(0); }
+  to { transform: perspective(420px) rotateX(62deg) translateY(60px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="tron-legacy"] *,
+  [data-theme="tron-legacy"] *::before,
+  [data-theme="tron-legacy"] *::after,
+  [data-theme="tron-legacy"] body::after { animation: none !important; transition: none !important; }
+}
+@media print {
+  [data-theme="tron-legacy"] body::after { display: none; }
+}
