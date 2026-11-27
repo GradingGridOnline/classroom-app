@@ -266,7 +266,11 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad-t { font-family:var(--font-heading); font-size:.76rem; letter-spacing:.08em; text-transform:uppercase; color:#eaffff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row.on .jr-pad-t { text-shadow:0 0 8px rgba(0,217,255,.7); }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row.jr-isdone .jr-pad-t { text-decoration:line-through; opacity:.7; }
-[data-theme="tron-legacy"] #journal-panel .jr-pad-s { font-size:.82rem; line-height:1.4; color:#9fd8e3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-line; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-s { font-size:.82rem; line-height:1.4; color:#9fd8e3; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-line; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-s-full { -webkit-line-clamp:10; line-clamp:10; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-s-partial { -webkit-line-clamp:3; line-clamp:3; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-who { font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.72rem; color:#7fb0bc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row.jr-pad-compact { padding:8px 14px; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-tags .jr-chip { font-size:.62rem; padding:0 6px; margin:0 3px 0 0; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-detail { display:flex; flex-direction:column; min-height:0; min-width:0; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody { flex:1; min-height:0; display:flex; flex-direction:column; padding:18px 24px 18px; animation:jr-wipe-in .28s ease-out; }
@@ -724,12 +728,19 @@
     const row = (e, num) => {
       const r = mk("button", `jr-pad-row jr-pad-${mode}${e.id === padSel ? " on" : ""}${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
       r.type = "button"; r.setAttribute("aria-pressed", String(e.id === padSel));
-      const top = mk("span", "jr-pad-rowtop");
-      top.append(mk("span", "jr-pad-n", num), mk("span", "jr-pad-d", e.date));
-      if (e.mode === "list") top.appendChild(mk("span", "jr-pad-task", e.done ? "✔ done" : "○ to do"));
-      r.append(top, mk("span", "jr-pad-t", e.subject || "(no subject)"));
-      if (mode === "full" && e.text) r.appendChild(mk("span", "jr-pad-s", e.text));
-      if (mode !== "compact" && e.tags.length) { const t = mk("span", "jr-pad-tags"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); r.appendChild(t); }
+      // Full: number, date, title, most of the text, who and tags · Partial: number, date, title, first 3 lines · Compact: the title only
+      if (mode !== "compact") {
+        const top = mk("span", "jr-pad-rowtop");
+        top.append(mk("span", "jr-pad-n", num), mk("span", "jr-pad-d", e.date));
+        if (e.mode === "list") top.appendChild(mk("span", "jr-pad-task", e.done ? "✔ done" : "○ to do"));
+        r.appendChild(top);
+      }
+      r.appendChild(mk("span", "jr-pad-t", e.subject || "(no subject)"));
+      if (mode !== "compact" && e.text) r.appendChild(mk("span", `jr-pad-s jr-pad-s-${mode}`, e.text));
+      if (mode === "full") {
+        r.appendChild(mk("span", "jr-pad-who", e.students.length ? `Students (${e.students.length}): ${e.students.map(sName).join(", ")}` : "Whole class"));
+        if (e.tags.length) { const t = mk("span", "jr-pad-tags"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); r.appendChild(t); }
+      }
       r.addEventListener("click", () => { if (creating || editingId) return; padSel = e.id; padFull = false; render(); });
       r.disabled = !!(creating || editingId);
       return r;
@@ -972,7 +983,7 @@
       });
       b.setAttribute("aria-pressed", String(displayMode === id)); b.disabled = creating || !!editingId;
       b.title = isPad()
-        ? { full: "Index shows each entry's title, first lines and tags", partial: "Index shows titles and tags", compact: "Index shows titles only" }[id]
+        ? { full: "Index shows most of each entry: title, text, students and tags", partial: "Index shows each entry's title and first 3 lines", compact: "Index shows titles only" }[id]
         : { full: "One whole entry per page", partial: "Up to 3 entries per page: title, first 2 lines, details", compact: "Up to 6 entries per page: titles only" }[id];
       seg.appendChild(b);
     });
