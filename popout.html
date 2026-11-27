@@ -79,18 +79,36 @@
     #popout-grid .desk-name {
       font-size: var(--popout-name-size, 0.9rem);
     }
+    /* Group number: a solid badge in the group's color with a big white number, so it reads from the back of the room
+       on any desk color and in every theme. */
     .popout-group-badge {
       position: absolute;
-      top: 2%;
-      right: 3%;
+      top: 6%;
+      left: 4%;
+      min-width: 1.35em;
+      height: 1.35em;
+      padding: 0 0.2em;
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
       font-size: var(--popout-badge-size, 1.6rem);
       font-weight: 800;
       line-height: 1;
-      color: hsl(var(--group-hue), 75%, 30%);
       font-family: var(--font-heading);
+      color: #fff;
+      background: hsl(var(--group-hue), 70%, 34%);
+      border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+      z-index: 1;
     }
-    [data-theme="cyberpunk"] .popout-group-badge {
-      color: hsl(var(--group-hue), 85%, 36%);
+    #popout-grid .desk-grouped .desk-name { padding-left: calc(var(--popout-badge-size, 1.6rem) * 1.25); }
+    [data-theme="cyberpunk"] .popout-group-badge { border-radius: 4px; background: hsl(var(--group-hue), 85%, 36%); }
+    [data-theme="tron-legacy"] .popout-group-badge {
+      border-radius: 0; border: 1px solid #fff; background: hsl(var(--group-hue), 80%, 30%);
+      box-shadow: 0 0 10px hsl(var(--group-hue), 90%, 55%); font-family: "Share Tech Mono", ui-monospace, monospace;
     }
   </style>
 </head>

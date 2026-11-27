@@ -955,6 +955,49 @@ function renderRoster() {
 
     el.rosterTbody.appendChild(tr);
   });
+  renderRosterCopyRow();
+}
+
+/** Under the main roster columns: "Copy all" puts that column's values on the clipboard, one per line in table order
+ *  (blank lines kept, so pasted columns still line up row for row). */
+function renderRosterCopyRow() {
+  const tfoot = document.getElementById("roster-tfoot");
+  if (!tfoot) return;
+  tfoot.innerHTML = "";
+  if (!RosterModule.students.length) return;
+  const tr = document.createElement("tr");
+  tr.className = "roster-copy-row";
+  const cols = [
+    ["Class #", (s) => (s.classNumber == null ? "" : s.classNumber)],
+    ["Name", (s) => s.name],
+    ["Pronunciation", (s) => s.pronunciation],
+    ["School ID", (s) => s.schoolId],
+    ["Email Address", (s) => s.email],
+  ];
+  cols.forEach(([label, get]) => {
+    const td = document.createElement("td");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-ghost btn-small roster-copy-btn";
+    b.textContent = "Copy all";
+    b.title = `Copy every ${label} (one per line) to paste somewhere else`;
+    b.addEventListener("click", async () => {
+      const text = RosterModule.students.map((s) => String(get(s) ?? "").trim()).join("\n");
+      let ok = false;
+      try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+        const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        try { ok = document.execCommand("copy"); } catch (e2) {}
+        ta.remove();
+      }
+      b.textContent = ok ? `Copied ✓ (${RosterModule.students.length})` : "Couldn't copy";
+      setTimeout(() => { b.textContent = "Copy all"; }, 1800);
+    });
+    td.appendChild(b);
+    tr.appendChild(td);
+  });
+  for (let i = 0; i < 3; i++) tr.appendChild(document.createElement("td")); // Remove, Special Needs, Notes
+  tfoot.appendChild(tr);
 }
 
 /** Special Needs: a checkbox (used by the "Students with Special Needs" section of the printed seating chart). */
@@ -1827,8 +1870,8 @@ function renderBanks() {
 
     const buttonRow = document.createElement("div");
     buttonRow.className = "bank-buttons";
+    // Loading is one click (no confirmation); only Save over a filled bank and ✕ ask first.
     const loadBtn = mkBtn("Load", `btn btn-small ${isEmpty ? "btn-ghost" : "btn-primary"}`, isEmpty ? "" : `Put “${bank.name}” on the chart`, async () => {
-      if (!confirm(`Load "${bank.name}"? This replaces your current seating arrangement (including grid size).`)) return;
       try { await SeatingModule.loadBank(index); selectedStudentId = null; renderSeating(); el.seatingStatus.textContent = `Loaded "${bank.name}" ✓`; }
       catch (err) { el.seatingStatus.textContent = `Couldn't load: ${err.message}`; }
     });
