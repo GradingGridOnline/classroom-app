@@ -231,6 +231,44 @@
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-sf-top b { text-transform:uppercase; letter-spacing:.14em; font-size:.8rem; color:#7fe9ff; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-sf-grid label { text-transform:uppercase; letter-spacing:.1em; font-size:.66rem; color:#7fb0bc; }
 
+/* ----- the data pad (Tron: Legacy): one screen, index + open entry ----- */
+[data-theme="tron-legacy"] #journal-panel .jr-pad-screen { display:grid; grid-template-columns:minmax(250px, 32%) 1fr; height:clamp(460px, 70vh, 720px); border:1px solid rgba(0,217,255,.4);
+  background:repeating-linear-gradient(to bottom, rgba(0,217,255,.03) 0 1px, transparent 1px 3px), linear-gradient(to bottom, rgba(0,217,255,.06), transparent 140px), #061017;
+  box-shadow:0 0 18px rgba(0,217,255,.16), inset 0 0 34px rgba(0,217,255,.06); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-screen.jr-pad-full { grid-template-columns:1fr; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-screen.jr-pad-full .jr-pad-list { display:none; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-list { display:flex; flex-direction:column; min-height:0; border-right:1px solid rgba(0,217,255,.3); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-listhead, [data-theme="tron-legacy"] #journal-panel .jr-pad-dethead { flex:none; display:flex; align-items:center; gap:10px; height:34px; padding:0 14px; border-bottom:1px solid rgba(0,217,255,.28);
+  font-family:var(--font-heading); font-size:.58rem; letter-spacing:.26em; text-transform:uppercase; color:#4fe0ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-listhead > span { flex:1; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-new, [data-theme="tron-legacy"] #journal-panel .jr-pad-back { font-family:var(--font-heading); font-size:.58rem; letter-spacing:.2em; text-transform:uppercase; color:#001218; background:#00d9ff; border:0; padding:4px 10px 4px 9px; cursor:pointer;
+  clip-path:polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-back { color:#4fe0ff; background:rgba(0,217,255,.1); box-shadow:inset 0 0 0 1px rgba(0,217,255,.55); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-new:hover { background:#7ff0ff; } [data-theme="tron-legacy"] #journal-panel .jr-pad-back:hover { background:rgba(0,217,255,.25); color:#fff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-dethead .jr-pad-dlabel { flex:1; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-rows { flex:1; min-height:0; overflow:auto; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row { display:grid; gap:3px; width:100%; text-align:left; padding:9px 14px 10px; background:transparent; border:0; border-bottom:1px solid rgba(0,217,255,.12); color:#bff3ff; cursor:pointer; font:inherit; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row:hover:not(:disabled) { background:rgba(0,217,255,.07); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row.on { background:linear-gradient(90deg, rgba(0,217,255,.22), rgba(0,217,255,.04)); box-shadow:inset 3px 0 0 #00d9ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row:disabled { cursor:default; opacity:.55; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-rowtop { display:flex; gap:10px; align-items:center; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.74rem; color:#4fe0ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-n { color:#7fb0bc; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row.on .jr-pad-d { color:#06121a; background:#f2d33c; padding:0 5px; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-task { margin-left:auto; color:#7fe9ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-t { font-family:var(--font-heading); font-size:.76rem; letter-spacing:.08em; text-transform:uppercase; color:#eaffff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row.on .jr-pad-t { text-shadow:0 0 8px rgba(0,217,255,.7); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row.jr-isdone .jr-pad-t { text-decoration:line-through; opacity:.7; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-s { font-size:.82rem; line-height:1.4; color:#9fd8e3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-line; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-tags .jr-chip { font-size:.62rem; padding:0 6px; margin:0 3px 0 0; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-detail { display:flex; flex-direction:column; min-height:0; min-width:0; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-detbody { flex:1; min-height:0; display:flex; flex-direction:column; padding:18px 24px 18px; animation:jr-wipe-in .28s ease-out; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-detbody > .jr-leaf, [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody > .jr-leafform { flex:1; min-height:0; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-detbody > .jr-leafform { overflow:hidden; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-detbody .jr-leafform .jr-ed [contenteditable] { flex:1; min-height:0 !important; overflow:auto; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-detbody > .jr-newslot { margin:auto; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-stage-foot { margin-top:10px; }
+@media (max-width:760px) { [data-theme="tron-legacy"] #journal-panel .jr-pad-screen { grid-template-columns:1fr; height:auto; } [data-theme="tron-legacy"] #journal-panel .jr-pad-list { max-height:260px; border-right:0; border-bottom:1px solid rgba(0,217,255,.3); } [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody { min-height:360px; } }
+
 /* display modes: full (one whole entry), partial (3 per page), compact (6 titles per page) */
 :is(#journal-panel, #journal-modal) .jr-seg { display:inline-flex; align-items:center; gap:4px; margin-left:12px; }
 :is(#journal-panel, #journal-modal) .jr-seg-label { font-size:.82rem; opacity:.8; margin-right:2px; }
@@ -293,6 +331,10 @@
   const PER = { full: 1, partial: 3, compact: 6 }; // entries per page for each display mode
   let displayMode = (() => { try { const v = localStorage.getItem("ggo-journal-display"); return PER[v] ? v : "full"; } catch (e) { return "full"; } })();
   let focusId = null; // the entry the book should open at on its next draw
+  // Tron: Legacy shows the journal as one data-pad screen (index + the open entry) instead of a book.
+  const isPad = () => document.documentElement.getAttribute("data-theme") === "tron-legacy";
+  let padSel = null;    // the entry open on the data pad
+  let padFull = false;  // the open entry fills the whole screen (index hidden)
   let leadId = null;  // the first entry on the spread now showing
   const modeNow = () => (creating || editingId ? "full" : displayMode); // writing and editing always use a whole page
   let tagFilter = new Set(); // tags ticked in the By-tag list: only entries with any of them are listed
@@ -490,6 +532,11 @@
 
   // ---------- the full-entry window ----------
   function openEntry(id) {
+    if (isPad()) { // the data pad opens the entry on its own screen, full size, instead of a pop-up
+      padSel = id; padFull = true; editingId = null; creating = false; render();
+      const w = panel.querySelector(".jr-pad"); if (w) w.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const existing = document.getElementById("journal-modal"); if (existing) existing.remove();
     const root = mk("div"); root.id = "journal-modal";
     const box = mk("div", "jr-modal-box"); root.appendChild(box);
@@ -624,6 +671,70 @@
       bar.appendChild(tb);
     }
     return bar;
+  }
+
+  /** Tron: Legacy — one screen: an index of entries on the left and the open entry on the right.
+   *  Full view (or a new entry / editing) uses the whole screen; "◂ Index" brings the list back. */
+  function buildPad(sorted) {
+    const wrap = mk("div", "jr-bookwrap jr-pad");
+    if (focusId && sorted.some((e) => e.id === focusId)) padSel = focusId;
+    focusId = null;
+    if (!sorted.some((e) => e.id === padSel)) { padSel = sorted.length ? (sortKey === "date-asc" ? sorted[sorted.length - 1] : sorted[0]).id : null; padFull = false; }
+    const open = sorted.find((e) => e.id === padSel) || null;
+    const writing = creating || (editingId && open && editingId === open.id);
+    const full = padFull || writing;
+    const mode = displayMode;
+
+    const head = mk("div", "jr-stage-head");
+    head.append(mk("span", "", "Data pad · Teaching log"), mk("span", "", `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`));
+    const screen = mk("div", `jr-pad-screen${full ? " jr-pad-full" : ""}`);
+
+    // the index
+    const list = mk("div", "jr-pad-list");
+    const lh = mk("div", "jr-pad-listhead");
+    lh.append(mk("span", "", "Index"), btn("+ New", "jr-pad-new", startNew));
+    const rows = mk("div", "jr-pad-rows");
+    if (!sorted.length) rows.appendChild(mk("div", "jr-blank", viewActive() ? "No entries match the filters." : "This journal is empty."));
+    sorted.forEach((e, i) => {
+      const r = mk("button", `jr-pad-row jr-pad-${mode}${e.id === padSel ? " on" : ""}${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
+      r.type = "button"; r.setAttribute("aria-pressed", String(e.id === padSel));
+      const top = mk("span", "jr-pad-rowtop");
+      top.append(mk("span", "jr-pad-n", String(i + 1).padStart(2, "0")), mk("span", "jr-pad-d", e.date));
+      if (e.mode === "list") top.appendChild(mk("span", "jr-pad-task", e.done ? "✔ done" : "○ to do"));
+      if (e.pinned) top.appendChild(mk("span", "jr-pad-task", "📌"));
+      r.append(top, mk("span", "jr-pad-t", e.subject || "(no subject)"));
+      if (mode === "full" && e.text) r.appendChild(mk("span", "jr-pad-s", e.text));
+      if (mode !== "compact" && e.tags.length) { const t = mk("span", "jr-pad-tags"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); r.appendChild(t); }
+      r.addEventListener("click", () => { if (creating || editingId) return; padSel = e.id; padFull = false; render(); });
+      r.disabled = !!(creating || editingId);
+      rows.appendChild(r);
+    });
+    list.append(lh, rows);
+
+    // the open entry
+    const det = mk("div", "jr-pad-detail");
+    const dh = mk("div", "jr-pad-dethead");
+    if (full && !writing) dh.appendChild(btn("◂ Index", "jr-pad-back", () => { padFull = false; render(); }));
+    dh.appendChild(mk("span", "jr-pad-dlabel", creating ? "New entry" : editingId ? "Editing" : open ? `Entry ${String(sorted.indexOf(open) + 1).padStart(2, "0")} / ${String(sorted.length).padStart(2, "0")}` : "Data log"));
+    if (!full && open) dh.appendChild(btn("Expand ▸", "jr-pad-back", () => { padFull = true; render(); }));
+    det.appendChild(dh);
+    const body = mk("div", "jr-pad-detbody");
+    if (creating) body.appendChild(buildForm(null));
+    else if (open) {
+      const lf = leaf(open);
+      // on the pad the entry is already open right here: "Full view" becomes Expand / Index
+      lf.querySelectorAll(".jr-foot-actions .btn").forEach((b) => { if (b.textContent === "Full view") b.remove(); });
+      body.appendChild(lf);
+    } else body.appendChild(newSlot(0));
+    det.appendChild(body);
+    screen.append(list, det);
+
+    const foot = mk("div", "jr-stage-foot");
+    const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
+    foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}` : `${sorted.length} entries`));
+    wrap.append(head, screen, foot);
+    leadId = open ? open.id : null;
+    return wrap;
   }
 
   function buildBook(sorted) {
@@ -814,7 +925,9 @@
         render();
       });
       b.setAttribute("aria-pressed", String(displayMode === id)); b.disabled = creating || !!editingId;
-      b.title = { full: "One whole entry per page", partial: "Up to 3 entries per page: title, first 2 lines, details", compact: "Up to 6 entries per page: titles only" }[id];
+      b.title = isPad()
+        ? { full: "Index shows each entry's title, first lines and tags", partial: "Index shows titles and tags", compact: "Index shows titles only" }[id]
+        : { full: "One whole entry per page", partial: "Up to 3 entries per page: title, first 2 lines, details", compact: "Up to 6 entries per page: titles only" }[id];
       seg.appendChild(b);
     });
     const showGroup = mk("div", "pad-group"); showGroup.dataset.label = "Show Entries";
@@ -829,7 +942,7 @@
 
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     const sorted = visibleEntries();
-    panel.appendChild(buildBook(sorted)); // the journal is always on the desk, even with no entries
+    panel.appendChild(isPad() ? buildPad(sorted) : buildBook(sorted)); // the journal is always on the desk, even with no entries
     panel.appendChild(sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length));
     if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
     if (pinned.length) {
@@ -861,6 +974,7 @@
     });
   }
 
+  new MutationObserver(() => { if (!panel.hidden && !creating && !editingId) render(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   let loadedFor = null;
   async function ensureLoaded() {
     const cid = AttendanceModule.currentCourseId || ScoringModule.currentCourseId;
