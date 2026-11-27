@@ -714,19 +714,21 @@
   /** Tron: Legacy — one screen: an index of entries on the left and the open entry on the right.
    *  Full view (or a new entry / editing) uses the whole screen; "◂ Index" brings the list back. */
   const padCatsShut = (() => { try { return new Set(JSON.parse(localStorage.getItem("ggo-journal-pad-shut")) || []); } catch (e) { return new Set(); } })();
-  let padCtl = (() => { try { const v = localStorage.getItem("ggo-journal-pad-ctl"); return ["filter", "stats", "export"].includes(v) ? v : "filter"; } catch (e) { return "filter"; } })();
+  let padCtl = (() => { try { const v = localStorage.getItem("ggo-journal-pad-ctl"); return ["filter", "stats", "settings"].includes(v) ? v : "filter"; } catch (e) { return "filter"; } })();
   /** The control screen under the main screen: Sort & filter, Stats or Export (picked with the three bars). */
   function padControls(sorted, pinned, filterBar) {
     if (padCtl === "filter") { filterBar.classList.add("jr-pad-ctl"); return filterBar; }
     const box = mk("div", "jr-sf jr-pad-ctl");
     const top = mk("div", "jr-sf-top");
-    top.appendChild(mk("b", "", padCtl === "stats" ? "Stats · Entry counts & timeline" : "Export"));
+    top.appendChild(mk("b", "", padCtl === "stats" ? "Stats · Entry counts & timeline" : "Settings · Journal & export"));
     box.appendChild(top);
     const body = mk("div", "jr-pad-ctl-body");
     if (padCtl === "stats") body.appendChild(countsBody());
     else {
+      body.appendChild(mk("h4", "", "Journal settings"));
+      body.appendChild(settingsBody());
       const all = J.entries.slice().sort(cmpDate);
-      top.appendChild(mk("span", "hint", `${all.length} entr${all.length === 1 ? "y" : "ies"}`));
+      body.appendChild(mk("h4", "", "Export"));
       body.appendChild(mk("p", "hint", "Download entries as a CSV file for Excel: date, subject, students, tags, the entry, and the attendance / score snapshot."));
       const row = mk("div", "jr-row");
       row.appendChild(btn(`Export CSV — showing now (${sorted.length})`, "btn btn-ghost btn-small", () => downloadCsv(sorted, `journal-${today()}.csv`))).title = "The Log entries the index is showing, with the current sort and filters";
@@ -821,9 +823,9 @@
     const foot = mk("div", "jr-stage-foot");
     // the three bars pick what the control screen shows
     const bars = mk("span", "jr-sf-bars jr-pad-bars"); bars.setAttribute("role", "tablist"); bars.setAttribute("aria-label", "Control screen");
-    [["filter", "Control"], ["stats", "Stats"], ["export", "Export"]].forEach(([k, label]) => {
+    [["filter", "Control"], ["stats", "Stats"], ["settings", "Settings"]].forEach(([k, label]) => {
       const b = mk("button", `jr-pad-bar${padCtl === k ? " on" : ""}`); b.type = "button";
-      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(padCtl === k)); b.title = { filter: "Control: sort & filter", stats: "Stats: entry counts & timeline", export: "Export: CSV files" }[k];
+      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(padCtl === k)); b.title = { filter: "Control: sort & filter", stats: "Stats: entry counts & timeline", settings: "Settings: journal settings and CSV export" }[k];
       b.append(mk("i"), mk("span", "", label));
       b.addEventListener("click", () => { padCtl = k; try { localStorage.setItem("ggo-journal-pad-ctl", k); } catch (e) {} render(); });
       bars.appendChild(b);
@@ -995,7 +997,12 @@
   }
 
   function settingsSection() {
-    const s = section("settings", "Journal Settings"); const body = mk("div"); s.appendChild(body);
+    const s = section("settings", "Journal Settings"); s.appendChild(settingsBody());
+    return s;
+  }
+  /** Snapshot switch and the quick-pick tags (the Settings screen on the data pad; a section elsewhere). */
+  function settingsBody() {
+    const body = mk("div");
     const l = mk("label"); const c = mk("input"); c.type = "checkbox"; c.checked = J.settings.snapshots;
     c.addEventListener("change", () => { J.settings.snapshots = c.checked; render(); });
     l.append(c, document.createTextNode(" Show attendance / score snapshot beside entries")); body.appendChild(l);
@@ -1008,7 +1015,7 @@
     const add = () => { if (ni.value.trim()) { J.addSettingsTag(ni.value); render(); } };
     ni.addEventListener("keydown", (ev) => { if (ev.key === "Enter") add(); });
     body.append(ni, btn("Add", "btn btn-ghost btn-small", add));
-    return s;
+    return body;
   }
 
   // ---------- the panel ----------
@@ -1077,8 +1084,8 @@
       panel.appendChild(m);
     }
 
-    // On the data pad, Stats and Export live on its control screen, so only Settings sits below it.
-    (isPad() ? [["journal-settings", settingsSection()]] : [["journal-counts", countsSection()], ["journal-search", searchSection()], ["journal-settings", settingsSection()]]).forEach(([id, sec]) => {
+    // On the data pad, Stats, Settings and Export live on its control screen: nothing sits below it.
+    (isPad() ? [] : [["journal-counts", countsSection()], ["journal-search", searchSection()], ["journal-settings", settingsSection()]]).forEach(([id, sec]) => {
       panel.appendChild(sec);
       if (window.GGOSections) window.GGOSections.add(id, `#${sec.id}`);
     });
