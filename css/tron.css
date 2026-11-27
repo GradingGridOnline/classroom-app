@@ -99,9 +99,12 @@
 }
 
 /* ----- Scoring tab row (Main Scores | tools) ----- */
-[data-theme="tron-legacy"] .scoring-tab-row {
-  border-bottom-color: var(--tron-cyan);
-  box-shadow: 0 6px 10px -8px var(--tron-cyan);
+[data-theme="tron-legacy"] #scoring-panel { --level-outline: rgba(0, 217, 255, 0.8); }
+[data-theme="tron-legacy"] .scoring-tab-row { border-bottom-color: var(--tron-cyan); }
+[data-theme="tron-legacy"] #scoring-panel > .scoring-mode-view {
+  border-width: 1px;
+  border-radius: 0;
+  box-shadow: 0 10px 22px -14px var(--tron-cyan), inset 0 0 26px -16px var(--tron-cyan);
 }
 [data-theme="tron-legacy"] .scoring-tab-row .tab-btn {
   font-family: var(--font-heading);

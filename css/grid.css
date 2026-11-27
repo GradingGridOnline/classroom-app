@@ -589,11 +589,19 @@ table.source-grid.source-grid-over {
 /* ===== Scoring: one tab row — Main Scores, a divider, then one tab per scoring tool =====
    Same outlined tabs as the 3rd/4th levels; the open tab sits on the card color so it
    joins the page below. Each tab has its type in small text under its name. */
+#scoring-panel { --level-outline: var(--green); --level-bg: var(--card); }
 .scoring-tab-row {
-  --level-outline: var(--green);
-  --level-bg: var(--card);
-  margin: 0 0 18px;
-  padding: 0;
+  margin: 0;
+  padding: 0 8px;
+}
+/* The open tab's view hangs from it: the tab row's line is the panel's top edge and the open tab opens into it. */
+#scoring-panel > .scoring-mode-view {
+  padding: 20px 20px 10px;
+  margin-bottom: 10px;
+  background: var(--level-bg);
+  border: 2px solid var(--level-outline);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 .scoring-tab-row .scoring-main-row,
 .scoring-tab-row .scoring-tool-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; }
