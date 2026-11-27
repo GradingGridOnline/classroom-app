@@ -732,9 +732,14 @@
   const status = mk("span", "result");
   function render() {
     panel.innerHTML = "";
-    const bar = mk("div", "panel-toolbar");
-    const left = mk("div", "panel-toolbar-buttons");
-    left.appendChild(btn("+ New Entry", "btn btn-ghost", startNew));
+    const bar = mk("div", "panel-toolbar pad-toolbar");
+    const readout = mk("div", "pad-readout pad-readout-tron"); // entry count, shown by the Tron: Legacy theme
+    readout.append(mk("span", "count-badge", String(J.entries.length)), mk("span", "pad-readout-label", "Entries"));
+    bar.appendChild(readout);
+    const left = mk("div", "panel-toolbar-buttons pad-main");
+    const writeGroup = mk("div", "pad-group"); writeGroup.dataset.label = "Write";
+    writeGroup.appendChild(btn("+ New Entry", "btn btn-ghost", startNew));
+    left.appendChild(writeGroup);
     const seg = mk("div", "jr-seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "How entries are shown");
     seg.appendChild(mk("span", "jr-seg-label", "Show entries:"));
     [["full", "Full"], ["partial", "Partial"], ["compact", "Compact"]].forEach(([id, label]) => {
@@ -748,9 +753,11 @@
       b.title = { full: "One whole entry per page", partial: "Up to 3 entries per page: title, first 2 lines, details", compact: "Up to 6 entries per page: titles only" }[id];
       seg.appendChild(b);
     });
-    left.appendChild(seg);
+    const showGroup = mk("div", "pad-group"); showGroup.dataset.label = "Show Entries";
+    showGroup.appendChild(seg);
+    left.appendChild(showGroup);
     bar.appendChild(left);
-    const right = mk("div", "panel-toolbar-buttons"); right.appendChild(status);
+    const right = mk("div", "pad-save"); right.appendChild(status);
     right.appendChild(btn("Save Journal", "btn btn-primary", async () => {
       try { status.textContent = "Saving…"; if (openForm && openForm.submit(true)) render(); await J.save(); status.textContent = "Saved ✓"; } catch (e) { status.textContent = `Couldn't save: ${e.message}`; }
     }));

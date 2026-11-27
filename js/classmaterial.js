@@ -196,18 +196,23 @@
     renderMaterials(host);
   }
   function renderMaterials(host) {
-    const top = mk("div", "cm-row");
-    const nm = mk("div", "cm-newmenu");
+    const top = mk("div", "panel-toolbar pad-toolbar cm-toolbar");
+    const readout = mk("div", "pad-readout pad-readout-tron"); // item count, shown by the Tron: Legacy theme
+    readout.append(mk("span", "count-badge", String(CM.items.length)), mk("span", "pad-readout-label", "Items"));
+    top.appendChild(readout);
+    const main = mk("div", "panel-toolbar-buttons pad-main"); top.appendChild(main);
+    const nm = mk("div", "cm-newmenu pad-group"); nm.dataset.label = "Create";
     Object.entries(KINDS).forEach(([k, v]) => nm.appendChild(btn(`+ New ${v.label.toLowerCase()}`, "btn btn-ghost", () => {
       if (k === "slides" && API.newSlideshow) return API.newSlideshow();
       const t = prompt(`Name for the new ${v.label.toLowerCase()}:`, `${courseTitle()} – ${v.label}`);
       if (t && t.trim()) run(`Creating ${v.label.toLowerCase()}`, () => createItem(k, t.trim()));
     })));
-    top.appendChild(nm);
+    main.appendChild(nm);
+    const drive = mk("div", "pad-group"); drive.dataset.label = "Google Drive"; main.appendChild(drive);
     const g = mk("span", "cm-google", G.connected() || G.email ? `Google: ${G.email || "connected"}` : "Google not connected yet — it connects when you create something.");
-    top.appendChild(g);
-    if (G.email || G.connected()) top.appendChild(btn("Disconnect", "btn btn-ghost btn-small", () => { G.disconnect(); render(); }));
-    top.appendChild(mk("span", "result cm-note", note));
+    drive.appendChild(g);
+    if (G.email || G.connected()) drive.appendChild(btn("Disconnect", "btn btn-ghost btn-small", () => { G.disconnect(); render(); }));
+    main.appendChild(mk("span", "result cm-note", note));
     host.appendChild(top);
 
     const bar = mk("div", "cm-row");

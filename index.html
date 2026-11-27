@@ -303,14 +303,15 @@
 
         <!-- ----- Attendance panel ----- -->
         <div id="attendance-panel" class="tab-panel" hidden>
-          <div class="panel-toolbar">
-            <span id="attendance-status" class="result"></span>
-            <button id="save-attendance-btn" class="btn btn-primary">Save Attendance</button>
-          </div>
-
-          <div class="attendance-view-toggle">
-            <button id="att-view-table-btn" class="btn btn-small btn-primary" type="button">Table</button>
-            <button id="att-view-seating-btn" class="btn btn-small btn-ghost" type="button">Seating Grid</button>
+          <div class="panel-toolbar pad-toolbar">
+            <div class="pad-group" data-label="View">
+              <button id="att-view-table-btn" class="btn btn-small btn-primary" type="button">Table</button>
+              <button id="att-view-seating-btn" class="btn btn-small btn-ghost" type="button">Seating Grid</button>
+            </div>
+            <div class="pad-save">
+              <span id="attendance-status" class="result"></span>
+              <button id="save-attendance-btn" class="btn btn-primary">Save Attendance</button>
+            </div>
           </div>
 
           <div id="attendance-seating-view" hidden>
@@ -343,9 +344,11 @@
 
         <!-- ----- Scoring panel ----- -->
         <div id="scoring-panel" class="tab-panel" hidden>
-          <div class="panel-toolbar">
-            <span id="scoring-status" class="result"></span>
-            <button id="save-scoring-btn" class="btn btn-primary">Save Scoring</button>
+          <div class="panel-toolbar pad-toolbar">
+            <div class="pad-save">
+              <span id="scoring-status" class="result"></span>
+              <button id="save-scoring-btn" class="btn btn-primary">Save Scoring</button>
+            </div>
           </div>
 
           <!-- Main Scores (its own large button) and the tool tabs share one line -->
@@ -386,9 +389,11 @@
 
           <!-- ----- Student Consultation ----- -->
           <div id="consultation-view">
-            <div class="panel-toolbar">
-              <label for="consultation-student-select">Student:</label>
-              <select id="consultation-student-select"></select>
+            <div class="panel-toolbar pad-toolbar">
+              <div class="pad-group" data-label="Student">
+                <label for="consultation-student-select">Student:</label>
+                <select id="consultation-student-select"></select>
+              </div>
             </div>
             <div id="consultation-detail"></div>
           </div>
@@ -398,20 +403,29 @@
             <div class="attendance-settings-block">
               <h4>Items to include</h4>
               <p class="hint">Choose which scoring items appear on printed report cards. Applies to both single and bulk printing below.</p>
-              <div class="panel-toolbar">
-                <button id="select-all-items-btn" class="btn btn-ghost btn-small">Select All</button>
-                <button id="select-no-items-btn" class="btn btn-ghost btn-small">Select None</button> <button id="save-printcard-btn" class="btn btn-primary btn-small">Save Selection</button>
+              <div class="panel-toolbar pad-toolbar">
+                <div class="pad-group" data-label="Select">
+                  <button id="select-all-items-btn" class="btn btn-ghost btn-small">Select All</button>
+                  <button id="select-no-items-btn" class="btn btn-ghost btn-small">Select None</button>
+                </div>
+                <div class="pad-save">
+                  <button id="save-printcard-btn" class="btn btn-primary btn-small">Save Selection</button>
+                </div>
               </div>
               <div id="item-selection-list"></div>
             </div>
 
             <div class="attendance-settings-block">
               <h4>Print</h4>
-              <div class="panel-toolbar">
-                <label for="printcard-student-select">Student:</label>
-                <select id="printcard-student-select"></select>
-                <button id="print-one-btn" class="btn btn-primary btn-small">Print This Student</button>
-                <button id="print-all-btn" class="btn btn-ghost btn-small">Print All Students</button>
+              <div class="panel-toolbar pad-toolbar">
+                <div class="pad-group" data-label="Student">
+                  <label for="printcard-student-select">Student:</label>
+                  <select id="printcard-student-select"></select>
+                </div>
+                <div class="pad-group" data-label="Print">
+                  <button id="print-one-btn" class="btn btn-primary btn-small">Print This Student</button>
+                  <button id="print-all-btn" class="btn btn-ghost btn-small">Print All Students</button>
+                </div>
               </div>
               <span id="printcard-status" class="result"></span>
             </div>

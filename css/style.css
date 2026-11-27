@@ -2322,6 +2322,9 @@ textarea {
    before; the Tron: Legacy theme (css/tron.css) lays them out as a data pad. */
 .pad-readout,
 .pad-main > .pad-group,
-.pad-save { display: contents; }
+.pad-main > .pad-save { display: contents; }
+.pad-toolbar > .pad-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pad-toolbar > .pad-save { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.pad-save > .result { margin: 0; }
 .pad-readout-label { display: none; }
 .pad-readout.pad-readout-tron { display: none; }

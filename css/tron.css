@@ -231,7 +231,8 @@
 [data-theme="tron-legacy"] :is(td, .panel-toolbar) .panel-toolbar::after { content: none; }
 
 /* ----- Control bar layout: readout | labelled groups | save -----
-   Applies to bars marked .pad-toolbar (Roster and Seating Chart so far). */
+   Applies to bars marked .pad-toolbar (Roster, Seating Chart, Attendance, Scoring,
+   Report Card, Journal, Class Material). */
 [data-theme="tron-legacy"] .pad-toolbar {
   display: flex;
   flex-wrap: nowrap;
@@ -392,6 +393,65 @@
   padding: 7px 10px;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
 }
+/* Toggle buttons in a group (Table / Seating Grid, Full / Partial / Compact,
+   Class Material filters): the selected one lights up. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-group .btn-primary:is([aria-pressed="true"], #att-view-table-btn, #att-view-seating-btn) {
+  color: #fff;
+  background-color: rgba(0, 217, 255, 0.3);
+  border-color: var(--tron-cyan);
+  box-shadow: inset 0 0 12px rgba(0, 217, 255, 0.55);
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.8);
+}
+/* Save zone: status message ("Saved ✓") sits under the button. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-save {
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-save > .result {
+  margin: 0;
+  max-width: 260px;
+  min-height: 0;
+  text-align: right;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-save > .result:empty { display: none; }
+[data-theme="tron-legacy"] .pad-toolbar .pad-main > .result {
+  align-self: center;
+  margin: 0 0 0 18px;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+/* Labels, drop-downs and text inside a group. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-group > label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7fb0bc;
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-group > select { min-height: 34px; border-radius: 0; }
+/* A field label that repeats the group's own tag ("STUDENT" / "Student:") is hidden
+   visually but kept for screen readers. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-group[data-label] > label[for] {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+[data-theme="tron-legacy"] .pad-toolbar .jr-seg { margin-left: 0; }
+[data-theme="tron-legacy"] .pad-toolbar .jr-seg-label { display: none; }
+[data-theme="tron-legacy"] .pad-toolbar .cm-google {
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #9fd8e3;
+}
+/* Small buttons keep the same height as the rest of the bar. */
+[data-theme="tron-legacy"] .pad-toolbar .btn-small { min-height: 30px; padding: 5px 12px; font-size: 0.74rem; }
+[data-theme="tron-legacy"] .pad-toolbar .pad-save .btn-small { min-height: 34px; padding: 7px 18px; }
+
 @media (max-width: 900px) {
   [data-theme="tron-legacy"] .pad-toolbar { flex-wrap: wrap; }
   [data-theme="tron-legacy"] .pad-toolbar .pad-save { margin-top: 12px; }
