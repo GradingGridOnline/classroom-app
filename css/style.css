@@ -2347,3 +2347,6 @@ textarea {
 .roster-copy-row td { padding-top: 8px; border-top: 2px solid var(--line); background: transparent; }
 .roster-copy-btn { width: 100%; white-space: nowrap; }
 [data-theme="tron-legacy"] .roster-copy-btn { border-radius: 0; text-transform: uppercase; letter-spacing: .08em; font-size: .68rem; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+
+/* Report Card → Items to include: the "print the total score" option above the item lists */
+.report-total-option { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 12px; font-weight: 600; }

@@ -10,11 +10,14 @@
 //    it's exactly what's been saved.
 //  - emailSubject / emailMessage: the wording used when report cards
 //    are emailed to students (blank = the standard wording).
+//  - showTotal: whether the student's current total score is printed
+//    (and emailed) at the bottom of the report card (default: yes).
 
 const ReportCardModule = {
   selectedItemIds: new Set(),
   emailSubject: "",
   emailMessage: "",
+  showTotal: true,
   currentCourseId: null,
 
   fileName(courseId) {
@@ -31,6 +34,7 @@ const ReportCardModule = {
     }
     this.emailSubject = data && typeof data.emailSubject === "string" ? data.emailSubject : "";
     this.emailMessage = data && typeof data.emailMessage === "string" ? data.emailMessage : "";
+    this.showTotal = !(data && data.showTotal === false);
   },
 
   async save() {
@@ -39,6 +43,7 @@ const ReportCardModule = {
       selectedItemIds: Array.from(this.selectedItemIds),
       emailSubject: this.emailSubject,
       emailMessage: this.emailMessage,
+      showTotal: this.showTotal,
     });
   },
 

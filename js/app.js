@@ -7418,6 +7418,16 @@ function renderConsultationDetail() {
 function renderItemSelectionList() {
   el.itemSelectionList.innerHTML = "";
 
+  // Whether the student's current total score goes on the report card (printed and emailed).
+  const totalRow = document.createElement("label");
+  totalRow.className = "item-checkbox-label report-total-option";
+  const totalBox = document.createElement("input");
+  totalBox.type = "checkbox";
+  totalBox.checked = ReportCardModule.showTotal;
+  totalBox.addEventListener("change", () => { ReportCardModule.showTotal = totalBox.checked; });
+  totalRow.append(totalBox, document.createTextNode(" Print the student's current total score"));
+  el.itemSelectionList.appendChild(totalRow);
+
   if (ScoringModule.categories.every((c) => c.items.length === 0)) {
     const hint = document.createElement("p");
     hint.className = "hint";
@@ -7580,10 +7590,12 @@ function buildReportCardSheet(studentId) {
 
   sheet.appendChild(columns);
 
-  const totalBlock = document.createElement("div");
-  totalBlock.className = "report-sheet-total-block";
-  totalBlock.textContent = `Total Score: ${detail.total === null ? "—" : detail.total}`;
-  sheet.appendChild(totalBlock);
+  if (ReportCardModule.showTotal) { // "Print the total score" in Items to include
+    const totalBlock = document.createElement("div");
+    totalBlock.className = "report-sheet-total-block";
+    totalBlock.textContent = `Total Score: ${detail.total === null ? "—" : detail.total}`;
+    sheet.appendChild(totalBlock);
+  }
 
   return sheet;
 }
@@ -8220,7 +8232,7 @@ document.getElementById("update-template-btn").addEventListener("click", async (
       name: "reportcard", mod: ReportCardModule, scoped: true,
       snap: () => ({
         selectedItemIds: Array.from(ReportCardModule.selectedItemIds),
-        emailSubject: ReportCardModule.emailSubject, emailMessage: ReportCardModule.emailMessage,
+        emailSubject: ReportCardModule.emailSubject, emailMessage: ReportCardModule.emailMessage, showTotal: ReportCardModule.showTotal,
       }),
     },
   ];
