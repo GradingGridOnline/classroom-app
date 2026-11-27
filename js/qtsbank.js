@@ -1106,6 +1106,8 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       b.title = "This quiz was changed in another course or in Class Material → Quizzes.";
       return [b];
     },
+    /** Every course quiz that uses a Library quiz (from the index: no course files are opened). */
+    async usesOf(libId) { const m = await batch(() => loadModel({})); return m.rows.filter((r) => r.d.libId === libId); },
     /** A line for the quiz editor: which Library item this is and how many courses use it. */
     usedInNote(test) {
       if (!test.libId) return null;

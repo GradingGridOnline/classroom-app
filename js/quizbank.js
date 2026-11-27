@@ -43,6 +43,29 @@
     st.id = "qz-style";
     st.textContent = `
       .qz-header { background: color-mix(in srgb, var(--green) 12%, var(--card)); border: 2px solid var(--green); border-radius: 10px; padding: 10px 14px; margin-bottom: 22px; }
+      .qz-top { margin: 0 0 16px; }
+      .qz-top-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 10px; }
+      .qz-title { margin: 0; font-family: var(--font-heading); font-size: 1.35rem; }
+      .qz-meta { color: var(--ink-soft); font-size: .9rem; }
+      .qz-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 12px; font-size: .92rem; }
+      .qz-steps { --level-outline: var(--green); --level-bg: var(--card); margin: 0 0 18px; }
+      .qz-steps .tab-btn { display: inline-flex; align-items: center; gap: 8px; }
+      .qz-step-n { display: inline-flex; align-items: center; justify-content: center; width: 1.45em; height: 1.45em; border-radius: 50%; border: 1.5px solid currentColor; font-size: .8em; font-weight: 700; }
+      .qz-form-line { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 8px 10px; margin: 0 0 6px; border: 1px solid var(--line); border-radius: var(--radius-small, 6px); background: color-mix(in srgb, var(--green) 5%, var(--card)); }
+      .qz-form-name { min-width: 9rem; }
+      .qz-form-counts { display: inline-flex; gap: 4px; align-items: center; font-size: .85rem; }
+      .count-badge.qz-open { background: #1e9e4a; color: #fff; border-color: #1e9e4a; }
+      .qz-open-name { cursor: pointer; }
+      .qz-open-name:hover { text-decoration: underline; }
+      .qz-dlg-cat { font-weight: 700; margin: 10px 0 2px; }
+      .qz-counts .hint, .qz-form-line .hint { margin: 0; }
+      [data-theme="tron-legacy"] .qz-title { text-transform: uppercase; letter-spacing: .1em; font-size: 1.05rem; color: #e8fdff; text-shadow: 0 0 8px rgba(0,217,255,.6); }
+      [data-theme="tron-legacy"] .qz-meta { font-family: "Share Tech Mono", ui-monospace, monospace; color: #9fd8e3; }
+      [data-theme="tron-legacy"] .qz-counts strong { font-family: var(--font-heading); font-size: .7rem; letter-spacing: .2em; text-transform: uppercase; color: rgba(0,217,255,.8); font-weight: 400; }
+      [data-theme="tron-legacy"] .qz-steps .tab-btn { font-family: var(--font-heading); font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; }
+      [data-theme="tron-legacy"] .qz-step-n { border-radius: 0; font-family: "Share Tech Mono", ui-monospace, monospace; }
+      [data-theme="tron-legacy"] .qz-form-line { border-radius: 0; border-color: rgba(0,217,255,.3); background: rgba(3,10,14,.6); }
+      [data-theme="tron-legacy"] .count-badge.qz-open { background: rgba(30,158,74,.25); color: #7dffa8; border-color: #3ddc78; box-shadow: 0 0 8px rgba(61,220,120,.5); }
       .qz-tab { font-weight: 700; padding: 8px 18px !important; border-width: 2px !important; }
       .pres-section.qz-sec-settings { border-color: #6a4fb3; }
       .pres-section.qz-sec-settings > .pres-section-head { background: #6a4fb3; color: #fff; }
@@ -577,11 +600,204 @@
   const kindName = (quiz) => (quiz.kind === "answers" ? "Answer Collection" : isSurveyKind(quiz.kind) ? "Research Survey" : quiz.kind === "formative" ? "Formative Survey" : "Quiz");
 
   // ---------- shared editor header ----------
+  // ---------- the quiz page: one page per quiz with three steps (Questions · Give it · Results) ----------
+  const isTmpCourse = () => String(ScoringModule.currentCourseId || "").startsWith("tmpledit-");
+  const openQrWindow = (url) => window.open(`presqr.html?k=quiz&u=${encodeURIComponent(url)}${window.qrCourseQuery ? window.qrCourseQuery() : ""}`, "ggo-quiz-qr", "width=480,height=620");
+  const hasManualScores = (itemId) => Object.keys(ScoringModule.records || {}).some((k) => k.endsWith(`|${itemId}`) && String(ScoringModule.records[k]).trim() !== "");
+
+  /** "Counts toward: Vocabulary › Quiz 3 · Progress Tracker › Unit 3 › Vocab" with a Change… button. */
+  function countsToward(tool, container, test) {
+    const line = h("div", "qz-counts");
+    const links = [];
+    (ScoringModule.categories || []).forEach((c) => (c.items || []).forEach((i) => {
+      const src = i.scoreSources;
+      if (!src || !src.testSelections || src.testSelections[tool.id] !== test.id) return;
+      const w = Number(src.toolWeights && src.toolWeights[tool.id]) || 0;
+      const total = (Number(src.manualWeight) || 0) + Object.values(src.toolWeights || {}).reduce((a, x) => a + (Number(x) || 0), 0);
+      const share = w && total ? Math.round((w / total) * 100) : 0;
+      links.push(`${c.name} › ${i.name}${share === 0 ? " (weight 0: not counted)" : share < 100 ? ` (${share}% of it)` : ""}`);
+    }));
+    (ScoringModule.tools || []).forEach((t2) => {
+      if (t2.type !== "table" || !t2.config) return;
+      (Array.isArray(t2.config.projects) ? t2.config.projects : [t2.config]).forEach((pc) => (pc.columns || []).forEach((col) => {
+        if (col.testSource && col.testSource.toolId === tool.id && col.testSource.testId === test.id) links.push(`${t2.name} › ${pc.name || "Project"} › ${col.name || "column"}`);
+      }));
+    });
+    line.appendChild(h("strong", "", "Counts toward: "));
+    line.appendChild(h("span", links.length ? "qz-counts-list" : "hint", links.length ? links.join(" · ") : "nothing yet: its scores don't reach Main Scores"));
+    line.appendChild(button(links.length ? "Change…" : "Choose…", "btn btn-ghost btn-small", () => chooseItems(tool, container, test)));
+    return line;
+  }
+  /** Tick the Main Scores items this quiz feeds. A newly ticked item takes the quiz's score; typed-in scores are kept and blended. */
+  async function chooseItems(tool, container, test) {
+    const cats = (ScoringModule.categories || []).filter((c) => (c.items || []).length);
+    if (!cats.length) { alert("Main Scores has no items yet. Add a category and its items in Scoring → Main Scores first."); return; }
+    if (!(window.QTSBank && QTSBank.core && QTSBank.core.dialog)) return;
+    const picked = await QTSBank.core.dialog((box, done) => {
+      box.appendChild(h("h3", "", `Where does “${test.name}” count?`));
+      box.appendChild(h("p", "hint", "Tick the Main Scores items this quiz's scores go into (scaled to each item's points). If you've typed scores into an item yourself, they're kept and blended with the quiz."));
+      const cbs = [];
+      cats.forEach((c) => {
+        box.appendChild(h("div", "qz-dlg-cat", c.name));
+        c.items.forEach((i) => {
+          const sel = i.scoreSources && i.scoreSources.testSelections && i.scoreSources.testSelections[tool.id];
+          const other = sel && sel !== test.id ? ScoringModule.findTest(tool.id, sel) : null;
+          const l = h("label", "qts-check"), cb = h("input"); cb.type = "checkbox"; cb.value = i.id; cb.checked = sel === test.id;
+          l.append(cb, h("span", "", `${i.name}${other ? ` (now uses “${other.name}”)` : ""}`));
+          box.appendChild(l); cbs.push(cb);
+        });
+      });
+      const acts = h("div", "qts-actions");
+      acts.append(button("Cancel", "btn btn-ghost", () => done(null)), button("Save", "btn btn-primary", () => done(new Set(cbs.filter((b) => b.checked).map((b) => b.value)))));
+      box.appendChild(acts);
+    });
+    if (!picked) return;
+    cats.forEach((c) => c.items.forEach((i) => {
+      const src = ScoringModule.getItemScoreSources(i.id);
+      const was = src.testSelections[tool.id] === test.id, now = picked.has(i.id);
+      if (now && !was) {
+        ScoringModule.setItemTestSelection(i.id, tool.id, test.id);
+        if (!(Number(src.toolWeights[tool.id]) > 0)) ScoringModule.setItemToolWeight(i.id, tool.id, 100);
+        if (!hasManualScores(i.id)) ScoringModule.setItemManualWeight(i.id, 0);
+      } else if (!now && was) {
+        ScoringModule.setItemTestSelection(i.id, tool.id, "");
+        ScoringModule.setItemToolWeight(i.id, tool.id, 0);
+        if (!Object.values(src.toolWeights).some((x) => Number(x) > 0) && !(Number(src.manualWeight) > 0)) ScoringModule.setItemManualWeight(i.id, 100);
+      }
+    }));
+    flush();
+    renderScoringToolView(tool, container);
+  }
+  /** Title, facts, Export, Counts toward, and the three step tabs. */
+  function quizPageTop(tool, container, test, quiz, current) {
+    const rerender = () => renderScoringToolView(tool, container);
+    const top = h("div", "qz-top");
+    const row = h("div", "qz-top-row");
+    if (!isTmpCourse()) row.appendChild(button("← All quizzes", "btn btn-ghost btn-small", () => { editing.delete(tool.id); rerender(); }));
+    row.appendChild(h("h3", "qz-title", test.name || "Untitled"));
+    const n = ScoringModule.quizQuestionCount(quiz);
+    row.appendChild(h("span", "qz-meta", `${kindName(quiz)} · ${n} question${n === 1 ? "" : "s"}${isSurveyKind(quiz.kind) ? "" : ` · ${ScoringModule.quizTotal(quiz)} points`}`));
+    const ex = exportItems(test, quiz);
+    if (ex.length) { const sp = h("span"); sp.style.flex = "1"; row.append(sp, menuButton("Export", "#4a5568", ex)); }
+    top.appendChild(row);
+    if (isTmpCourse()) return top; // editing with no students: questions only
+    if (!isSurveyKind(quiz.kind)) top.appendChild(countsToward(tool, container, test));
+    const steps = h("div", "level-tab-row qz-steps");
+    const students = new Set(quiz.submissions.map((x) => x.sid)).size, open = quiz.forms.filter((f) => f.open).length;
+    [["build", "1", "Questions"], ["give", "2", `Give it${open ? " · QR open" : ""}`], ["results", "3", `Results${students ? ` (${students})` : ""}`]].forEach(([v, num, label]) => {
+      const active = current === v;
+      const b = button("", `tab-btn${active ? " tab-btn-active" : ""}`, () => {
+        if (v === "results") resultMode.set(test.id, "view");
+        viewOf.set(tool.id, v); rerender();
+      });
+      b.append(h("span", "qz-step-n", num), document.createTextNode(label));
+      steps.appendChild(b);
+    });
+    top.appendChild(steps);
+    return top;
+  }
+  /** Step 2: this course's QR forms for the quiz, and the other courses that use it. */
+  function renderGive(tool, container, testId) {
+    const t = ScoringModule.findTest(tool.id, testId), quiz = ScoringModule.quizOf(tool.id, testId);
+    const rerender = () => renderScoringToolView(tool, container);
+    container.innerHTML = "";
+    container.appendChild(editorHeader(tool, container, t, quiz, "give"));
+    const statKey = `${tool.id}|${t.id}|give`;
+    const stat = h("p", "result", statusMsg.get(statKey) || "");
+    const say = (x) => { statusMsg.set(statKey, x); stat.textContent = x; };
+    const guard = (fn) => async () => { try { await fn(); } catch (err) { say(`Couldn't do that: ${err.message}`); } };
+    const isSurvey = isSurveyKind(quiz.kind);
+    const styleQ = () => (window.QRStyles ? QRStyles.query(quiz.style) : "");
+    const course = (CoursesModule.courses || []).find((c) => c.id === ScoringModule.currentCourseId);
+
+    const { section, body } = makePresSection(`This course${course ? `: ${course.name}` : ""}`);
+    section.classList.add("qz-give");
+    body.appendChild(h("p", "hint", "A QR form is one sitting: students scan it with their phones and answer. Give each sitting its own form (for example “Period 2” or “Retake”); each keeps its own answers. Get responses brings answers in and grades them."));
+    const bar = h("div", "panel-toolbar-buttons");
+    bar.appendChild(button(quiz.forms.length ? "＋ New form" : "＋ Launch QR form", "btn btn-primary", guard(async () => {
+      const nm = prompt("Name for this form (for example “Period 2” or “Retake”):", `Form ${quiz.forms.length + 1}`);
+      if (nm === null) return;
+      say("Creating QR code…");
+      const r = await QuizForms.create(tool.id, t.id, nm);
+      flush(); say(`“${r.form.name}” is open.`); rerender();
+      openQrWindow(r.url + styleQ());
+    })));
+    if (!isSurvey && quiz.forms.length) bar.appendChild(button("Re-grade", "btn btn-ghost btn-small", guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say("Re-calculated with the current answer key."); rerender(); })));
+    if (window.QRStyles) { QRStyles.ensureLoaded().catch(() => {}); bar.appendChild(QRStyles.menuButton(() => quiz.style || null, (st) => { quiz.style = st || null; flush(); }, say, "btn btn-ghost btn-small qz-menu-btn")); }
+    body.append(bar, stat);
+    if (!quiz.forms.length) body.appendChild(h("p", "hint", "No forms yet."));
+    quiz.forms.forEach((f) => {
+      const line = h("div", "qz-form-line");
+      const mine = quiz.submissions.filter((x) => x.form === f.id), ppl = new Set(mine.map((x) => x.sid)).size;
+      const chip = h("span", `count-badge${f.open ? " qz-open" : ""}`, f.open ? "QR open" : "closed");
+      line.append(h("strong", "qz-form-name", f.name), chip, h("span", "hint", `${ppl} student${ppl === 1 ? "" : "s"} · ${mine.length} attempt${mine.length === 1 ? "" : "s"}`));
+      if (!isSurvey) {
+        const lab = h("label", "qz-form-counts"), cb = h("input"); cb.type = "checkbox"; cb.checked = f.counts !== false;
+        cb.title = "Untick to leave this form's answers out of the scores that go to Main Scores.";
+        cb.addEventListener("change", () => { f.counts = cb.checked; ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`“${f.name}” ${f.counts ? "now counts toward" : "no longer counts toward"} scores.`); rerender(); });
+        lab.append(cb, document.createTextNode("Counts toward scores")); line.appendChild(lab);
+      }
+      const sp = h("span"); sp.style.flex = "1"; line.appendChild(sp);
+      const fb = (label, fn, title) => { const x = button(label, "btn btn-ghost btn-small", fn); if (title) x.title = title; line.appendChild(x); };
+      if (f.open) {
+        fb("Show QR", () => openQrWindow(QuizForms.urlFor(f.token) + styleQ()));
+        fb("Copy link", guard(async () => { await navigator.clipboard.writeText(QuizForms.urlFor(f.token)); say(`Link copied: ${QuizForms.urlFor(f.token)}`); }));
+        fb("Get responses", guard(async () => {
+          say("Getting responses…");
+          const r = await QuizForms.sync(tool.id, t.id, f.id); flush();
+          const here = new Set(quiz.submissions.filter((x) => x.form === f.id).map((x) => x.sid));
+          say(`${f.name}: ${here.size} student(s) have answered${r.expected ? ` of ${r.expected}` : ""}${isSurvey ? "" : "; graded"}.`); rerender();
+        }));
+      }
+      fb("Results", () => { quiz.view = f.id; flush(); resultMode.set(t.id, "view"); viewOf.set(tool.id, "results"); rerender(); }, "See only this form's answers");
+      fb("Rename", () => { const nm = prompt("Form name:", f.name); if (nm && nm.trim()) { f.name = nm.trim(); flush(); rerender(); } });
+      if (f.open) fb("Close", guard(async () => {
+        if (!confirm(`Close “${f.name}”? Its link and QR code stop working and the server's copies of its answers are deleted, so use Get responses first. Answers already collected stay here.`)) return;
+        await QuizForms.close(tool.id, t.id, f.id); flush(); say(`“${f.name}” closed. Its answers are kept.`); rerender();
+      }));
+      else fb("Delete form", guard(async () => {
+        if (!confirm(`Delete “${f.name}” and its ${mine.length} saved attempt(s)? This cannot be undone.`)) return;
+        quiz.forms = quiz.forms.filter((x) => x !== f); quiz.submissions = quiz.submissions.filter((x) => x.form !== f.id);
+        ScoringModule.normalizeQuiz(t); ScoringModule.regradeQuiz(tool.id, t.id); flush(); rerender();
+      }));
+      body.appendChild(line);
+    });
+    container.appendChild(section);
+
+    // Other courses that use the same quiz (read from the index, so their files aren't opened).
+    if (t.libId && window.QTSBank && QTSBank.usesOf) {
+      const { section: s2, body: b2 } = makePresSection("Other courses using this quiz");
+      s2.classList.add("qz-give-others");
+      b2.appendChild(h("p", "hint", "Loading…"));
+      container.appendChild(s2);
+      QTSBank.usesOf(t.libId).then((rows) => {
+        b2.textContent = "";
+        const others = rows.filter((r) => r.courseId !== ScoringModule.currentCourseId);
+        if (!others.length) { b2.appendChild(h("p", "hint", "No other course uses this quiz. Use “Use in…” in Class Material → Quizzes to add it to more courses.")); return; }
+        others.forEach((r) => {
+          const line = h("div", "qz-form-line");
+          line.append(h("strong", "qz-form-name", r.courseName), h("span", `count-badge${r.d.qr ? " qz-open" : ""}`, r.d.qr ? "QR open" : "no open QR"), h("span", "hint", `${r.d.answers || 0} student${r.d.answers === 1 ? "" : "s"} answered`));
+          const sp = h("span"); sp.style.flex = "1"; line.appendChild(sp);
+          line.appendChild(button("Open in that course", "btn btn-ghost btn-small", guard(async () => {
+            const c = (CoursesModule.courses || []).find((x) => x.id === r.courseId); if (!c) throw new Error("that course isn't available");
+            if (window.GGOAutosave && GGOAutosave.enabled()) await GGOAutosave.flush();
+            await openCourseDetail(c);
+            editing.set(r.toolId, r.id); viewOf.set(r.toolId, "give");
+            showTab("scoring"); showScoringMode(r.toolId);
+          })));
+          b2.appendChild(line);
+        });
+      }).catch((e) => { b2.textContent = ""; b2.appendChild(h("p", "hint", `Couldn't load: ${e.message}`)); });
+    }
+  }
+
   function editorHeader(tool, container, test, quiz, current) {
     const rerender = () => renderScoringToolView(tool, container);
+    const page = h("div", "qz-page-head");
+    page.appendChild(quizPageTop(tool, container, test, quiz, current));
+    if (current === "give") return page;
     const bar = h("div", "panel-toolbar qz-header");
     const left = h("div", "panel-toolbar-buttons");
-    left.appendChild(button("← Back to bank", "btn btn-ghost", () => { editing.delete(tool.id); rerender(); }));
     left.appendChild(h("label", "", "Type:"));
     const typeSel = h("select");
     [["standard", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]].forEach(([id, text]) => {
@@ -594,26 +810,27 @@
       if (lose && !confirm("Switching to a survey stops scoring: the answer key and points are kept but ignored, and students' scores are hidden until you switch back. Continue?")) { typeSel.value = quiz.kind; return; }
       ScoringModule.setQuizKind(tool.id, test.id, to);
       viewOf.set(tool.id, "build");
-      if (quiz.token) alert("This item's QR code is open: use Results → Get Responses in the list to publish the new type to students.");
+      if (quiz.token) alert("This item's QR code is open: use Give it → Get responses to publish the new type to students.");
       rerender();
     });
     left.appendChild(typeSel);
-    left.appendChild(h("label", "", `${kindName(quiz)} name:`));
-    left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
+    if (current === "build") {
+      left.appendChild(h("label", "", `${kindName(quiz)} name:`));
+      left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
+    }
     left.appendChild(button("Print", "btn btn-ghost btn-small", () => window.QuizPrint && QuizPrint.open(quiz, test.name)));
     left.appendChild(button("Export quiz template", "btn btn-ghost btn-small", () => exportTemplate(test, quiz))).title = "A CSV of this quiz laid out for Excel (an empty quiz gives an example sheet showing what to type where). Fill it in and use “Upload quiz contents” to make a new quiz from it.";
-    left.appendChild(button("Edit questions", "qz-tab " + (current === "build" ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"), () => { viewOf.set(tool.id, "build"); rerender(); }));
     if (current === "results" && quiz.forms.length) { // which form's answers to show (and send to Main Scores)
       left.appendChild(h("label", "", "Showing:"));
       const vs = h("select");
       [["all", `All forms combined (${quiz.forms.length})`], ...quiz.forms.map((f) => [f.id, `${f.name}${f.open ? " — QR open" : ""} (${quiz.submissions.filter((x) => x.form === f.id).length})`])].forEach(([id, text]) => { const o = h("option", "", text); o.value = id; if (id === (quiz.view || "all")) o.selected = true; vs.appendChild(o); });
-      vs.title = "Choose one form's answers, or all forms together. (Which forms count toward scores is set on each form's row in the Tests & Quizzes list.)";
+      vs.title = "Choose one form's answers, or all forms together. (Which forms count toward scores is set on Give it.)";
       vs.addEventListener("change", () => { quiz.view = vs.value; ScoringModule.regradeQuiz(tool.id, test.id); flush(); rerender(); });
       left.appendChild(vs);
     }
     bar.appendChild(left);
-    bar.appendChild(h("span", "count-badge", isSurveyKind(quiz.kind) ? `${ScoringModule.quizQuestionCount(quiz)} questions` : `${ScoringModule.quizQuestionCount(quiz)} questions · ${ScoringModule.quizTotal(quiz)} points`));
-    return bar;
+    page.appendChild(bar);
+    return page;
   }
 
   /** A row of option checkboxes (A, B, C…) for picking a set of options. */
@@ -2321,85 +2538,11 @@
       maxCell.appendChild(maxText);
 
       const group = h("div", "qz-actions");
-      group.appendChild(button("Edit Questions", "btn btn-primary btn-small", go("build")));
-      const styleQ = () => (window.QRStyles ? QRStyles.query(quiz.style) : "");
-      const newForm = guard(async () => {
-        const nm = prompt("Name for this form (for example “Period 2” or “Retake”):", `Form ${quiz.forms.length + 1}`);
-        if (nm === null) return;
-        say("Creating QR code…");
-        const r = await QuizForms.create(tool.id, t.id, nm);
-        flush();
-        say(`“${r.form.name}” is open for “${t.name}”.`);
-        rerender();
-        openQr(r.url + styleQ());
-      });
-      group.appendChild(button(quiz.forms.length ? "＋ New form" : "＋ Launch QR form", "btn btn-ghost btn-small", newForm));
-      group.appendChild(button(quiz.forms.length > 1 ? `Results: all forms (${students})` : `Results (${students})`, "btn btn-ghost btn-small", () => { quiz.view = "all"; flush(); go("results")(); }));
-      if (!isSurvey && quiz.forms.length) group.appendChild(button("Re-grade", "btn btn-ghost btn-small", guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Results for "${t.name}" re-calculated (only forms marked “counts toward scores”).`); rerender(); })));
-      // One row per form, right under the quiz: its own QR code, answers and controls.
-      let after = tr;
-      const formRows = [];
-      if (quiz.forms.length) { // fold the forms into their quiz
-        const isOpen = () => formsOpen.get(t.id) !== false;
-        const tog = h("button", "btn btn-ghost btn-small", "");
-        tog.type = "button"; tog.style.cssText = "display:block;margin:4px 0 0;padding:1px 8px;font-size:.78rem;";
-        const paint = () => { tog.textContent = `${isOpen() ? "▾" : "▸"} ${quiz.forms.length} form${quiz.forms.length === 1 ? "" : "s"}`; tog.setAttribute("aria-expanded", String(isOpen())); tog.title = isOpen() ? "Hide this quiz's forms" : "Show this quiz's forms"; formRows.forEach((r) => { r.hidden = !isOpen(); }); tr.classList.toggle("qz-has-forms-open", isOpen()); };
-        tog.addEventListener("click", () => { formsOpen.set(t.id, !isOpen()); paint(); });
-        tr.children[0].appendChild(tog);
-        setTimeout(paint, 0);
-        tr.style.cssText += "border-left:4px solid #c2571a;";
-      }
-      quiz.forms.forEach((f, fi) => {
-        const fr = h("tr", "qz-formrow"), td = h("td"); td.colSpan = 6; fr.appendChild(td); formRows.push(fr);
-        td.style.cssText = `padding:6px 8px 6px 14px;background:rgba(127,127,127,.09);border-left:4px solid #c2571a;${fi === quiz.forms.length - 1 ? "border-bottom:2px solid #c2571a;" : ""}`;
-        const line = h("div"); line.style.cssText = "display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-left:34px;padding-left:12px;border-left:2px dotted rgba(127,127,127,.6);";
-        const mine = quiz.submissions.filter((x) => x.form === f.id), ppl = new Set(mine.map((x) => x.sid)).size;
-        const nameB = h("strong", "", `↳ ${f.name}`); nameB.style.minWidth = "9rem";
-        const chip = h("span", "count-badge", f.open ? "QR open" : "closed"); if (f.open) chip.style.cssText = "background:#1e9e4a;color:#fff;";
-        line.append(nameB, chip, h("span", "hint", `${ppl} student${ppl === 1 ? "" : "s"} · ${mine.length} attempt${mine.length === 1 ? "" : "s"}`));
-        if (!isSurvey) {
-          const lab = h("label"); lab.style.cssText = "display:inline-flex;gap:4px;align-items:center;font-size:.85rem;";
-          const cb = h("input"); cb.type = "checkbox"; cb.checked = f.counts !== false;
-          cb.title = "Untick to leave this form's answers out of the scores that go to Main Scores.";
-          cb.addEventListener("change", () => { f.counts = cb.checked; ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`“${f.name}” ${f.counts ? "now counts toward" : "no longer counts toward"} scores.`); rerender(); });
-          lab.append(cb, document.createTextNode("Counts toward scores")); line.appendChild(lab);
-        }
-        const sp = h("span"); sp.style.flex = "1"; line.appendChild(sp);
-        const fb = (label, fn, title) => { const x = button(label, "btn btn-ghost btn-small", fn); if (title) x.title = title; line.appendChild(x); };
-        if (f.open) {
-          fb("Show QR", () => openQr(QuizForms.urlFor(f.token) + styleQ()));
-          fb("Copy link", guard(async () => { await navigator.clipboard.writeText(QuizForms.urlFor(f.token)); say(`Link copied: ${QuizForms.urlFor(f.token)}`); }));
-          fb("Get responses", guard(async () => {
-            say("Getting responses…");
-            const r = await QuizForms.sync(tool.id, t.id, f.id); flush();
-            const here = new Set(quiz.submissions.filter((x) => x.form === f.id).map((x) => x.sid));
-            say(`${f.name}: ${here.size} student(s) have answered${r.expected ? ` of ${r.expected}` : ""}${isSurvey ? "" : "; graded"}.`); rerender();
-          }));
-        }
-        if (!isSurvey) fb("Re-grade", guard(async () => { ScoringModule.regradeQuiz(tool.id, t.id); flush(); say(`Re-calculated.`); rerender(); }), "Grade this quiz's answers again with the current answer key.");
-        fb("Results", () => { quiz.view = f.id; flush(); go("results")(); }, "See only this form's answers");
-        fb("Rename", () => { const nm = prompt("Form name:", f.name); if (nm && nm.trim()) { f.name = nm.trim(); flush(); rerender(); } });
-        if (f.open) fb("Close", guard(async () => {
-          if (!confirm(`Close “${f.name}”? Its link and QR code stop working and the server's copies of its answers are deleted, so use Get responses first. Answers already collected stay here.`)) return;
-          await QuizForms.close(tool.id, t.id, f.id); flush(); say(`“${f.name}” closed. Its answers are kept.`); rerender();
-        }));
-        else fb("Delete form", guard(async () => {
-          if (!confirm(`Delete “${f.name}” and its ${mine.length} saved attempt(s)? This cannot be undone.`)) return;
-          quiz.forms = quiz.forms.filter((x) => x !== f); quiz.submissions = quiz.submissions.filter((x) => x.form !== f.id);
-          ScoringModule.normalizeQuiz(t); ScoringModule.regradeQuiz(tool.id, t.id); flush(); rerender();
-        }));
-        td.appendChild(line);
-        after.after(fr); after = fr;
-      });
-
-      if (window.QRStyles) {
-        QRStyles.ensureLoaded().catch(() => {});
-        group.appendChild(QRStyles.menuButton(() => quiz.style || null, (st) => { quiz.style = st || null; flush(); }, say, "btn btn-ghost btn-small qz-menu-btn"));
-      }
-      group.appendChild(menuButton("More", "#4a5568", [
-        { label: "Print", onClick: () => window.QuizPrint && QuizPrint.open(quiz, t.name) },
-        "-", ...exportItems(t, quiz).map((it) => ({ ...it, label: `Export: ${it.label}` })),
-      ]));
+      const firstStep = ScoringModule.quizQuestionCount(quiz) > 0 ? "give" : "build";
+      group.appendChild(button("Open", "btn btn-primary btn-small", go(firstStep)));
+      const nameCell = tr.children[0];
+      nameCell.classList.add("qz-open-name"); nameCell.title = "Open this quiz";
+      nameCell.addEventListener("click", (e) => { if (e.target.closest("button, input, select, a, textarea")) return; go(firstStep)(); });
       statusBtns.forEach((b) => group.appendChild(b));
       // Keep the bank's own Delete button (same behavior); drop Details / Re-match for quizzes.
       const actions = tr.children[5];
@@ -2437,6 +2580,7 @@
       const view = viewOf.get(tool.id);
       if (view === "review") { resultMode.set(testId, "edit"); return renderResults(tool, container, testId); }
       if (view === "results") return renderResults(tool, container, testId);
+      if (view === "give" && !isTmpCourse()) return renderGive(tool, container, testId);
       return renderEditor(tool, container, testId);
     }
     editing.delete(tool.id);

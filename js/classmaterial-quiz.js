@@ -207,7 +207,9 @@
     shown.forEach(({ it, uses }) => {
       const tr = mk("tr");
       const isSurvey = it.kind === "survey" || it.kind === "formative";
-      tr.appendChild(mk("td", "qts-name", it.name || "(untitled)"));
+      const nameTd = mk("td", "qts-name cmq-name", it.name || "(untitled)");
+      nameTd.title = "Open this quiz"; nameTd.addEventListener("click", act(host, () => editQuiz(it, uses)));
+      tr.appendChild(nameTd);
       tr.appendChild(mk("td", "qts-n", c.KIND_LABEL[c.kindKey(it.kind)]));
       tr.appendChild(mk("td", "qts-n", String(c.qCount(it))));
       tr.appendChild(mk("td", "qts-n", isSurvey ? "—" : String(it.max == null ? "—" : it.max)));
@@ -253,6 +255,7 @@
 .cmq-bar .cmq-search { min-width:150px; max-width:220px; padding:4px 8px; }
 .cmq-bar select { padding:3px 6px; }
 .cmq-note:empty { display:none; }
+table.cmq-grid td.cmq-name { cursor:pointer; } table.cmq-grid td.cmq-name:hover { text-decoration:underline; }
 table.cmq-grid td.cmq-used { white-space:normal; }
 .cmq-chip { display:inline-block; font-size:.78rem; padding:1px 8px; margin:2px 4px 2px 0; border:1px solid var(--line); border-radius:10px; white-space:nowrap; }
 .cmq-chip.cmq-here { border-color:var(--green); font-weight:700; }
