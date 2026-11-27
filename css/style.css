@@ -2350,3 +2350,19 @@ textarea {
 
 /* Report Card → Items to include: the "print the total score" option above the item lists */
 .report-total-option { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0 12px; font-weight: 600; }
+
+/* Quiz Results → Send scores: one student's printable / emailed score page */
+.qz-send .qz-send-opts { display: flex; gap: 18px; flex-wrap: wrap; margin: 6px 0 10px; }
+.qz-score-sheet .qz-score-who { font-size: 1.05rem; font-weight: 700; margin: 0 0 2px; }
+.qz-score-sheet .qz-score-big { font-size: 1.25rem; font-weight: 700; margin: 6px 0 12px; padding: 6px 0; border-top: 2px solid #000; border-bottom: 1px solid #999; white-space: pre; }
+.qz-score-sheet .qz-score-table th { text-align: left; font-size: 0.75rem; border-bottom: 1px solid #999; padding: 2px 4px; }
+.qz-score-sheet .qz-score-table td { vertical-align: top; }
+.qz-score-sheet .qz-score-sec td { font-weight: 700; padding-top: 6px; border-bottom: 1px solid #999; }
+.qz-score-sheet .qz-score-mark { width: 1.4em; text-align: center; font-weight: 800; }
+.qz-score-sheet .qz-yes { color: #1e9e4a; } .qz-score-sheet .qz-no { color: #d3302f; } .qz-score-sheet .qz-part { color: #b8860b; }
+@page qzscores { size: A4 portrait; }
+body.qz-printing-scores #print-area .qz-score-sheet { page: qzscores; }
+.qz-send .mapping-row { display: flex; align-items: center; gap: 10px; }
+.qz-send .mapping-row > label { flex: 0 0 120px; }
+.qz-send .mapping-row > input, .qz-send .mapping-row > select, .qz-send .mapping-row > textarea { flex: 1; width: auto; max-width: none; }
+.qz-send .panel-toolbar-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }

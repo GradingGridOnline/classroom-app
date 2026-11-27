@@ -229,6 +229,7 @@
 <li><b>Show Results</b> — a grid with ● correct and ✕ incorrect (surveys show a summary of every answer).</li>
 <li><b>Results</b> — one screen with a <b>View</b> mode (sortable grid of ● / ✕, times) and an <b>Edit</b> mode: change a student's answer, fix an answer key (scores recalculate), combine a student's duplicate entries one by one or all at once. <b>Quiz stats</b> (high, low, median, average…) sit at the bottom.</li>
 <li><b>Export CSV ▾</b> — Responses, Scores per question, or Question summary, opened in Excel.</li>
+<li><b>Send scores</b> (under the Results grid) — print a student's score page or email it to them as a PDF (one student or everyone). It uses the attempt that counts toward Main Scores, can list each question with their answer and points, and can show the correct answers. Students need an email address on the Roster.</li>
 </ul>
 <h4>Using a quiz in other courses</h4>
 <p>A quiz exists once: in Class Material → Quizzes, <b>Use in…</b> picks the courses that use it. Fixing a quiz changes it in every one of them and re-grades their answers.</p>`);

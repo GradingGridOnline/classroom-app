@@ -2300,9 +2300,216 @@
     qs.forEach((q, i) => ftr.appendChild(h("td", "", `${Math.round((100 * correctCount[i]) / count)}%`)));
     tfoot.appendChild(ftr);
     table.appendChild(tfoot);
+    container.appendChild(sendScoresBox(tool, test, quiz));
     const stats = statsBox(quiz);
     container.appendChild(stats.section);
     stats.draw();
+  }
+
+  // ---------- sending one student's score: print it or email it as a PDF ----------
+  // Uses the attempt that counts (the quiz's best / latest / first rule, counted forms only),
+  // the same score that goes to Main Scores. Options and wording are kept on the quiz tool
+  // (tool.scoreSend), so they apply to every quiz in this course.
+  const SEND_SUBJECT = "{course}: {quiz} score";
+  const SEND_MESSAGE = "Hello {name},\n\nAttached is your score for {quiz} in {course}.\n";
+  function sendSettings(tool) {
+    if (!tool.scoreSend || typeof tool.scoreSend !== "object") tool.scoreSend = {};
+    const c = tool.scoreSend;
+    if (typeof c.perQuestion !== "boolean") c.perQuestion = true;
+    if (typeof c.showKey !== "boolean") c.showKey = false;
+    if (typeof c.subject !== "string") c.subject = "";
+    if (typeof c.message !== "string") c.message = "";
+    return c;
+  }
+  /** The roster student for a School ID (or null). */
+  function rosterStudent(sid) {
+    const k = String(sid == null ? "" : sid).trim();
+    return k ? (RosterModule.students || []).find((x) => String(x.schoolId == null ? "" : x.schoolId).trim() === k) || null : null;
+  }
+  /** The entry that counts for a student, by the quiz's attempt rule; entries on forms that don't count are used only when nothing else exists. */
+  function countedEntry(quiz, sid) {
+    const all = quiz.submissions.filter((x) => x.sid === sid);
+    const counted = all.filter((x) => { const f = quiz.forms.find((y) => y.id === x.form); return !f || f.counts !== false; });
+    const list = (counted.length ? counted : all).slice().sort((a, b) => (a.attempt - b.attempt) || String(a.at || "").localeCompare(String(b.at || "")));
+    if (!list.length) return null;
+    const rule = quiz.settings.attemptRule;
+    if (rule === "latest") return list[list.length - 1];
+    if (rule === "first") return list[0];
+    let best = list[0], bestScore = -Infinity;
+    list.forEach((x) => { const sc = ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x)); if (sc > bestScore) { best = x; bestScore = sc; } });
+    return best;
+  }
+  /** Everyone who answered, in class-number order: [{ sid, name, student, entry }]. */
+  function sendList(quiz) {
+    const seen = new Map();
+    quiz.submissions.forEach((x) => { if (!seen.has(x.sid)) seen.set(x.sid, x); });
+    const num = (st) => { const n = Number(st && st.classNumber); return st && st.classNumber !== "" && st.classNumber != null && Number.isFinite(n) ? n : Infinity; };
+    return [...seen.values()].map((x) => {
+      const student = rosterStudent(x.sid);
+      return { sid: x.sid, name: (student && student.name) || x.name || x.sid, student, entry: countedEntry(quiz, x.sid) };
+    }).filter((p) => p.entry).sort((a, b) => (num(a.student) - num(b.student)) || a.name.localeCompare(b.name));
+  }
+  const clip = (t, n) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+  function choiceText(quiz, q, i) {
+    const lab = optionLabel(quiz.settings.labelStyle, i), txt = q.choices && q.choices[i] ? clip(q.choices[i], 60) : "";
+    return txt ? `${lab}. ${txt}` : lab;
+  }
+  function givenText(quiz, q, ans) {
+    if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && !ans.length)) return "(no answer)";
+    if (q.type === "multi") return multiSet(ans).map((i) => choiceText(quiz, q, i)).join(", ");
+    if (q.type === "mc") return choiceText(quiz, q, Number(ans));
+    return clip(ans, 160);
+  }
+  function keyText(quiz, q) {
+    if (q.type === "para") return "(marked by the teacher)";
+    if (q.type === "multi") return multiSet(q.correctSet).map((i) => choiceText(quiz, q, i)).join(", ");
+    if (q.type === "mc") return choiceText(quiz, q, q.correct);
+    return (q.accepted || []).filter(Boolean).join(" / ");
+  }
+  /** One student's printable score page (same look as the report card). */
+  function buildScoreSheet(tool, test, quiz, person) {
+    const cfg = sendSettings(tool);
+    const course = CoursesModule.find(RosterModule.currentCourseId);
+    const eff = ScoringModule.quizEffectiveAnswers(person.entry);
+    const total = ScoringModule.quizTotal(quiz);
+    const score = ScoringModule.gradeQuizSubmission(quiz, eff);
+    const sheet = h("div", "report-sheet qz-score-sheet");
+    sheet.appendChild(h("p", "report-sheet-course", course ? course.name : ""));
+    sheet.appendChild(h("h2", "", test.name || "Quiz"));
+    const st = person.student;
+    sheet.appendChild(h("p", "qz-score-who", `${st && st.classNumber ? `#${st.classNumber} ` : ""}${person.name}`));
+    const form = quiz.forms.length > 1 ? (quiz.forms.find((f) => f.id === person.entry.form) || {}).name : "";
+    sheet.appendChild(h("p", "report-sheet-sub", [st && st.pronunciation, person.sid, form, person.entry.at ? fmtTime(person.entry.at) : ""].filter(Boolean).join(" · ")));
+    const pct = total > 0 ? Math.round((1000 * score) / total) / 10 : null;
+    sheet.appendChild(h("div", "qz-score-big", `Score: ${score} / ${total}${pct === null ? "" : `  (${pct}%)`}`));
+    if (cfg.perQuestion) {
+      const table = h("table", "report-sheet-table qz-score-table");
+      const hr = h("tr");
+      ["", "Question", "Your answer", ...(cfg.showKey ? ["Correct answer"] : []), "Points"].forEach((t) => hr.appendChild(h("th", "", t)));
+      const thead = h("thead"); thead.appendChild(hr); table.appendChild(thead);
+      const tbody = h("tbody");
+      let n = 0;
+      quiz.sections.forEach((sec, si) => {
+        if (!sec.questions.length) return;
+        if (quiz.sections.filter((x) => x.questions.length).length > 1) {
+          const sr = h("tr", "qz-score-sec"); const td = h("td", "", sec.title || `Section ${si + 1}`); td.colSpan = cfg.showKey ? 5 : 4; sr.appendChild(td); tbody.appendChild(sr);
+        }
+        sec.questions.forEach((q) => {
+          n++;
+          const frac = ScoringModule.quizAnswerFraction(q, eff[q.id], eff["#" + q.id]);
+          const got = ScoringModule.gradeQuizQuestion(q, eff[q.id], eff["#" + q.id]);
+          const tr = h("tr");
+          tr.appendChild(h("td", "qz-score-mark " + (frac === 1 ? "qz-yes" : frac > 0 ? "qz-part" : "qz-no"), frac === 1 ? "●" : frac > 0 ? "◐" : "✕"));
+          tr.appendChild(h("td", "", quiz.kind === "answers" || !q.text ? `Q${n}` : `Q${n}. ${clip(q.text, 90)}`));
+          tr.appendChild(h("td", "", givenText(quiz, q, eff[q.id])));
+          if (cfg.showKey) tr.appendChild(h("td", "", keyText(quiz, q)));
+          tr.appendChild(h("td", "report-sheet-score-col", `${got} / ${q.points}`));
+          tbody.appendChild(tr);
+        });
+      });
+      table.appendChild(tbody);
+      sheet.appendChild(table);
+    }
+    return sheet;
+  }
+  function printScores(tool, test, quiz, people) {
+    const area = document.getElementById("print-area");
+    area.innerHTML = "";
+    people.forEach((p, i) => {
+      const sheet = buildScoreSheet(tool, test, quiz, p);
+      if (i < people.length - 1) sheet.classList.add("report-sheet-page-break");
+      area.appendChild(sheet);
+    });
+    document.body.classList.add("qz-printing-scores"); // portrait pages (the seating chart prints landscape)
+    const course = CoursesModule.find(RosterModule.currentCourseId);
+    const done = () => { document.body.classList.remove("qz-printing-scores"); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
+    printSeatingChart([course && course.name, test.name].filter(Boolean).join(" — "));
+  }
+  async function emailScores(tool, test, quiz, people, testAddress, status) {
+    if (typeof html2canvas === "undefined" || !window.jspdf) { status.textContent = "The PDF tools didn't load — check your internet connection and reload the page."; return; }
+    const cfg = sendSettings(tool);
+    const course = CoursesModule.find(RosterModule.currentCourseId);
+    const courseName = course ? course.name : "";
+    const addr = (p) => (p.student && /@/.test(p.student.email || "") ? p.student.email.trim() : "");
+    let jobs = people.map((p) => ({ p, to: addr(p) }));
+    const skipped = jobs.filter((j) => !j.to).map((j) => j.p.name);
+    const testTo = String(testAddress || "").trim();
+    if (testTo) jobs = jobs.slice(0, 1).map((j) => ({ ...j, to: testTo, isTest: true }));
+    else jobs = jobs.filter((j) => j.to);
+    if (!jobs.length) { status.textContent = skipped.length ? `No email address on the Roster for: ${skipped.join(", ")}.` : "There is nobody to send to."; return; }
+    const ask = testTo ? `Send ONE test email (${jobs[0].p.name}'s score) to ${testTo}?`
+      : `Send ${jobs.length} email(s), each with that student's ${test.name || "quiz"} score as a PDF, to ${jobs.length === 1 ? jobs[0].to : "these students"}?` + (skipped.length ? `\n\nNo email address on the Roster, so skipped: ${skipped.join(", ")}.` : "");
+    if (!confirm(ask)) return;
+    try { status.textContent = "Signing in to Google…"; await storage.getAccessToken(); }
+    catch (err) { status.textContent = `Couldn't sign in to Google (${err.message}). Allow pop-ups for this site and try again.`; return; }
+    const stage = h("div"); stage.id = "ggo-pdf-stage"; stage.style.cssText = "position:fixed;left:-10000px;top:0;background:#fff;";
+    document.body.appendChild(stage);
+    const failures = []; let sent = 0;
+    const fill = (t, p) => fillEmailTemplate(t, { name: p.name, group: "", report: "Quiz score", project: "", course: courseName }).replaceAll("{quiz}", test.name || "Quiz");
+    try {
+      for (const j of jobs) {
+        status.textContent = `Sending ${sent + failures.length + 1} of ${jobs.length}…`;
+        try {
+          const wrapper = h("div"); wrapper.style.cssText = "width:185mm;padding:7mm;box-sizing:border-box;background:#fff;color:#000;";
+          wrapper.appendChild(buildScoreSheet(tool, test, quiz, j.p));
+          const pdfBytes = await renderElementToPdfBytes(wrapper, stage);
+          const safe = (t) => String(t || "").replace(/[\\/:*?"<>|]/g, "").trim();
+          await sendGmailMessage(buildPdfEmailMessage({
+            to: j.to,
+            subject: (j.isTest ? "[TEST] " : "") + fill(cfg.subject.trim() || SEND_SUBJECT, j.p),
+            body: fill(cfg.message.trim() ? cfg.message : SEND_MESSAGE, j.p),
+            filename: `${[safe(courseName), safe(test.name), safe(j.p.name)].filter(Boolean).join(" ")}.pdf`,
+            pdfBytes,
+          }));
+          sent++;
+        } catch (err) {
+          failures.push(`${j.p.name}: ${err.message}`);
+          if (/allowed this app to send email/.test(err.message)) break;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    } finally { stage.remove(); }
+    status.textContent = `Sent ${sent} email(s)` + (testTo ? " (test)" : "") + (skipped.length && !testTo ? `; skipped (no email address): ${skipped.join(", ")}` : "") + (failures.length ? `. Problems: ${failures.join(" | ")}` : ".");
+  }
+  /** The "Send scores" section under the results: print or email one student's score, or everyone's. */
+  function sendScoresBox(tool, test, quiz) {
+    const cfg = sendSettings(tool);
+    const { section, body } = makePresSection("Send scores");
+    section.classList.add("qz-sec-review", "qz-send");
+    const people = sendList(quiz);
+    body.appendChild(h("p", "hint", "Print a student's score or email it to them as a PDF (through your Google account; they need an email address on the Roster). Uses the attempt that counts toward Main Scores."));
+    const row = (labelText, control) => { const r = h("div", "mapping-row"); r.append(h("label", "", labelText), control); body.appendChild(r); return r; };
+    const pick = h("select");
+    people.forEach((p) => { const o = h("option", "", `${p.student && p.student.classNumber ? `#${p.student.classNumber} ` : ""}${p.name}${p.student && /@/.test(p.student.email || "") ? "" : "  (no email)"}`); o.value = p.sid; pick.appendChild(o); });
+    row("Student", pick);
+    const opts = h("div", "qz-send-opts");
+    [["perQuestion", "List each question (their answer and points)"], ["showKey", "Show the correct answers"]].forEach(([k, l]) => {
+      const lab = h("label", "item-checkbox-label"); const cb = h("input"); cb.type = "checkbox"; cb.checked = cfg[k];
+      cb.addEventListener("change", () => { cfg[k] = cb.checked; keyLab.style.opacity = cfg.perQuestion ? "" : ".5"; });
+      lab.append(cb, document.createTextNode(" " + l)); opts.appendChild(lab);
+    });
+    const keyLab = opts.children[1]; keyLab.style.opacity = cfg.perQuestion ? "" : ".5";
+    body.appendChild(opts);
+    const subj = h("input"); subj.type = "text"; subj.placeholder = SEND_SUBJECT; subj.value = cfg.subject; subj.addEventListener("input", () => { cfg.subject = subj.value; });
+    row("Email subject", subj);
+    const msg = h("textarea"); msg.rows = 3; msg.placeholder = SEND_MESSAGE; msg.value = cfg.message; msg.addEventListener("input", () => { cfg.message = msg.value; });
+    row("Email message", msg);
+    body.appendChild(h("p", "hint", "{name}, {quiz} and {course} are filled in for each student. Leave blank for the standard wording. These settings apply to every quiz in this course."));
+    const testIn = h("input"); testIn.type = "text"; testIn.placeholder = "your own address — sends ONE test email only";
+    row("Test address", testIn);
+    const status = h("p", "result");
+    const bar = h("div", "panel-toolbar-buttons");
+    const one = () => people.filter((p) => p.sid === pick.value);
+    const busy = async (fn) => { const all = bar.querySelectorAll("button"); all.forEach((b) => (b.disabled = true)); try { await fn(); } catch (err) { status.textContent = `Couldn't send: ${err.message}`; } all.forEach((b) => (b.disabled = false)); };
+    bar.append(
+      button("Print This Student", "btn btn-ghost btn-small", () => printScores(tool, test, quiz, one())),
+      button("Print All", "btn btn-ghost btn-small", () => printScores(tool, test, quiz, people)),
+      button("Email This Student", "btn btn-ghost btn-small", () => busy(() => emailScores(tool, test, quiz, one(), testIn.value, status))),
+      button("Email All", "btn btn-primary btn-small", () => busy(() => emailScores(tool, test, quiz, people, testIn.value, status))),
+    );
+    body.append(bar, status);
+    return section;
   }
 
   // ---------- dropdown menus ----------
