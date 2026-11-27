@@ -275,6 +275,21 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody .jr-leafform .jr-ed [contenteditable] { flex:1; min-height:0 !important; overflow:auto; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody > .jr-newslot { margin:auto; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-stage-foot { margin-top:10px; }
+/* the control screen under the main screen (sort & filter) */
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl { position:relative; margin:12px 0 0; padding:0; border:1px solid rgba(0,217,255,.4); border-radius:0; color:#c9f6ff;
+  background:repeating-linear-gradient(to bottom, rgba(0,217,255,.03) 0 1px, transparent 1px 3px), #061017;
+  box-shadow:0 0 14px rgba(0,217,255,.12), inset 0 0 26px rgba(0,217,255,.05); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl::before { content:""; position:absolute; left:50%; top:-13px; width:120px; margin-left:-60px; height:12px; pointer-events:none;
+  background:linear-gradient(90deg, transparent 0 8px, rgba(0,217,255,.55) 8px 10px, transparent 10px calc(100% - 10px), rgba(0,217,255,.55) calc(100% - 10px) calc(100% - 8px), transparent 0); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-top { display:flex; align-items:center; gap:12px; height:32px; margin:0; padding:0 14px; border-bottom:1px solid rgba(0,217,255,.28); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-top b { flex:1; font-family:var(--font-heading); font-size:.58rem; font-weight:400; letter-spacing:.26em; text-transform:uppercase; color:#4fe0ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-top .hint { margin:0; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.78rem; letter-spacing:.06em; color:#e8fdff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-top .btn { font-family:var(--font-heading); font-size:.56rem; letter-spacing:.2em; text-transform:uppercase; padding:3px 10px; border-radius:0; color:#001218; background:var(--marker,#ff7a1a); border:0; clip-path:polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-grid { padding:12px 14px 6px; gap:10px 16px; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-grid label { font-family:var(--font-heading); font-size:.54rem; letter-spacing:.2em; text-transform:uppercase; color:#7fb0bc; gap:5px; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl :is(input, select) { border-radius:0; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-tags { margin:0; padding:6px 14px 12px; border-top:1px dashed rgba(0,217,255,.2); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-tags > span:first-child { font-family:var(--font-heading); font-size:.54rem; letter-spacing:.2em; text-transform:uppercase; color:#7fb0bc; margin-right:4px; }
 @media (max-width:760px) { [data-theme="tron-legacy"] #journal-panel .jr-pad-screen { grid-template-columns:1fr; height:auto; } [data-theme="tron-legacy"] #journal-panel .jr-pad-list { max-height:260px; border-right:0; border-bottom:1px solid rgba(0,217,255,.3); } [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody { min-height:360px; } }
 
 /* display modes: full (one whole entry), partial (3 per page), compact (6 titles per page) */
@@ -641,7 +656,7 @@
   function sortFilterBar(shown, total) {
     const bar = mk("div", "jr-sf");
     const top = mk("div", "jr-sf-top");
-    top.appendChild(mk("b", "", "Sort & filter"));
+    top.appendChild(mk("b", "", isPad() ? "Control · Sort & filter" : "Sort & filter"));
     const cnt = mk("span", "hint", viewActive() ? `Showing ${shown} of ${total} entries` : `${total} entr${total === 1 ? "y" : "ies"}`);
     top.appendChild(cnt);
     if (viewActive()) top.appendChild(btn("Clear filters", "btn btn-ghost btn-small", () => { tagFilter = new Set(); view = Object.assign({}, VIEW0); spread = defSpread(); render(); }));
@@ -684,7 +699,7 @@
   /** Tron: Legacy — one screen: an index of entries on the left and the open entry on the right.
    *  Full view (or a new entry / editing) uses the whole screen; "◂ Index" brings the list back. */
   const padCatsShut = (() => { try { return new Set(JSON.parse(localStorage.getItem("ggo-journal-pad-shut")) || []); } catch (e) { return new Set(); } })();
-  function buildPad(sorted, pinned) {
+  function buildPad(sorted, pinned, controls) {
     pinned = pinned || [];
     const wrap = mk("div", "jr-bookwrap jr-pad");
     const known = (id) => sorted.some((e) => e.id === id) || pinned.some((e) => e.id === id);
@@ -761,7 +776,9 @@
     const foot = mk("div", "jr-stage-foot");
     const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
     foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? (openPinned ? `Pinned ${pinned.indexOf(open) + 1} of ${pinned.length}` : `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}`) : `${sorted.length} entries`));
-    wrap.append(head, screen, foot);
+    // the control screen under the main screen: sort & filter, as part of the pad
+    if (controls) { controls.classList.add("jr-pad-ctl"); wrap.append(head, screen, controls, foot); }
+    else wrap.append(head, screen, foot);
     leadId = open ? open.id : null;
     return wrap;
   }
@@ -971,8 +988,9 @@
 
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     const sorted = visibleEntries();
-    panel.appendChild(isPad() ? buildPad(sorted, pinned) : buildBook(sorted)); // the journal is always on the desk, even with no entries
-    panel.appendChild(sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length));
+    const sf = sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length);
+    if (isPad()) panel.appendChild(buildPad(sorted, pinned, sf)); // the data pad carries sort & filter on its own control screen
+    else { panel.appendChild(buildBook(sorted)); panel.appendChild(sf); } // the journal is always on the desk, even with no entries
     if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
     if (pinned.length && !isPad()) { // the data pad lists pinned entries as their own category in its index
       const m = mk("div", "jr-margin");
