@@ -306,7 +306,9 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-grid label { font-family:var(--font-heading); font-size:.54rem; letter-spacing:.2em; text-transform:uppercase; color:#7fb0bc; gap:5px; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl :is(input, select) { border-radius:0; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body { max-height:380px; overflow:auto; padding:12px 14px 14px; }
-[data-theme="tron-legacy"] #journal-panel .jr-pad-screen.jr-pad-alt { display:flex; flex-direction:column; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-stack { position:relative; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-stack.jr-pad-alt-on > :not(.jr-pad-alt) { visibility:hidden; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-screen.jr-pad-alt { position:absolute; inset:0; height:auto; display:flex; flex-direction:column; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-alt-body { flex:1; min-height:0; max-height:none; padding:16px 22px 18px; animation:jr-wipe-in .28s ease-out; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body h4 { margin:12px 0 6px; font-family:var(--font-heading); font-size:.58rem; font-weight:400; letter-spacing:.24em; text-transform:uppercase; color:#4fe0ff; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .hint { color:#9fd8e3; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.8rem; }
@@ -838,14 +840,6 @@
     const det = mk("div", "jr-pad-detail");
     const dh = mk("div", "jr-pad-dethead");
     if (full && !writing) dh.appendChild(btn("◂ Index", "jr-pad-back", () => { padFull = false; render(); }));
-    if (padCtl !== "filter") { // Stats / Settings replace the journal on the main screen
-      wrap.append(head);
-      if (command) wrap.append(command);
-      wrap.append(padAltScreen(sorted, pinned));
-      if (controls) wrap.append(controls);
-      wrap.append(padFoot(null));
-      return wrap;
-    }
     const where = open ? (openPinned ? `Pinned · P${pinned.indexOf(open) + 1}` : `Entry ${String(sorted.indexOf(open) + 1).padStart(2, "0")} / ${String(sorted.length).padStart(2, "0")}`) : "Data log";
     dh.appendChild(mk("span", "jr-pad-dlabel", creating ? "New entry" : editingId ? "Editing" : where));
     if (!full && open) dh.appendChild(btn("Expand ▸", "jr-pad-back", () => { padFull = true; render(); }));
@@ -861,11 +855,14 @@
     det.appendChild(body);
     screen.append(list, det);
 
-    wrap.append(head);
-    if (command) wrap.append(command);
-    wrap.append(screen);
-    if (controls) { controls.classList.add("jr-pad-ctl"); wrap.append(controls); }
-    wrap.append(padFoot(open));
+    // The command strip, the journal screen and sort & filter belong to Control. Stats and Settings cover all three
+    // with one screen of exactly the same size (the journal stays laid out underneath, hidden), so the pad never resizes.
+    const stack = mk("div", "jr-pad-stack");
+    if (command) stack.append(command);
+    stack.append(screen);
+    if (controls) { controls.classList.add("jr-pad-ctl"); stack.append(controls); }
+    if (padCtl !== "filter") { stack.classList.add("jr-pad-alt-on"); stack.append(padAltScreen(sorted, pinned)); }
+    wrap.append(head, stack, padFoot(padCtl === "filter" ? open : null));
     leadId = open ? open.id : null;
     return wrap;
   }
