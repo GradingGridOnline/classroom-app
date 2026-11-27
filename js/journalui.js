@@ -254,7 +254,6 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad-cat-count { font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.78rem; letter-spacing:.06em; color:#e8fdff; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row + .jr-pad-cat, [data-theme="tron-legacy"] #journal-panel .jr-pad-empty + .jr-pad-cat { margin-top:10px; border-top:1px solid rgba(0,217,255,.35); }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-cat-pinned { box-shadow:inset 3px 0 0 var(--marker,#ff7a1a); }
-[data-theme="tron-legacy"] #journal-panel .jr-pad-cat-pinned .jr-pad-cat-name::before { content:"📌 "; letter-spacing:0; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-empty { padding:12px 14px; font-size:.8rem; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row { display:grid; gap:3px; width:100%; text-align:left; padding:9px 14px 10px; background:transparent; border:0; border-bottom:1px solid rgba(0,217,255,.12); color:#bff3ff; cursor:pointer; font:inherit; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row:hover:not(:disabled) { background:rgba(0,217,255,.07); }
