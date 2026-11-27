@@ -7,6 +7,7 @@
      solid fill; a light streak crosses them once, when the page loads.
    - Drop-down menus: black glass with a glowing cyan frame and orange corner
      brackets; they "rez in" top-to-bottom and their items arrive one by one.
+   - Control bars: framed like the data pads / screens in the film.
    - Buttons: a light streak sweeps across on hover.
    - Switching tabs: the panel rezzes in with a quick top-to-bottom wipe.
    - Page: the title boots up with a brief flicker; a perspective floor grid
@@ -161,6 +162,72 @@
   text-shadow: 0 0 6px rgba(0, 217, 255, 0.7);
 }
 [data-theme="tron-legacy"] .pres-section { border-color: rgba(0, 217, 255, 0.4); }
+
+/* ----- Control bars: framed like a data pad / screen -----
+   Every control bar (.panel-toolbar) gets a dark glass screen with faint
+   scan lines, a thin cyan frame, bright corner brackets, a "CONTROLS" tag on
+   the top edge and a strip of readout ticks top-right. All of it is drawn with
+   backgrounds and two small tags, so drop-down menus inside a bar are never cut off. */
+[data-theme="tron-legacy"] .panel-toolbar {
+  --pad-c: rgba(0, 217, 255, 0.95);
+  --pad-k: 18px;
+  position: relative;
+  margin-top: 14px;
+  padding: 16px 18px 14px;
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  border-radius: 0;
+  background:
+    /* corner brackets: top-left, top-right, bottom-left, bottom-right */
+    linear-gradient(var(--pad-c), var(--pad-c)) left top / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) left top / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) right top / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) right top / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) left bottom / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) left bottom / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) right bottom / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) right bottom / 2px var(--pad-k),
+    /* scan lines + screen glow */
+    repeating-linear-gradient(to bottom, rgba(0, 217, 255, 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(120% 140% at 50% 0%, rgba(0, 217, 255, 0.1), transparent 60%),
+    rgba(3, 10, 14, 0.88);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat, no-repeat;
+  background-origin: border-box;
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.14), inset 0 0 20px rgba(0, 217, 255, 0.07);
+}
+[data-theme="tron-legacy"] .panel-toolbar::before {
+  content: "CONTROLS";
+  position: absolute;
+  top: -8px;
+  left: 26px;
+  padding: 2px 14px 2px 9px;
+  font-family: var(--font-heading);
+  font-size: 8.5px;
+  line-height: 11px;
+  letter-spacing: 0.28em;
+  color: #001218;
+  background: var(--tron-cyan);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+  pointer-events: none;
+}
+[data-theme="tron-legacy"] .panel-toolbar::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: 30px;
+  width: 64px;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--marker) 0 8px, transparent 8px 12px);
+  opacity: 0.85;
+  pointer-events: none;
+}
+/* A bar marked hidden (e.g. the template-link row) stays out of sight instead of showing an empty frame. */
+[data-theme="tron-legacy"] .panel-toolbar[hidden] { display: none; }
+/* A bar inside a table cell or another bar stays plain. */
+[data-theme="tron-legacy"] :is(td, .panel-toolbar) .panel-toolbar {
+  margin-top: 0; padding: 0; border: 0; background: none; box-shadow: none;
+}
+[data-theme="tron-legacy"] :is(td, .panel-toolbar) .panel-toolbar::before,
+[data-theme="tron-legacy"] :is(td, .panel-toolbar) .panel-toolbar::after { content: none; }
 
 /* ----- Drop-down menus ----- */
 [data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list) {
