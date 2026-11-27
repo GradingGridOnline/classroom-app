@@ -5,7 +5,6 @@
 // Load AFTER the modules' own scripts.
 (function () {
   const SECTIONS = [
-    ["seating-banks", "#seating-panel .banks-section"],
     ["seating-groups", "#seating-panel .group-list-section"],
     ["seating-settings", "#seating-settings", true], // true = always open, no collapse
   ];

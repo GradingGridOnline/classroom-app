@@ -266,9 +266,12 @@
           </div>
           <p class="front-label">Front of Classroom</p>
 
-          <div class="banks-section">
-            <h3>Memory Banks</h3>
-            <p class="hint">Save the current arrangement into a slot, or load/delete a saved one. Banks are stored when you click Save Seating Chart.</p>
+          <!-- Memory banks: part of the chart itself (saved arrangements to load), not a collapsible section -->
+          <div class="banks-section seat-subsection">
+            <div class="seat-subsection-head">
+              <h4 class="seat-subsection-title">Memory Banks</h4>
+              <span class="hint">Saved arrangements: <b>Load</b> one onto the chart, or <b>Save</b> the chart into a slot. They're stored when you click Save Seating Chart.</span>
+            </div>
             <div id="banks-list" class="banks-list"></div>
           </div>
 

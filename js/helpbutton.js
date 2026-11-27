@@ -105,7 +105,7 @@
 <li><b>Save Seating Chart</b> — saves the chart (autosave does too).</li>
 </ul>
 <h4>Memory Banks</h4>
-<p>Each bank stores one whole arrangement. <b>Save</b> puts the current chart in a bank, <b>Load</b> brings it back (students excluded since then are taken off their desks and return to them when re-included), <b>Delete</b> empties it.</p>
+<p>The panel under the chart. Each bank stores one whole arrangement. <b>Save</b> puts the current chart in a bank, <b>Load</b> brings it back (students excluded since then are taken off their desks and return to them when re-included), <b>✎</b> renames it and <b>✕</b> empties it.</p>
 <h4>Group Assignments</h4>
 <p>Lists every seated student by group. Use the <b>Group N</b> buttons above the table to copy that group's email addresses (separated by commas) for pasting into OneDrive or an email. The <b>Copy</b> button on a row copies one student's address.</p>
 <h4>Seating Settings (click Edit Settings)</h4>

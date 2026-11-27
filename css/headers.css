@@ -10,7 +10,6 @@
 #course-section summary > .section-header,
 /* Seating chart and roster panels */
 .unseated-panel > h3,
-.banks-section > h3,
 .group-list-section > h3,
 #mapping-panel > h3,
 /* Global Settings blocks */
@@ -43,7 +42,6 @@
 .attendance-settings-header h3,
 #course-section .section-header h2,
 .unseated-panel > h3,
-.banks-section > h3,
 .group-list-section > h3,
 #mapping-panel > h3,
 #settings-section .settings-block > h3,

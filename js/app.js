@@ -1785,96 +1785,60 @@ function renderSeatingSettings() {
 
 function renderBanks() {
   el.banksList.innerHTML = "";
+  const mkBtn = (text, cls, title, fn) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = cls; b.textContent = text; if (title) { b.title = title; b.setAttribute("aria-label", title); }
+    b.addEventListener("click", fn);
+    return b;
+  };
 
   SeatingModule.banks.forEach((bank, index) => {
     const isEmpty = !bank.snapshot;
-
     const card = document.createElement("div");
-    card.className = "bank-card";
+    card.className = `bank-card${isEmpty ? " bank-empty" : ""}`;
 
+    const top = document.createElement("div");
+    top.className = "bank-top";
+    const num = document.createElement("span");
+    num.className = "bank-num";
+    num.textContent = String(index + 1).padStart(2, "0");
     const label = document.createElement("div");
     label.className = "bank-label";
     label.textContent = bank.name;
-    card.appendChild(label);
+    top.append(num, label);
+    top.appendChild(mkBtn("✎", "bank-icon-btn", `Rename “${bank.name}”`, async () => {
+      const next = prompt("Name this memory bank:", bank.name);
+      if (next === null) return;
+      try { await SeatingModule.renameBank(index, next); renderBanks(); el.seatingStatus.textContent = ""; }
+      catch (err) { el.seatingStatus.textContent = `Couldn't rename: ${err.message}`; }
+    }));
+    if (!isEmpty) top.appendChild(mkBtn("✕", "bank-icon-btn", `Clear “${bank.name}”`, async () => {
+      if (!confirm(`Delete the saved arrangement in "${bank.name}"? This can't be undone.`)) return;
+      try { await SeatingModule.deleteBank(index); el.seatingStatus.textContent = `"${bank.name}" cleared.`; renderBanks(); }
+      catch (err) { el.seatingStatus.textContent = `Couldn't delete: ${err.message}`; }
+    }));
+    card.appendChild(top);
 
     const status = document.createElement("div");
     status.className = "bank-status";
-    status.textContent = isEmpty
-      ? "Empty"
-      : `Saved ${new Date(bank.snapshot.savedAt).toLocaleString()}`;
+    const when = !isEmpty && bank.snapshot.savedAt ? new Date(bank.snapshot.savedAt) : null;
+    status.textContent = isEmpty ? "Empty" : when && !isNaN(when) ? `Saved ${when.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "Saved";
     card.appendChild(status);
 
     const buttonRow = document.createElement("div");
     buttonRow.className = "bank-buttons";
-
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.className = "btn btn-ghost btn-small";
-    saveBtn.textContent = "Save";
-    saveBtn.addEventListener("click", async () => {
-      if (!isEmpty && !confirm(`Overwrite "${bank.name}" with the current arrangement?`)) return;
-      try {
-        await SeatingModule.saveBank(index);
-        el.seatingStatus.textContent = `Saved to "${bank.name}" — click Save Seating Chart to store it.`;
-        renderBanks();
-      } catch (err) {
-        el.seatingStatus.textContent = `Couldn't save: ${err.message}`;
-      }
-    });
-    buttonRow.appendChild(saveBtn);
-
-    const loadBtn = document.createElement("button");
-    loadBtn.type = "button";
-    loadBtn.className = "btn btn-ghost btn-small";
-    loadBtn.textContent = "Load";
-    loadBtn.disabled = isEmpty;
-    loadBtn.addEventListener("click", async () => {
+    const loadBtn = mkBtn("Load", `btn btn-small ${isEmpty ? "btn-ghost" : "btn-primary"}`, isEmpty ? "" : `Put “${bank.name}” on the chart`, async () => {
       if (!confirm(`Load "${bank.name}"? This replaces your current seating arrangement (including grid size).`)) return;
-      try {
-        await SeatingModule.loadBank(index);
-        selectedStudentId = null;
-        renderSeating();
-        el.seatingStatus.textContent = `Loaded "${bank.name}" ✓`;
-      } catch (err) {
-        el.seatingStatus.textContent = `Couldn't load: ${err.message}`;
-      }
+      try { await SeatingModule.loadBank(index); selectedStudentId = null; renderSeating(); el.seatingStatus.textContent = `Loaded "${bank.name}" ✓`; }
+      catch (err) { el.seatingStatus.textContent = `Couldn't load: ${err.message}`; }
     });
+    loadBtn.disabled = isEmpty;
     buttonRow.appendChild(loadBtn);
-
-    const renameBtn = document.createElement("button");
-    renameBtn.type = "button";
-    renameBtn.className = "btn btn-ghost btn-small";
-    renameBtn.textContent = "Rename";
-    renameBtn.addEventListener("click", async () => {
-      const next = prompt("Name this memory bank:", bank.name);
-      if (next === null) return;
-      try {
-        await SeatingModule.renameBank(index, next);
-        renderBanks();
-        el.seatingStatus.textContent = "";
-      } catch (err) {
-        el.seatingStatus.textContent = `Couldn't rename: ${err.message}`;
-      }
-    });
-    buttonRow.appendChild(renameBtn);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "btn btn-ghost btn-small";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.disabled = isEmpty;
-    deleteBtn.addEventListener("click", async () => {
-      if (!confirm(`Delete the saved arrangement in "${bank.name}"? This can't be undone.`)) return;
-      try {
-        await SeatingModule.deleteBank(index);
-        el.seatingStatus.textContent = `"${bank.name}" cleared.`;
-        renderBanks();
-      } catch (err) {
-        el.seatingStatus.textContent = `Couldn't delete: ${err.message}`;
-      }
-    });
-    buttonRow.appendChild(deleteBtn);
-
+    buttonRow.appendChild(mkBtn("Save", "btn btn-ghost btn-small", `Save the chart into “${bank.name}”`, async () => {
+      if (!isEmpty && !confirm(`Overwrite "${bank.name}" with the current arrangement?`)) return;
+      try { await SeatingModule.saveBank(index); el.seatingStatus.textContent = `Saved to "${bank.name}" — click Save Seating Chart to store it.`; renderBanks(); }
+      catch (err) { el.seatingStatus.textContent = `Couldn't save: ${err.message}`; }
+    }));
     card.appendChild(buttonRow);
     el.banksList.appendChild(card);
   });

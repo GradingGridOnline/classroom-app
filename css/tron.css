@@ -159,7 +159,6 @@
   #course-section .section-header:not(:has(#course-detail-title)),
   #course-section summary > .section-header,
   .unseated-panel > h3,
-  .banks-section > h3,
   .group-list-section > h3,
   #mapping-panel > h3,
   #settings-section .settings-block > h3,
@@ -188,7 +187,6 @@
   #course-section .section-header:not(:has(#course-detail-title)),
   #course-section summary > .section-header,
   .unseated-panel > h3,
-  .banks-section > h3,
   .group-list-section > h3,
   #mapping-panel > h3,
   #settings-section .settings-block > h3,
@@ -204,7 +202,6 @@
   .attendance-settings-header h3,
   #course-section .section-header h2,
   .unseated-panel > h3,
-  .banks-section > h3,
   .group-list-section > h3,
   #mapping-panel > h3,
   #settings-section .settings-block > h3,
@@ -660,6 +657,46 @@
   background-color: #7ff0ff;
   text-shadow: none;
 }
+
+/* ----- Seating Chart memory banks: a framed sub-panel of the chart ----- */
+[data-theme="tron-legacy"] .seat-subsection {
+  --pad-c: rgba(0, 217, 255, 0.95);
+  --pad-k: 14px;
+  position: relative;
+  margin-top: 22px;
+  padding: 16px 16px 14px;
+  border: 1px solid rgba(0, 217, 255, 0.28);
+  border-radius: 0;
+  background:
+    linear-gradient(var(--pad-c), var(--pad-c)) left top / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) left top / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) right bottom / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) right bottom / 2px var(--pad-k),
+    repeating-linear-gradient(to bottom, rgba(0, 217, 255, 0.03) 0 1px, transparent 1px 3px),
+    rgba(3, 10, 14, 0.75);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat;
+  background-origin: border-box;
+  box-shadow: inset 0 0 18px rgba(0, 217, 255, 0.05);
+}
+[data-theme="tron-legacy"] .seat-subsection-title {
+  position: absolute; top: -8px; left: 22px;
+  padding: 1px 14px 1px 9px;
+  font-size: 8.5px; line-height: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: #001218; background: var(--tron-cyan);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+}
+[data-theme="tron-legacy"] .seat-subsection-head .hint { color: #7fb0bc; }
+[data-theme="tron-legacy"] .bank-card {
+  border-radius: 0;
+  border-color: rgba(0, 217, 255, 0.3);
+  background: rgba(0, 217, 255, 0.04);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+[data-theme="tron-legacy"] .bank-card:not(.bank-empty) { border-color: rgba(0, 217, 255, 0.65); box-shadow: inset 0 0 14px rgba(0, 217, 255, 0.12); }
+[data-theme="tron-legacy"] .bank-num { font-family: "Share Tech Mono", ui-monospace, monospace; font-size: 0.85rem; color: var(--tron-cyan); }
+[data-theme="tron-legacy"] .bank-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.8rem; color: #e8fdff; }
+[data-theme="tron-legacy"] .bank-status { font-family: "Share Tech Mono", ui-monospace, monospace; color: #7fb0bc; }
+[data-theme="tron-legacy"] .bank-buttons .btn { border-radius: 0; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; }
 
 /* ----- Drop-down menus ----- */
 [data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu) {
