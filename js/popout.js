@@ -70,7 +70,7 @@ function render() {
   grid.style.gridTemplateColumns = `repeat(${seating.cols}, ${deskWidth}px)`;
   grid.style.gridTemplateRows = `repeat(${seating.rows}, ${deskHeight}px)`;
   grid.style.setProperty("--popout-name-size", `${Math.max(12, Math.round(deskHeight * NAME_SIZE_RATIO))}px`);
-  grid.style.setProperty("--popout-badge-size", `${Math.max(18, Math.round(deskHeight * 0.36))}px`);
+  grid.style.setProperty("--popout-badge-size", `${Math.max(14, Math.round(deskHeight * 0.3))}px`);
 
   // Reversed row order AND mirrored column order — see comment above.
   for (let r = seating.rows - 1; r >= 0; r--) {
