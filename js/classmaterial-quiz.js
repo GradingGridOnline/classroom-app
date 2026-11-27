@@ -169,12 +169,14 @@
     try {
       if (!keepModel || !model) {
         host.textContent = ""; host.appendChild(mk("p", "hint", "Loading your quizzes…"));
-        await c.libEnsure();
-        const ad = await c.adoptOrphans(); // quizzes made in a Test & Quiz Bank, or before the one-list change
-        model = await c.loadModel({ flush: true });
-        const r = await c.syncPass();
-        if (r.updated || ad.made || ad.joined) model = await c.loadModel({});
-        if (r.updated) note = note || `${plural(r.updated, "course")} brought up to date${r.regraded ? ` (${plural(r.regraded, "student")} re-graded)` : ""}.`;
+        await c.batch(async () => { // one read of the Library and of the index for the whole load
+          await c.libEnsure();
+          const ad = await c.adoptOrphans(); // quizzes made in a Test & Quiz Bank, or before the one-list change
+          model = await c.loadModel({ flush: true });
+          const r = await c.syncPass();
+          if (r.updated || ad.made || ad.joined) model = await c.loadModel({});
+          if (r.updated) note = note || `${plural(r.updated, "course")} brought up to date${r.regraded ? ` (${plural(r.regraded, "student")} re-graded)` : ""}.`;
+        });
       }
     } catch (e) { host.textContent = ""; host.appendChild(mk("p", "hint", `Couldn't load: ${e.message}`)); busy = false; return; }
     busy = false;

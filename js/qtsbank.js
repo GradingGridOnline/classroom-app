@@ -125,12 +125,20 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   // items: [{ id, name, kind, settings, sections, max, hash, rev, createdAt, updatedAt }]. A course quiz linked to an item
   // carries libId / libRev (the revision it matches) / libHash (fingerprint of its questions when last in step).
   let lib = null;
+  // A "batch" (one opening of the Quizzes list, one sync) reads the Library and the index at most once each:
+  // inside it, forced reloads reuse what was read, and the index is updated in memory before being saved.
+  let batchDepth = 0, libFresh = false;
+  async function batch(fn) {
+    batchDepth++;
+    try { return await fn(); } finally { if (--batchDepth === 0) { libFresh = false; Index.cache = null; } }
+  }
   async function libLoad(force) {
-    if (lib && !force) return lib;
+    if (lib && (!force || (batchDepth && libFresh))) return lib;
     let d = null;
     try { d = await storage.loadFile(LIB_FILE); } catch (e) { d = null; }
     lib = d && typeof d === "object" ? d : {};
     lib.items = Array.isArray(lib.items) ? lib.items : [];
+    if (batchDepth) libFresh = true;
     return lib;
   }
   async function libSave() { await storage.saveFile(LIB_FILE, { migrated: !!lib.migrated, oneQuiz: !!lib.oneQuiz, items: lib.items }); }
@@ -159,7 +167,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     }));
   }
   const Index = {
-    queue: new Map(), gone: new Set(), timer: null, running: null,
+    queue: new Map(), gone: new Set(), timer: null, running: null, cache: null,
     queueCourse(courseId, tools) { if (isTmp(courseId)) return; this.gone.delete(courseId); this.queue.set(courseId, describeTools(tools)); this.arm(); },
     queueDelete(courseId) { this.queue.delete(courseId); this.gone.add(courseId); this.arm(); },
     arm() { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush().catch(() => {}), 1500); },
@@ -170,15 +178,23 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       const q = new Map(this.queue), g = new Set(this.gone);
       this.queue.clear(); this.gone.clear();
       this.running = (async () => {
-        const idx = (await storage.loadFile(INDEX_FILE)) || {};
+        const idx = this.cache || (await storage.loadFile(INDEX_FILE)) || {};
         idx.courses = idx.courses || {};
         q.forEach((tools, id) => { idx.courses[id] = { at: nowIso(), tools }; });
         g.forEach((id) => { delete idx.courses[id]; });
         await storage.saveFile(INDEX_FILE, idx);
+        if (batchDepth) this.cache = idx;
       })();
       try { await this.running; } finally { this.running = null; }
     },
-    async load() { await this.flush().catch(() => {}); const d = await storage.loadFile(INDEX_FILE); return d && d.courses ? d : { courses: {} }; },
+    async load() {
+      await this.flush().catch(() => {});
+      if (batchDepth && this.cache) return this.cache;
+      const d = await storage.loadFile(INDEX_FILE);
+      const out = d && d.courses ? d : { courses: {} };
+      if (batchDepth) this.cache = out;
+      return out;
+    },
   };
   // Edits to a linked quiz's questions are sent to the Library after a quiet moment.
   const Push = {
@@ -253,17 +269,9 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       m.courses.push({ id: c.id, name: c.name, tools: tools.map((t) => ({ toolId: t.toolId, toolName: t.toolName })) });
       tools.forEach((t) => t.tests.forEach((d) => m.rows.push({ courseId: c.id, courseName: c.name, toolId: t.toolId, toolName: t.toolName, id: d.id, d })));
     }
-    if (changedIdx) { try { await storage.saveFile(INDEX_FILE, idx); } catch (e) {} }
-    // Old group lists (kept only so their items can be imported into the Library).
-    try {
-      if (window.GroupShare) {
-        const groups = await GroupShare.myGroups(true);
-        for (const g of groups || []) {
-          const d = await GroupShare.loadDoc(g.id, "tests");
-          if (d && Array.isArray(d.items) && d.items.length) m.legacy.push({ key: g.id, label: `the old group list “${g.name}”`, items: d.items });
-        }
-      }
-    } catch (e) { /* groups are optional */ }
+    if (changedIdx) { try { await storage.saveFile(INDEX_FILE, idx); if (batchDepth) Index.cache = idx; } catch (e) {} }
+    // (The old group lists are no longer looked up here: the Quizzes list doesn't import them, and it saved
+    //  one Supabase query per group every time the list loaded.)
     return m;
   }
   const sameRef = (a, b) => a.courseId === b.courseId && a.id === b.id;
@@ -1122,10 +1130,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       if (firstLoad) { firstLoad = false; libEnsure().catch(() => {}); }
       if (cid && Date.now() - (lastSync.get(cid) || 0) > 20000) {
         lastSync.set(cid, Date.now());
-        syncPass(null, cid).then((r) => { if (r.updated) { try { renderScoringToolView(tool, container); } catch (e) {} } }).catch(() => {});
+        batch(() => syncPass(null, cid)).then((r) => { if (r.updated) { try { renderScoringToolView(tool, container); } catch (e) {} } }).catch(() => {});
       }
       return section;
     },
-    core: { adoptOrphans, syncWords, addDialog, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, updateOne, updateAll, makeOwn, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, useStatus, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
+    core: { batch, adoptOrphans, syncWords, addDialog, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, updateOne, updateAll, makeOwn, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, useStatus, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
   };
 })();
