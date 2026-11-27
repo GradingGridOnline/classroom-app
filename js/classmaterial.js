@@ -177,7 +177,7 @@
   }
 
   let view = "materials", section = "slides";
-  const SECTIONS = [["quiz", "Quiz Library"], ["slides", "Slideshows"], ["worksheets", "Worksheets"]];
+  const SECTIONS = [["quiz", "Quizzes"], ["slides", "Slideshows"], ["worksheets", "Worksheets"]];
   function render() {
     panel.innerHTML = "";
     if (!CM.courseId) { panel.appendChild(mk("p", "hint", "Open a course to see its class material.")); return; }
@@ -185,7 +185,7 @@
     SECTIONS.forEach(([k, label]) => { const b = btn(label, `btn ${section === k ? "btn-primary" : "btn-ghost"}`, () => { section = k; render(); }); b.setAttribute("aria-pressed", String(section === k)); top.appendChild(b); });
     panel.appendChild(top);
     const body = mk("div"); panel.appendChild(body);
-    if (section === "quiz") { if (API.quizLibrary) API.quizLibrary(body); else body.appendChild(mk("p", "hint", "The Quiz Library isn't available.")); return; }
+    if (section === "quiz") { if (API.quizLibrary) API.quizLibrary(body); else body.appendChild(mk("p", "hint", "Quizzes aren't available.")); return; }
     if (section === "worksheets") { body.appendChild(mk("p", "hint", "Worksheets will be built later.")); return; }
     const views = Object.assign({ materials: { label: "Materials" } }, API.views);
     const seg = mk("div", "cm-row");

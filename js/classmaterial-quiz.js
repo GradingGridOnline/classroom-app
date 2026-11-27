@@ -1,21 +1,17 @@
-// ===== Class Material → Quiz Library =====
-// Three sections: This Course's Quizzes (make new ones here), All Quizzes (manage every course's quizzes: copy, edit…,
-// but no "new"), and Templates (Library items; a copy in a course keeps a live link, so editing the template updates it).
-// Built on the Library engine in qtsbank.js (QTSBank.core).
+// ===== Class Material → Quizzes =====
+// One list. Every quiz exists once (a Library item) and can be used in any number of courses; each course keeps its own
+// students' answers, scores and QR codes. Editing a quiz anywhere changes it in every course that uses it, and answers
+// already given are re-graded. A variation is a separate quiz: Duplicate. Built on the engine in qtsbank.js (QTSBank.core).
 (function () {
   const CMX = window.ClassMaterial; if (!CMX) return;
   const mk = CMX.mk;
   const core = () => window.QTSBank && QTSBank.core;
   const KINDS = [["standard", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]];
-  const F = { q: "", course: "", type: "" };
-  const open2 = { mine: true, all: true, tpl: true };
+  const F = { q: "", scope: "course", type: "" };
   let busy = false, note = "";
-
   const live = () => ScoringModule.currentCourseId;
-  const typeKey = (d) => (d.kind === "answers" ? "answers" : d.kind === "survey" ? "survey" : d.kind === "formative" ? "formative" : "quiz");
   async function saveNow() { try { if (window.GGOAutosave && GGOAutosave.enabled()) await GGOAutosave.flush(); else await ScoringModule.save(); } catch (e) {} }
   const rebuildTabs = () => { try { if (typeof renderScoringToolTabs === "function") renderScoringToolTabs(); } catch (e) {} };
-
   function openEditor(toolId, testId) {
     QuizBankUI.open(toolId, testId);
     window.showTab("scoring");
@@ -27,220 +23,239 @@
     if (!tool) { tool = ScoringModule.addTool("testbank"); rebuildTabs(); }
     return tool;
   }
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-  // ---------- making things ----------
-  async function newQuiz(kind, label, count) {
-    const name = prompt(`${label} name:`, `${label} ${count + 1}`); if (name === null || !name.trim()) return;
+  // ---------- making ----------
+  /** A new quiz is made in this course and put in the Library at once, so it can be used anywhere. */
+  async function newQuiz(kind, label) {
+    const c = core(), name = prompt(`${label} name:`, `${label} ${c.getLib().items.length + 1}`);
+    if (name === null || !name.trim()) return "";
     const tool = liveTool(), t = ScoringModule.addQuizTest(tool.id, name.trim(), kind);
+    await c.addToLibrary({ courseId: live(), toolId: tool.id, id: t.id });
     await saveNow(); openEditor(tool.id, t.id);
+    return "";
   }
-  function uploadQuiz() {
+  function uploadQuiz(done) {
     QuizSheet.pick(async (p, f) => {
       try {
         const tool = liveTool(), t = ScoringModule.addQuizTest(tool.id, p.name || f.name.replace(/\.[^.]+$/, ""), p.kind);
         Object.assign(t.quiz.settings, p.settings); t.quiz.sections = p.sections;
         ScoringModule.normalizeQuiz(t); ScoringModule.regradeQuiz(tool.id, t.id);
+        await core().addToLibrary({ courseId: live(), toolId: tool.id, id: t.id });
         alert(QuizSheet.summary({ ...p, name: t.name })); await saveNow(); openEditor(tool.id, t.id);
-      } catch (e) { alert(`Couldn't make the quiz: ${e.message}`); }
-    });
-  }
-  async function newTemplate(kind, label, count) {
-    const c = core(); const name = prompt(`${label} template name:`, `${label} template ${count + 1}`); if (name === null || !name.trim()) return;
-    const lib = await c.libLoad(true);
-    if (lib.items.length >= c.MAX_LIB) throw new Error(`The Library is at its limit of ${c.MAX_LIB} items.`);
-    const item = c.newItem({ name: name.trim(), quiz: { kind, settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1, attemptRule: "best" }, sections: [{ id: c.rid("sec"), title: "Section 1", questions: [], notes: [] }] } }, name.trim());
-    lib.items.push(item); await c.libSave();
-    await c.openTplEditor({ id: item.id });
-  }
-  function uploadTemplate() {
-    QuizSheet.pick(async (p, f) => {
-      try {
-        const c = core(), lib = await c.libLoad(true);
-        if (lib.items.length >= c.MAX_LIB) throw new Error(`The Library is at its limit of ${c.MAX_LIB} items.`);
-        const name = p.name || f.name.replace(/\.[^.]+$/, "");
-        const item = c.newItem({ name, quiz: { kind: p.kind, settings: p.settings, sections: p.sections } }, name);
-        lib.items.push(item); await c.libSave(); alert(QuizSheet.summary({ ...p, name })); await c.openTplEditor({ id: item.id });
-      } catch (e) { say(`Couldn't do that: ${e.message}`); }
+      } catch (e) { done(`Couldn't make the quiz: ${e.message}`); }
     });
   }
 
-  // ---------- copying ----------
-  function chooseCourses(title, hint, model, note2) {
+  // ---------- one quiz's actions ----------
+  /** Edits in this course when it uses the quiz (students here are re-graded live); otherwise in the no-students editor. */
+  async function editQuiz(item, uses) {
+    const here = uses.find((u) => u.courseId === live());
+    if (here) { openEditor(here.toolId, here.id); return ""; }
+    await core().openTplEditor({ id: item.id });
+    return "";
+  }
+  /** Tick the courses that should use this quiz. Unticking a course removes the quiz (and its answers) from it. */
+  async function useInCourses(item, uses, model) {
     const c = core();
-    return c.dialog((box, done) => {
-      box.appendChild(mk("h3", "", title)); box.appendChild(mk("p", "hint", hint));
-      const cbs = model.courses.map((co) => { const l = mk("label", "qts-check"); const cb = mk("input"); cb.type = "checkbox"; cb.value = co.id; l.append(cb, mk("span", "", co.name + (co.id === live() ? " (this course)" : ""))); box.appendChild(l); return cb; });
-      const msg = mk("p", "hint"); box.appendChild(msg);
+    const byCourse = new Map();
+    uses.forEach((u) => { if (!byCourse.has(u.courseId)) byCourse.set(u.courseId, []); byCourse.get(u.courseId).push(u); });
+    const picked = await c.dialog((box, done) => {
+      box.appendChild(mk("h3", "", `Use “${item.name}” in…`));
+      box.appendChild(mk("p", "hint", "Each course runs the same quiz with its own students, answers, scores and QR codes. Changes to the questions reach every course ticked here."));
+      const boxes = model.courses.map((co) => {
+        const l = mk("label", "qts-check"), cb = mk("input"); cb.type = "checkbox"; cb.value = co.id; cb.checked = byCourse.has(co.id);
+        const here = byCourse.get(co.id) || [], ans = here.reduce((a, u) => a + (u.d.answers || 0), 0);
+        l.append(cb, mk("span", "", `${co.name}${co.id === live() ? " (this course)" : ""}${ans ? ` — ${plural(ans, "student")} answered` : ""}`));
+        box.appendChild(l); return cb;
+      });
       const acts = mk("div", "qts-actions");
       const no = mk("button", "btn btn-ghost", "Cancel"); no.type = "button"; no.addEventListener("click", () => done(null));
-      const go = mk("button", "btn btn-primary", "Copy"); go.type = "button";
-      go.addEventListener("click", () => { const ids = cbs.filter((b) => b.checked).map((b) => b.value); if (!ids.length) { msg.textContent = "Tick at least one course."; return; } done(ids); });
+      const go = mk("button", "btn btn-primary", "Save"); go.type = "button";
+      go.addEventListener("click", () => done(new Set(boxes.filter((b) => b.checked).map((b) => b.value))));
       acts.append(no, go); box.appendChild(acts);
     });
-  }
-  /** An independent copy of a course quiz (no Library link) in the chosen courses. */
-  async function copyQuiz(row, model) {
-    const c = core(), full = await c.fullOf(row); if (!full || !full.quiz) throw new Error("That quiz no longer exists.");
-    const ids = await chooseCourses(`Copy “${full.name}” to courses`, "Each course gets its own separate copy of the questions (no link back). Students' answers aren't copied.", model);
-    if (!ids) return "";
-    let n = 0; const errs = [];
-    for (const cid of ids) {
+    if (!picked) return "";
+    const add = model.courses.filter((co) => picked.has(co.id) && !byCourse.has(co.id));
+    const drop = [...byCourse.entries()].filter(([cid]) => !picked.has(cid));
+    const open = drop.filter(([, us]) => us.some((u) => u.d.qr));
+    if (open.length) throw new Error(`close the QR code in ${open.map(([cid]) => (model.courses.find((x) => x.id === cid) || {}).name || cid).join(", ")} first`);
+    const lost = drop.reduce((a, [, us]) => a + us.reduce((b, u) => b + (u.d.answers || 0), 0), 0);
+    if (lost && !confirm(`Remove “${item.name}” from ${plural(drop.length, "course")}?\n\n${plural(lost, "student")}' answers and scores for it will be deleted there. The quiz itself stays in your list.`)) return "";
+    await c.libLoad(true);
+    const it = c.itemById(item.id); if (!it) throw new Error("That quiz no longer exists.");
+    const errs = [];
+    for (const co of add) {
       try {
-        const course = model.courses.find((x) => x.id === cid), toolId = course && course.tools.length ? course.tools[0].toolId : "__new";
-        const t = JSON.parse(JSON.stringify({ id: c.rid("test"), name: cid === row.courseId ? `${full.name} (copy)` : full.name, maxPoints: full.maxPoints, sourceFile: "Quiz editor", rows: [], scores: {}, unmatched: [], createdAt: new Date().toISOString(), quiz: { kind: full.quiz.kind, settings: full.quiz.settings || {}, sections: full.quiz.sections || [], style: full.quiz.style } }));
-        t.quiz.token = null; t.quiz.submissions = [];
-        await c.courseAdd(cid, toolId, t); n++;
-      } catch (e) { errs.push(`${(model.courses.find((x) => x.id === cid) || {}).name || cid}: ${e.message}`); }
+        const toolId = co.id === live() ? liveTool().id : co.tools.length ? co.tools[0].toolId : "__new";
+        await c.courseAdd(co.id, toolId, c.useOf(it, it.name));
+      } catch (e) { errs.push(`${co.name}: ${e.message}`); }
     }
-    if (live()) rebuildTabs();
-    return `Copied to ${n} course${n === 1 ? "" : "s"}.${errs.length ? ` Couldn't copy to: ${errs.join("; ")}` : ""}`;
+    for (const [, us] of drop) for (const u of us) { try { await c.courseRemove(u.courseId, u.toolId, u.id); } catch (e) { errs.push(`${u.courseName}: ${e.message}`); } }
+    if (add.some((co) => co.id === live()) || drop.some(([cid]) => cid === live())) rebuildTabs();
+    const parts = [];
+    if (add.length) parts.push(`added to ${plural(add.length, "course")}`);
+    if (drop.length) parts.push(`removed from ${plural(drop.length, "course")}`);
+    return `${parts.length ? `“${it.name}” ${parts.join(", ")}.` : "No change."}${errs.length ? ` Couldn't change: ${errs.join("; ")}` : ""}`;
   }
-  /** A template copied to this course, with a live link to it. */
-  async function templateToHere(item) {
-    const c = core(); await c.libLoad(true);
-    const tool = liveTool();
-    await c.courseAdd(live(), tool.id, c.useOf(c.itemById(item.id), item.name));
-    rebuildTabs();
-    return `“${item.name}” copied to this course. It stays linked to the template.`;
+  /** A separate quiz with the same questions, used in no course yet. */
+  async function duplicate(item) {
+    const c = core(), lib = await c.libLoad(true);
+    if (lib.items.length >= c.MAX_LIB) throw new Error(`you have reached the limit of ${c.MAX_LIB} quizzes`);
+    const src = c.itemById(item.id); if (!src) throw new Error("That quiz no longer exists.");
+    const name = prompt("Name for the copy:", `${src.name} (copy)`); if (name === null || !name.trim()) return "";
+    lib.items.push(c.newItem(c.itemTest(src), name.trim())); await c.libSave();
+    return `“${name.trim()}” made. It's a separate quiz: use “Use in…” to add it to courses.`;
   }
-
-  /** Links an own quiz to a template: its questions become the template's (answers kept and regraded). */
-  async function linkToTemplate(r, c) {
-    const lib = await c.libLoad(true);
-    if (!lib.items.length) throw new Error("there are no templates yet");
-    if (r.d.qr) throw new Error("its QR code is open — close it first");
-    const pick = await c.dialog((box, done) => {
-      box.appendChild(mk("h3", "", `Link “${r.d.name}” to a template`));
-      box.appendChild(mk("p", "hint", `This quiz's questions are replaced by the template's, and it then follows the template's edits.${r.d.answers ? ` Its ${r.d.answers} student answer(s) are kept and regraded.` : ""}`));
-      const s = mk("select"); lib.items.forEach((it) => { const o = mk("option", "", it.name); o.value = it.id; s.appendChild(o); }); box.appendChild(s);
-      const acts = mk("div", "qts-actions"), no = mk("button", "btn btn-ghost", "Cancel"), go = mk("button", "btn btn-primary", "Link");
-      no.type = go.type = "button"; no.addEventListener("click", () => done(null)); go.addEventListener("click", () => done(s.value)); acts.append(no, go); box.appendChild(acts);
-    });
-    if (!pick) return "";
-    const item = c.itemById(pick);
-    await c.applyUpdate(r, item);
-    return `Linked to “${item.name}”.`;
+  /** One name everywhere: renames the quiz and its copy in every course. */
+  async function rename(item, uses) {
+    const c = core(), v = prompt("New name:", item.name); if (v === null || !v.trim()) return "";
+    await c.libLoad(true); const it = c.itemById(item.id); if (!it) throw new Error("That quiz no longer exists.");
+    it.name = v.trim(); await c.libSave();
+    for (const u of uses) { try { await c.editCourseTest(u, (t) => { t.name = it.name; }); } catch (e) {} }
+    if (uses.some((u) => u.courseId === live())) rebuildTabs();
+    return "Renamed.";
   }
-
-  // ---------- editing in another course ----------
-  async function editElsewhere(row) {
-    if (row.courseId === live()) { openEditor(row.toolId, row.id); return ""; }
-    if (!confirm(`“${row.d.name}” is in ${row.courseName}. Open that course to edit it?`)) return "";
-    const course = CoursesModule.courses.find((x) => x.id === row.courseId); if (!course) throw new Error("That course isn't available.");
-    await saveNow();
-    await openCourseDetail(course);
-    openEditor(row.toolId, row.id);
-    return "";
+  async function remove(item, uses, model) {
+    if (uses.length) {
+      const names = [...new Set(uses.map((u) => u.courseName))].join(", ");
+      throw new Error(`it's used in ${names}. Untick those courses in “Use in…” first`);
+    }
+    if (!confirm(`Delete “${item.name}”? No course uses it.`)) return "";
+    const c = core(), lib = await c.libLoad(true);
+    lib.items = lib.items.filter((x) => x.id !== item.id); await c.libSave();
+    return "Deleted.";
   }
 
   // ---------- drawing ----------
-  let statusEl = null;
+  let statusEl = null, model = null, pendingHost = null;
   const say = (t) => { note = t || ""; if (statusEl) statusEl.textContent = note; };
-  const act = (host, fn) => async () => { try { const m = await fn(); if (m) note = m; else if (m === "") return; await draw(host); } catch (e) { say(`Couldn't do that: ${e.message}`); } };
-  const b = (label, fn, title) => { const x = mk("button", "btn btn-ghost btn-small", label); x.type = "button"; if (title) x.title = title; x.addEventListener("click", (e) => { e.stopPropagation(); fn(); }); return x; };
+  const act = (host, fn) => async () => { try { const m = await fn(); if (m) note = m; else if (m === "") return; model = null; await draw(host); } catch (e) { say(`Couldn't do that: ${e.message}`); } };
+  const b = (label, fn, cls, title) => { const x = mk("button", cls || "btn btn-ghost btn-small", label); x.type = "button"; if (title) x.title = title; x.addEventListener("click", (e) => { e.stopPropagation(); fn(); }); return x; };
 
-  function section(host, key, title, hint, tools) {
-    const d = mk("details", "cmq-sec"); d.open = open2[key]; d.addEventListener("toggle", () => { open2[key] = d.open; });
-    d.appendChild(mk("summary", "cmq-sum", title));
-    d.appendChild(mk("p", "hint", hint));
-    const bar = mk("div", "qts-head"); tools.forEach((t) => bar.appendChild(t)); d.appendChild(bar);
-    const body = mk("div"); d.appendChild(body); host.appendChild(d);
-    return body;
+  function toolbar(host, c, shown, total) {
+    const bar = mk("div", "panel-toolbar pad-toolbar cmq-bar");
+    const ro = mk("div", "pad-readout pad-readout-tron");
+    ro.append(mk("span", "count-badge", String(shown)), mk("span", "pad-readout-label", "Quizzes"));
+    const main = mk("div", "panel-toolbar-buttons pad-main");
+    const create = mk("div", "pad-group"); create.dataset.label = "Create";
+    create.appendChild(c.menuButton("+ New", () => KINDS.map(([k, l]) => ({ label: l, onClick: act(host, () => newQuiz(k, l)) }))));
+    if (window.QuizSheet) {
+      create.appendChild(b("Upload from sheet", () => uploadQuiz((m) => say(m)), null, "Make a new quiz from a filled-in CSV or Excel sheet."));
+      create.appendChild(b("Example sheet", () => QuizSheet.example("standard"), "btn btn-ghost btn-small pad-minor", "Downloads an example sheet showing what to type where."));
+    }
+    const show = mk("div", "pad-group cmq-show"); show.dataset.label = "Show";
+    [["course", "This course"], ["all", "All courses"]].forEach(([k, l]) => {
+      const x = b(l, () => { F.scope = k; draw(host, true); }, `btn btn-small ${F.scope === k ? "btn-primary" : "btn-ghost"}`);
+      x.setAttribute("aria-pressed", String(F.scope === k)); show.appendChild(x);
+    });
+    const ts = mk("select"); ts.setAttribute("aria-label", "Type");
+    [["", "All types"], ["quiz", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]].forEach(([v, t]) => { const o = mk("option", "", t); o.value = v; ts.appendChild(o); });
+    ts.value = F.type; ts.addEventListener("change", () => { F.type = ts.value; draw(host, true); });
+    const si = mk("input"); si.type = "search"; si.placeholder = "Search names"; si.value = F.q; si.className = "cmq-search";
+    si.addEventListener("input", () => { F.q = si.value; const pos = si.selectionStart; draw(host, true).then(() => { const n = host.querySelector(".cmq-search"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } }); });
+    show.append(ts, si, b("↻", () => { model = null; draw(host); }, "btn btn-ghost btn-small pad-minor", "Refresh"));
+    main.append(create, show);
+    bar.append(ro, main);
+    if (shown !== total) bar.title = `${shown} of ${total} quizzes shown`;
+    return bar;
   }
-  function table(cols, rows) {
-    const tb = mk("table", "source-grid qts-grid"), hr = mk("tr");
-    cols.forEach((x) => hr.appendChild(mk("th", "nosort", x)));
-    const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
-    const body = mk("tbody"); tb.appendChild(body);
-    if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", "Nothing here yet."); td.colSpan = cols.length; tr.appendChild(td); body.appendChild(tr); }
-    rows.forEach((cells) => { const tr = mk("tr"); cells.forEach((cell, i) => { if (cell instanceof Node) tr.appendChild(cell); else tr.appendChild(mk("td", i === 0 || cell === "" ? "qts-name" : "qts-n", cell == null || cell === "" ? "—" : String(cell))); }); body.appendChild(tr); });
-    const w = mk("div", "qts-wrap"); w.appendChild(tb); return w;
-  }
-  const ctl = (...btns) => { const td = mk("td", "qts-ctl"); btns.filter(Boolean).forEach((x) => td.appendChild(x)); return td; };
-  const sel = (label, key, opts, host) => { const l = mk("label", "", label), s = mk("select"); opts.forEach(([v, t]) => { const o = mk("option", "", t); o.value = v; s.appendChild(o); }); s.value = F[key]; s.addEventListener("change", () => { F[key] = s.value; draw(host); }); l.appendChild(s); return l; };
-  const search = (host) => { const l = mk("label", "", "Search"), i = mk("input"); i.type = "search"; i.value = F.q; i.placeholder = "Name"; i.addEventListener("input", () => { F.q = i.value; const pos = i.selectionStart; draw(host, true).then(() => { const n = host.querySelector(".cmq-search input"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } }); }); l.appendChild(i); l.classList.add("cmq-search"); return l; };
 
-  let model = null;
   async function draw(host, keepModel) {
     const c = core();
-    if (!c) { host.textContent = "The Quiz Library engine isn't loaded."; return; }
-    if (busy) return; busy = true;
+    if (!c) { host.textContent = "The quiz engine isn't loaded."; return; }
+    if (busy) { pendingHost = host; return; } // drawn into the newest host once the current load finishes
+    busy = true; pendingHost = null;
     try {
       if (!keepModel || !model) {
-        host.textContent = ""; host.appendChild(mk("p", "hint", "Loading your Quiz Library…"));
-        await c.libEnsure(); model = await c.loadModel({ flush: true });
-        const r = await c.syncPass(); if (r.updated) { model = await c.loadModel({}); note = note || `${r.updated} course quiz${r.updated === 1 ? "" : "zes"} updated from their templates.`; }
+        host.textContent = ""; host.appendChild(mk("p", "hint", "Loading your quizzes…"));
+        await c.libEnsure();
+        const ad = await c.adoptOrphans(); // quizzes made in a Test & Quiz Bank, or before the one-list change
+        model = await c.loadModel({ flush: true });
+        const r = await c.syncPass();
+        if (r.updated || ad.made || ad.joined) model = await c.loadModel({});
+        if (r.updated) note = note || `${plural(r.updated, "course")} brought up to date${r.regraded ? ` (${plural(r.regraded, "student")} re-graded)` : ""}.`;
       }
     } catch (e) { host.textContent = ""; host.appendChild(mk("p", "hint", `Couldn't load: ${e.message}`)); busy = false; return; }
     busy = false;
+    if (pendingHost) { host = pendingHost; pendingHost = null; } // the section was re-rendered while loading
     host.textContent = ""; host.classList.add("qts-root");
-    const lib = c.getLib(), cid = live(), q = F.q.toLowerCase();
-    const nm = (x) => String(x || "").toLowerCase().includes(q);
-    statusEl = mk("p", "result", note); host.appendChild(statusEl); note = "";
-    const rerun = act(host, async () => "");
-    const refresh = b("Refresh", () => { model = null; draw(host); });
+    const lib = c.getLib(), cid = live(), q = F.q.trim().toLowerCase();
     const rows = model.rows.filter((r) => r.d.kind !== "test");
-    const itemName = (id) => { const it = c.itemById(id); return it ? it.name : ""; };
-    const sourceCell = (r) => { const it = r.d.libId && c.itemById(r.d.libId); return !it ? "Not linked" : `Template: ${it.name}${c.isStale(r.d, it) ? " — update available" : ""}`; };
+    const all = lib.items.map((it) => ({ it, uses: rows.filter((r) => r.d.libId === it.id) }));
+    const shown = all.filter(({ it, uses }) =>
+      (!q || String(it.name).toLowerCase().includes(q)) &&
+      (!F.type || c.kindKey(it.kind) === F.type) &&
+      (F.scope !== "course" || uses.some((u) => u.courseId === cid)))
+      .sort((a, z) => String(a.it.name).localeCompare(String(z.it.name)));
 
-    // ---- 1. this course ----
-    const mine = rows.filter((r) => r.courseId === cid);
-    const nq = mine.length;
-    const tools1 = KINDS.map(([k, l]) => b(`+ New ${l}`, act(host, async () => { await newQuiz(k, l, nq); return ""; })));
-    if (window.QuizSheet) tools1.push(b("Upload quiz contents", uploadQuiz, "Make a new quiz in this course from a filled-in CSV or Excel sheet."), b("Export quiz template", () => QuizSheet.example("standard"), "Downloads an example sheet showing what to type where."));
-    tools1.push(refresh);
-    const body1 = section(host, "mine", `This Course's Quizzes (${mine.length})`, "Quizzes, surveys and answer collections for this course. Make new ones here; students' answers and scores stay in this course.", tools1);
-    body1.appendChild(table(["Name", "Type", "Questions", "Max", "Answers", "Source", "Control"], mine.filter((r) => nm(r.d.name)).map((r) => {
-      const d = r.d, it = d.libId && c.itemById(d.libId), stale = it && c.isStale(d, it);
-      const ex = c.exportMenuItems(r, say);
-      return [d.name || "(untitled)", c.KIND_LABEL[typeKey(d)], d.questions, d.max, d.answers, mk("td", stale ? "qts-stale" : "qts-n", sourceCell(r)),
-        ctl(b("Edit", act(host, () => editElsewhere(r))),
-          b("Rename", act(host, async () => { const v = prompt("New name:", d.name); if (v === null || !v.trim()) return ""; await c.editCourseTest(r, (t) => { t.name = v.trim(); }); return "Renamed."; })),
-          b("Copy to course…", act(host, () => copyQuiz(r, model))),
-          it ? null : b("Save as template", act(host, async () => { const x = await c.addToLibrary(r); return `“${x.name}” is now a template, and this quiz is linked to it.`; }), "Puts this quiz in Templates and links it, so edits go to every copy."),
-          stale ? b("Update (re-grade)", act(host, () => c.updateOne(r))) : null,
-          it ? b("Unlink", act(host, async () => { if (!confirm("Unlink this quiz from its template? Template edits will no longer reach it. (You can link it again later.)")) return ""; await c.makeOwn(r); return "Unlinked: this quiz is now its own copy."; }), "Stop following the template")
-             : b("Link…", act(host, () => linkToTemplate(r, c)), "Link this quiz to a template so it follows the template's edits"),
-          b("Delete", act(host, async () => { if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR / Forms → Close)"); if (!confirm(`Delete “${d.name}” from this course?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers, which will be lost.` : ""}`)) return ""; await c.courseRemove(r.courseId, r.toolId, r.id); rebuildTabs(); return "Deleted."; })),
-          ex.length ? c.menuButton("Export", () => ex) : null)];
-    })));
+    host.appendChild(toolbar(host, c, shown.length, all.length));
+    statusEl = mk("p", "result cmq-note", note); host.appendChild(statusEl); note = "";
 
-    // ---- 2. all quizzes ----
-    const body2 = section(host, "all", `All Quizzes (${rows.length})`, "Every quiz across your courses. Copy, edit, rename or export them here; new quizzes are made in “This Course's Quizzes”.", [
-      search(host), sel("Course", "course", [["", "All courses"], ...model.courses.map((x) => [x.id, x.name])], host), sel("Type", "type", [["", "All"], ["quiz", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]], host), refresh]);
-    body2.appendChild(table(["Course", "Name", "Type", "Questions", "Max", "Answers", "Source", "Control"], rows.filter((r) => nm(r.d.name) && (!F.course || r.courseId === F.course) && (!F.type || typeKey(r.d) === F.type)).sort((a, z) => (a.courseName + a.d.name).localeCompare(z.courseName + z.d.name)).map((r) => {
-      const d = r.d, ex = c.exportMenuItems(r, say);
-      return [mk("td", "qts-n", r.courseName), mk("td", "qts-name", d.name || "(untitled)"), mk("td", "qts-n", c.KIND_LABEL[typeKey(d)]), mk("td", "qts-n", String(d.questions == null ? "—" : d.questions)), mk("td", "qts-n", d.max == null ? "—" : String(d.max)), mk("td", "qts-n", String(d.answers || 0)), mk("td", "qts-n", sourceCell(r)),
-        ctl(b("Edit", act(host, () => editElsewhere(r))),
-          b("Copy to course…", act(host, () => copyQuiz(r, model))),
-          b("Rename", act(host, async () => { const v = prompt("New name:", d.name); if (v === null || !v.trim()) return ""; await c.editCourseTest(r, (t) => { t.name = v.trim(); }); return "Renamed."; })),
-          b("Delete", act(host, async () => { if (d.qr) throw new Error("close its QR code first"); if (!confirm(`Delete “${d.name}” from ${r.courseName}?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers, which will be lost.` : ""}`)) return ""; await c.courseRemove(r.courseId, r.toolId, r.id); if (r.courseId === cid) rebuildTabs(); return "Deleted."; })),
-          ex.length ? c.menuButton("Export", () => ex) : null)];
-    })));
-
-    // ---- 3. templates ----
-    const tools3 = KINDS.map(([k, l]) => b(`+ New ${l} template`, act(host, async () => { await newTemplate(k, l, lib.items.length); return ""; })));
-    if (window.QuizSheet) tools3.push(b("Upload quiz contents", uploadTemplate, "Make a new template from a filled-in CSV or Excel sheet."), b("Export quiz template", () => QuizSheet.example("standard")));
-    tools3.push(refresh);
-    const body3 = section(host, "tpl", `Templates (${lib.items.length})`, "A template is a quiz kept once. Copy it to this course (or others) and the copy stays linked: edit the template and every linked copy follows (a course with student answers shows “Update available”).", tools3);
-    body3.appendChild(table(["Name", "Type", "Questions", "Max", "Used in", "Status", "Control"], lib.items.filter((it) => nm(it.name)).sort((a, z) => String(a.name).localeCompare(String(z.name))).map((it) => {
-      const uses = model.rows.filter((r) => r.d.libId === it.id), stale = uses.filter((r) => c.isStale(r.d, it));
+    const tb = mk("table", "source-grid qts-grid cmq-grid"), hr = mk("tr");
+    ["Name", "Type", "Questions", "Max", "Used in", "Answered", ""].forEach((x) => hr.appendChild(mk("th", "nosort", x)));
+    const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
+    const body = mk("tbody"); tb.appendChild(body);
+    if (!shown.length) {
+      const tr = mk("tr"), td = mk("td", "hint", F.scope === "course" && !q && !F.type
+        ? (all.length ? "This course doesn't use any quizzes yet. Make one with “+ New”, or show All courses and use “Use in…” on one you already have." : "No quizzes yet. Make one with “+ New”.")
+        : "Nothing matches.");
+      td.colSpan = 7; tr.appendChild(td); body.appendChild(tr);
+    }
+    shown.forEach(({ it, uses }) => {
+      const tr = mk("tr");
+      const isSurvey = it.kind === "survey" || it.kind === "formative";
+      tr.appendChild(mk("td", "qts-name", it.name || "(untitled)"));
+      tr.appendChild(mk("td", "qts-n", c.KIND_LABEL[c.kindKey(it.kind)]));
+      tr.appendChild(mk("td", "qts-n", String(c.qCount(it))));
+      tr.appendChild(mk("td", "qts-n", isSurvey ? "—" : String(it.max == null ? "—" : it.max)));
+      const usedTd = mk("td", "cmq-used");
+      if (!uses.length) usedTd.appendChild(mk("span", "hint", "No course"));
+      [...new Map(uses.map((u) => [u.courseId, u])).values()].sort((a, z) => (a.courseId === cid ? -1 : z.courseId === cid ? 1 : a.courseName.localeCompare(z.courseName))).forEach((u) => {
+        const waiting = c.isStale(u.d, it);
+        const chip = mk("span", `cmq-chip${u.courseId === cid ? " cmq-here" : ""}${waiting ? " qts-stale" : ""}`, u.courseName);
+        if (waiting) chip.title = u.d.qr ? "Changes waiting: they apply when this course's QR code closes." : "Updating…";
+        usedTd.appendChild(chip);
+      });
+      tr.appendChild(usedTd);
+      const ans = uses.reduce((a, u) => a + (u.d.answers || 0), 0);
+      tr.appendChild(mk("td", "qts-n", ans ? String(ans) : "—"));
+      const ctl = mk("td", "qts-ctl");
+      ctl.appendChild(b("Edit", act(host, () => editQuiz(it, uses)), "btn btn-ghost btn-small", "Edit the questions. Every course using this quiz gets the change; answers already given are re-graded."));
+      ctl.appendChild(b("Use in…", act(host, () => useInCourses(it, uses, model)), "btn btn-ghost btn-small", "Choose the courses that use this quiz"));
+      ctl.appendChild(b("Duplicate", act(host, () => duplicate(it)), "btn btn-ghost btn-small", "A separate quiz with the same questions (for a variation)"));
+      if (window.QRStyles && QRStyles.menuButton) {
+        ctl.appendChild(QRStyles.menuButton(() => it.style || null, async (st) => {
+          await c.libLoad(true); const x = c.itemById(it.id); if (!x) return;
+          x.style = st || undefined; x.hash = c.hashOf(c.itemTest(x)); x.rev += 1; x.updatedAt = new Date().toISOString();
+          await c.libSave(); await c.syncPass(x.id); model = null; draw(host);
+        }, say, "btn btn-ghost btn-small"));
+      }
       const ex = c.exportMenuItems({ courseId: c.LIB, toolId: "", id: it.id, d: { kind: c.kindKey(it.kind) } }, say);
-      const style = window.QRStyles && QRStyles.menuButton ? QRStyles.menuButton(() => it.style || null, async (st) => { await c.libLoad(true); const x = c.itemById(it.id); if (!x) return; x.style = st || undefined; x.hash = c.hashOf(c.itemTest(x)); x.rev += 1; x.updatedAt = new Date().toISOString(); await c.libSave(); await c.syncPass(x.id); model = null; draw(host); }, say, "btn btn-ghost btn-small") : null;
-      return [it.name || "(untitled)", c.KIND_LABEL[c.kindKey(it.kind)], c.qCount(it), it.kind === "survey" || it.kind === "formative" ? null : it.max, uses.length ? `${uses.length} course quiz${uses.length === 1 ? "" : "zes"}` : "", stale.length ? mk("td", "qts-stale", `Update available (${stale.length})`) : "Up to date",
-        ctl(b("Copy to this course", act(host, () => templateToHere(it)), "Adds a linked copy to this course."),
-          b("Copy to courses…", act(host, () => c.addDialog({ courseId: c.LIB, toolId: "", id: it.id }))),
-          b("Edit", act(host, async () => { await c.openTplEditor({ id: it.id }); return ""; })),
-          stale.length ? b("Update all (re-grade)", act(host, async () => { const m = await c.updateAll(it, uses); return m; })) : null,
-          b("Rename", act(host, async () => { const v = prompt("New name:", it.name); if (v === null || !v.trim()) return ""; await c.libLoad(true); const x = c.itemById(it.id); if (x) { x.name = v.trim(); await c.libSave(); } return "Renamed."; })),
-          style,
-          b("Delete", act(host, async () => { if (!confirm(`Delete the template “${it.name}”?\n\n${uses.length ? `The ${uses.length} course quiz${uses.length === 1 ? "" : "zes"} linked to it keep their questions and students' answers, and become own copies.` : "No course quiz uses it."}`)) return ""; await c.libLoad(true); const l2 = c.getLib(); l2.items = l2.items.filter((x) => x.id !== it.id); await c.libSave(); for (const u of uses) { try { await c.makeOwn(u); } catch (e) {} } return "Template deleted."; })),
-          ex.length ? c.menuButton("Export", () => ex) : null)];
-    })));
+      ctl.appendChild(c.menuButton("More", () => [
+        { label: "Rename…", onClick: act(host, () => rename(it, uses)) },
+        ...(ex.length ? ["-", ...ex.map((x) => ({ ...x, label: `Export: ${x.label}` }))] : []),
+        "-",
+        { label: "Delete…", onClick: act(host, () => remove(it, uses, model)) },
+      ]));
+      tr.appendChild(ctl);
+      body.appendChild(tr);
+    });
+    const w = mk("div", "qts-wrap"); w.appendChild(tb); host.appendChild(w);
   }
 
   CMX.quizLibrary = (host) => { host.classList.add("qts-root"); model = null; draw(host); };
   const css = mk("style");
-  css.textContent = ".cmq-sec { margin:0 0 18px; border:1px solid var(--line); border-radius:10px; padding:8px 12px; background:var(--card); } .cmq-sum { font-family:var(--font-heading); font-size:1.2rem; font-weight:700; cursor:pointer; padding:4px 0; } .cmq-sec[open] > .cmq-sum { margin-bottom:4px; } .cm-sections { margin-bottom:12px; }";
+  css.textContent = `
+.cm-sections { margin-bottom:12px; }
+.cmq-bar .cmq-search { min-width:150px; max-width:220px; padding:4px 8px; }
+.cmq-bar select { padding:3px 6px; }
+.cmq-note:empty { display:none; }
+table.cmq-grid td.cmq-used { white-space:normal; }
+.cmq-chip { display:inline-block; font-size:.78rem; padding:1px 8px; margin:2px 4px 2px 0; border:1px solid var(--line); border-radius:10px; white-space:nowrap; }
+.cmq-chip.cmq-here { border-color:var(--green); font-weight:700; }
+[data-theme="tron-legacy"] .cmq-chip { border-radius:0; border-color:rgba(0,217,255,.35); color:#9fd8e3; font-family:"Share Tech Mono", ui-monospace, monospace; }
+[data-theme="tron-legacy"] .cmq-chip.cmq-here { border-color:var(--tron-cyan); color:#fff; box-shadow:inset 0 0 8px rgba(0,217,255,.35); }
+`;
   document.head.appendChild(css);
 })();

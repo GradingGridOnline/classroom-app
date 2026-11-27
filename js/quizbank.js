@@ -2263,7 +2263,7 @@
     container.appendChild(section);
 
     const hint = body.querySelector("p.hint");
-    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or manage the quizzes, answer collections and surveys of this course (new ones are made in Class Material → Quiz Library). Collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
+    if (hint) hint.textContent = "Upload a CSV or Excel file of scores, or manage the quizzes, answer collections and surveys of this course (new ones are made in Class Material → Quizzes). Collect answers from students' phones by QR code. Everything listed here can be used in Main Scores (Sources) and Progress Tracker columns.";
 
     const create = (kind, label) => () => {
       const count = tests.filter((t) => t.quiz).length + 1;
@@ -2286,9 +2286,9 @@
       } catch (err) { alert(`Couldn't make the quiz: ${err.message}`); return; }
       rerender();
     });
-    // Quizzes are made in Class Material → Quiz Library; this tool only manages them (and feeds Main Scores).
+    // Quizzes are made in Class Material → Quizzes; this tool only manages them (and feeds Main Scores).
     const btns = body.querySelector(".panel-toolbar-buttons");
-    if (btns) btns.appendChild(button("Open Quiz Library", "btn btn-ghost", () => { window.showTab("classmaterial"); if (window.ClassMaterial && ClassMaterial.show) ClassMaterial.show("quiz"); }));
+    if (btns) btns.appendChild(button("Open Quizzes", "btn btn-ghost", () => { window.showTab("classmaterial"); if (window.ClassMaterial && ClassMaterial.show) ClassMaterial.show("quiz"); }));
 
     // status line for the QR buttons
     const statKey = `${tool.id}|bank`;
@@ -2321,7 +2321,7 @@
       maxCell.appendChild(maxText);
 
       const group = h("div", "qz-actions");
-      group.appendChild(button(t.libId ? "Edit Questions" : "Edit this Quiz's Questions", "btn btn-primary btn-small", go("build")));
+      group.appendChild(button("Edit Questions", "btn btn-primary btn-small", go("build")));
       const styleQ = () => (window.QRStyles ? QRStyles.query(quiz.style) : "");
       const newForm = guard(async () => {
         const nm = prompt("Name for this form (for example “Period 2” or “Retake”):", `Form ${quiz.forms.length + 1}`);

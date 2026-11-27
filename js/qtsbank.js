@@ -1,4 +1,7 @@
-// ===== Quiz Library: every quiz's questions and settings live ONCE, in the Library (quizlibrary.json) =====
+// ===== Quizzes: every quiz's questions and settings live ONCE, in the Library (quizlibrary.json) =====
+// Rules (Nov 2026): a quiz exists once and has no per-course versions. Every course quiz is linked to a Library item;
+// an edit made anywhere reaches every course using it, and answers already given are re-graded (a course whose QR code
+// is open waits until it closes). A variation is a separate quiz (Duplicate). The notes below describe the engine.
 // A tab to the right of Journal, and the same grid inside every course's Test & Quiz Bank. A course "uses" a Library item:
 // it keeps its own students' answers, scores, QR code and name, plus a working copy of the questions (libId / libRev /
 // libHash). Editing a used quiz's questions in a course (or "Edit questions…" in the Library) updates the item; courses
@@ -130,7 +133,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     lib.items = Array.isArray(lib.items) ? lib.items : [];
     return lib;
   }
-  async function libSave() { await storage.saveFile(LIB_FILE, { migrated: !!lib.migrated, items: lib.items }); }
+  async function libSave() { await storage.saveFile(LIB_FILE, { migrated: !!lib.migrated, oneQuiz: !!lib.oneQuiz, items: lib.items }); }
   const itemById = (id) => (lib ? lib.items.find((x) => x.id === id) : null) || null;
   /** A test-shaped copy of a Library item (for exports, the editor, and adding to courses). */
   const itemTest = (item) => ({ id: item.id, name: item.name, maxPoints: item.max, sourceFile: "Quiz editor", rows: [], scores: {}, unmatched: [], quiz: { kind: item.kind, settings: clone(item.settings || {}), sections: clone(item.sections || []), style: item.style ? clone(item.style) : undefined, token: null, submissions: [] } });
@@ -372,19 +375,20 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (t.libHash && hashOf(t) !== t.libHash) msg += "\nThis course's own changes to the questions will be replaced. (To keep them, choose “Make my own copy” instead.)";
     return msg;
   }
-  /** Updates courses that have no answers (and no open QR). Others keep showing "Update available". */
+  /** Brings every course quiz up to its Library item's newest questions, re-grading answers already given.
+   *  Only a course whose QR code is open (or whose own edits haven't reached the Library yet) waits. */
   async function syncPass(libId, courseId) {
     await libLoad(true);
     const model = await loadModel({});
-    let updated = 0, waiting = 0;
+    let updated = 0, waiting = 0, regraded = 0;
     for (const r of model.rows) {
       if (!r.d.libId || (libId && r.d.libId !== libId) || (courseId && r.courseId !== courseId)) continue;
       const item = itemById(r.d.libId);
       if (!isStale(r.d, item)) continue;
-      if (r.d.answers > 0 || r.d.qr || r.d.edited) { waiting++; continue; }
-      try { await applyUpdate(r, item); updated++; } catch (e) { waiting++; }
+      if (r.d.qr || r.d.edited) { waiting++; continue; }
+      try { await applyUpdate(r, item); updated++; regraded += r.d.answers || 0; } catch (e) { waiting++; }
     }
-    return { updated, waiting };
+    return { updated, waiting, regraded };
   }
   /** Sends an edited linked quiz's questions to its Library item, then updates the other courses that can be. */
   async function pushToLibrary(ref) {
@@ -395,7 +399,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (!item) return null; // the item was deleted: this is now an own copy
     const h = hashOf(t);
     if (h === t.libHash) return null;
-    if ((Number(t.libRev) || 0) < item.rev) return { msg: `“${t.name}” has changes of its own, but the Library item has a newer version. Update it, or choose “Make my own copy”.` };
+    // The newest edit wins: if the quiz was also changed elsewhere since this course last caught up, this edit replaces it.
     if (h !== item.hash) {
       const c = contentOf(t);
       Object.assign(item, { kind: c.kind, settings: c.settings, sections: c.sections, style: c.style, max: c.max, hash: h, rev: item.rev + 1, updatedAt: nowIso() });
@@ -403,12 +407,16 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     }
     await editCourseTest(ref, (x) => { x.libRev = item.rev; x.libHash = h; });
     const r = await syncPass(item.id);
-    const parts = [];
-    if (r.updated) parts.push(`${r.updated} other ${r.updated === 1 ? "course" : "courses"} updated`);
-    if (r.waiting) parts.push(`${r.waiting} ${r.waiting === 1 ? "has" : "have"} an update waiting`);
-    return { item, msg: `Library: “${item.name}” saved${parts.length ? ` — ${parts.join(", ")}` : ""}.` };
+    return { item, msg: syncWords(item, r) };
   }
-  /** Makes a course quiz independent of the Library (one way: it can't rejoin). */
+  /** "“Quiz” saved — 2 other courses updated (31 students re-graded), 1 waiting for its QR code to close." */
+  function syncWords(item, r) {
+    const parts = [];
+    if (r.updated) parts.push(`${r.updated} other ${r.updated === 1 ? "course" : "courses"} updated${r.regraded ? ` (${r.regraded} student${r.regraded === 1 ? "" : "s"} re-graded)` : ""}`);
+    if (r.waiting) parts.push(`${r.waiting} waiting for ${r.waiting === 1 ? "its" : "their"} QR code to close`);
+    return `“${item.name}” saved${parts.length ? ` — ${parts.join(", ")}` : ""}.`;
+  }
+  /** Makes a course quiz independent of the Library (one way: it can't rejoin). Kept for old data paths; the UI no longer offers it. */
   async function makeOwn(ref) {
     await editCourseTest(ref, (t) => { delete t.libId; delete t.libRev; delete t.libHash; });
     return "That quiz is now its own copy. Library changes no longer reach it.";
@@ -424,6 +432,32 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     lib.items.push(item); await libSave();
     await editCourseTest(ref, (t) => { t.libId = item.id; t.libRev = item.rev; t.libHash = hashOf(t); });
     return item;
+  }
+
+  // ---------- every course quiz belongs to a Library item ----------
+  /** Links each course quiz that has no Library item. A quiz with the same name and the same questions as an
+   *  existing item joins it (copies made the old way); anything else becomes a new item. Answers stay put. */
+  async function adoptOrphans() {
+    await libLoad(true);
+    const model = await loadModel({});
+    const norm = (x) => String(x || "").trim().toLowerCase();
+    let made = 0, joined = 0, dirty = false;
+    for (const r of model.rows) {
+      if (r.d.kind === "test" || (r.d.libId && itemById(r.d.libId))) continue;
+      const full = await fullOf(r);
+      if (!full || !full.quiz) continue;
+      const h = hashOf(full);
+      let item = (r.d.questions || 0) > 0 ? lib.items.find((it) => it.hash === h && norm(it.name) === norm(full.name)) : null;
+      if (item) joined++;
+      else {
+        if (lib.items.length >= MAX_LIB) break;
+        item = newItem(full); lib.items.push(item); made++;
+      }
+      dirty = true;
+      await editCourseTest(r, (t) => { t.libId = item.id; t.libRev = item.rev; t.libHash = hashOf(t); });
+    }
+    if (dirty) await libSave();
+    return { made, joined };
   }
 
   // ---------- one-time move from families and master templates into the Library ----------
@@ -503,6 +537,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   async function libEnsure() {
     await libLoad();
     if (!lib.migrated) await migrate();
+    if (!lib.oneQuiz) { // Nov 2026: every course quiz gets a Library item (once; later orphans are caught by adoptOrphans)
+      lib.oneQuiz = true; await libSave(); // saved first: adoptOrphans reloads the Library and calls loadModel → libEnsure
+      try { await adoptOrphans(); } catch (e) { /* any quiz missed here is picked up when Class Material → Quizzes opens */ }
+    }
     return lib;
   }
 
@@ -960,7 +998,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   const tbanner = mk("div"); tbanner.hidden = true;
   tbanner.style.cssText = "margin:0 0 16px;padding:12px 16px;border:2px solid #c2571a;border-radius:8px;background:color-mix(in srgb, #c2571a 14%, var(--card));";
   const tbText = mk("div"); tbText.style.fontWeight = "700";
-  const tbHint = mk("div", "hint", "You're editing a template (no students here). Saving updates every course quiz linked to it; courses with student answers show “Update available”.");
+  const tbHint = mk("div", "hint", "No students here. Saving puts your changes in every course that uses this quiz and re-grades the answers already given (a course whose QR code is open gets them when it closes).");
   const tbBar = mk("div", "panel-toolbar-buttons"); tbBar.style.marginTop = "10px";
   const tbStatus = mk("p", "result"); tbStatus.style.margin = "8px 0 0";
   const tbBtn = (label, cls, fn) => { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); tbBar.appendChild(b); return b; };
@@ -982,7 +1020,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       if (t.name) item.name = t.name;
       await libSave();
       const r = await syncPass(item.id);
-      tbStatus.textContent = `Saved ✓${r.updated ? ` — ${r.updated} course${r.updated === 1 ? "" : "s"} updated` : ""}${r.waiting ? ` — ${r.waiting} waiting for you to update` : ""}`;
+      tbStatus.textContent = `Saved ✓${r.updated ? ` — ${r.updated} course${r.updated === 1 ? "" : "s"} updated${r.regraded ? ` (${r.regraded} student${r.regraded === 1 ? "" : "s"} re-graded)` : ""}` : ""}${r.waiting ? ` — ${r.waiting} waiting for ${r.waiting === 1 ? "its" : "their"} QR code to close` : ""}`;
       return true;
     } catch (e) { tbStatus.textContent = `Couldn't save: ${e.message}`; return false; }
   }
@@ -998,8 +1036,8 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     ["roster", "seating", "attendance", "scoring", "reportcard"].forEach((p) => { try { Promise.resolve(storage.deleteFile(`${p}-${cid}.json`)).catch(() => {}); } catch (e) {} });
     invalidate();
   }
-  tbBtn("Save template", "btn btn-primary btn-small", () => saveTpl());
-  tbBtn("Save & back to Quiz Library", "btn btn-ghost btn-small", () => closeTpl(true));
+  tbBtn("Save", "btn btn-primary btn-small", () => saveTpl());
+  tbBtn("Save & back to Quizzes", "btn btn-ghost btn-small", () => closeTpl(true));
   tbBtn("Close without saving", "btn btn-ghost btn-small", () => { if (confirm("Close without saving? Changes since your last save will be lost.")) closeTpl(false); });
   if (typeof el !== "undefined" && el.backToCoursesBtn) el.backToCoursesBtn.addEventListener("click", (e) => { if (!tedit) return; e.stopImmediatePropagation(); closeTpl(true); }, true);
   async function openTplEditor(row) {
@@ -1012,12 +1050,12 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     const test = clone(item); test.quiz = { ...clone(item.quiz), token: null, submissions: [] };
     await storage.saveFile(`roster-${cid}.json`, { students: [] });
     await storage.saveFile(`scoring-${cid}.json`, { categories: [], records: {}, weights: {}, presentationMigrated: true, tools: [{ id: toolId, type: "testbank", name: "Test & Quiz Bank", config: { tests: [test] } }] });
-    const course = { id: cid, name: `Library: ${item.name}`, periodId: null, archived: false, templateId: null, editingTemplateId: "qts" };
+    const course = { id: cid, name: `Quiz: ${item.name}`, periodId: null, archived: false, templateId: null, editingTemplateId: "qts" };
     CoursesModule.courses.push(course);
     const back = ScoringModule.currentCourseId && !isTmp(ScoringModule.currentCourseId) ? ScoringModule.currentCourseId : null;
     tedit = { cid, id: item.id, back };
     await openCourseDetail(course);
-    tbText.textContent = `Editing template “${item.name}”`; tbStatus.textContent = ""; tbanner.hidden = false;
+    tbText.textContent = `Editing quiz “${item.name}”`; tbStatus.textContent = ""; tbanner.hidden = false;
     el.tabRosterBtn.style.display = "none";
     window.QuizBankUI.open(toolId, item.id);
     showTab("scoring");
@@ -1055,14 +1093,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     statusButtons(courseId, toolId, t, say, rerender) {
       if (!t.libId || !t.quiz) return [];
       const item = itemById(t.libId);
-      if (!item) return [];
-      const stale = (Number(t.libRev) || 0) < item.rev;
-      const ref = { courseId, toolId, id: t.id, courseName: "", d: describe(t) };
-      const out = [mk("span", `qts-badge${stale ? " qts-stale" : ""}`, stale ? "Update available" : "Library: up to date")];
-      const btn = (label, fn) => { const b = mk("button", "btn btn-ghost btn-small", label); b.type = "button"; b.addEventListener("click", async () => { try { const m = await fn(); if (m) { say(m); rerender(); } } catch (e) { say(`Couldn't do that: ${e.message}`); } }); return b; };
-      if (stale) out.push(btn("Update (re-grade)", () => updateOne(ref)));
-      out.push(btn("Unlink", async () => (confirm(`Unlink “${t.name}” from its template? Template changes will no longer reach it. (You can link it again in Class Material → Quiz Library.)`) ? makeOwn(ref) : "")));
-      return out;
+      if (!item || (Number(t.libRev) || 0) >= item.rev) return [];
+      const b = mk("span", "qts-badge qts-stale", t.quiz.token ? "Changes waiting — close the QR code to apply them" : "Updating…");
+      b.title = "This quiz was changed in another course or in Class Material → Quizzes.";
+      return [b];
     },
     /** A line for the quiz editor: which Library item this is and how many courses use it. */
     usedInNote(test) {
@@ -1071,16 +1105,17 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       loadModel({}).then((m) => {
         const item = itemById(test.libId);
         if (!item) { p.remove(); return; }
-        const n = new Set(m.rows.filter((r) => r.d.libId === item.id).map((r) => r.courseId)).size;
-        p.textContent = `Library item “${item.name}” · used in ${courseWord(n)}. Changes to the questions here go to all of them (a course with student answers shows “Update available”).`;
+        const uses = m.rows.filter((r) => r.d.libId === item.id);
+        const n = new Set(uses.map((r) => r.courseId)).size, ans = uses.reduce((a, r) => a + (r.d.answers || 0), 0);
+        p.textContent = `Used in ${courseWord(n)}${ans ? ` · ${ans} student${ans === 1 ? "" : "s"} answered` : ""}. Changes here go to every course that uses this quiz${ans ? ", and answers already given are re-graded" : ""}.`;
       }).catch(() => p.remove());
       return p;
     },
     buildSection(tool, container) {
-      const { section, body } = makePresSection("Quiz Library");
+      const { section, body } = makePresSection("Quizzes");
       section.classList.add("qz-sec-shared");
-      body.appendChild(mk("p", "hint", "The Quiz Library has moved to the Class Material tab: this course's quizzes, all quizzes, and templates."));
-      const go = mk("button", "btn btn-ghost", "Open Quiz Library"); go.type = "button";
+      body.appendChild(mk("p", "hint", "Quizzes are made and shared between courses in Class Material → Quizzes. Each quiz exists once; editing it changes it in every course that uses it."));
+      const go = mk("button", "btn btn-ghost", "Open Quizzes"); go.type = "button";
       go.addEventListener("click", () => { window.showTab("classmaterial"); if (window.ClassMaterial && ClassMaterial.show) ClassMaterial.show("quiz"); });
       body.appendChild(go);
       const cid = ScoringModule.currentCourseId;
@@ -1091,6 +1126,6 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       }
       return section;
     },
-    core: { addDialog, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, updateOne, updateAll, makeOwn, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, useStatus, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
+    core: { adoptOrphans, syncWords, addDialog, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, updateOne, updateAll, makeOwn, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, useStatus, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
   };
 })();
