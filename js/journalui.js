@@ -247,6 +247,15 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad-new:hover { background:#7ff0ff; } [data-theme="tron-legacy"] #journal-panel .jr-pad-back:hover { background:rgba(0,217,255,.25); color:#fff; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-dethead .jr-pad-dlabel { flex:1; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-rows { flex:1; min-height:0; overflow:auto; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-cat { position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px; width:100%; padding:6px 14px; border:0; border-bottom:1px solid rgba(0,217,255,.35); cursor:pointer;
+  background:linear-gradient(90deg, rgba(0,217,255,.16), rgba(0,217,255,.03)), #071319; color:#7fe9ff; font-family:var(--font-heading); font-size:.6rem; letter-spacing:.24em; text-transform:uppercase; text-align:left; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-cat:hover { color:#fff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-cat-name { flex:1; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-cat-count { font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.78rem; letter-spacing:.06em; color:#e8fdff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-row + .jr-pad-cat, [data-theme="tron-legacy"] #journal-panel .jr-pad-empty + .jr-pad-cat { margin-top:10px; border-top:1px solid rgba(0,217,255,.35); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-cat-pinned { box-shadow:inset 3px 0 0 var(--marker,#ff7a1a); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-cat-pinned .jr-pad-cat-name::before { content:"📌 "; letter-spacing:0; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad-empty { padding:12px 14px; font-size:.8rem; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row { display:grid; gap:3px; width:100%; text-align:left; padding:9px 14px 10px; background:transparent; border:0; border-bottom:1px solid rgba(0,217,255,.12); color:#bff3ff; cursor:pointer; font:inherit; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row:hover:not(:disabled) { background:rgba(0,217,255,.07); }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-row.on { background:linear-gradient(90deg, rgba(0,217,255,.22), rgba(0,217,255,.04)); box-shadow:inset 3px 0 0 #00d9ff; }
@@ -475,7 +484,7 @@
     return f;
   }
 
-  const pinPill = (e, fn) => { const b = mk("button", `jr-pinpill${e.pinned ? " on" : ""}`, e.pinned ? "Pinned ✓ (click to unpin)" : "Pin to margin"); b.type = "button"; b.setAttribute("aria-pressed", String(!!e.pinned)); b.addEventListener("click", fn); return b; };
+  const pinPill = (e, fn) => { const b = mk("button", `jr-pinpill${e.pinned ? " on" : ""}`, e.pinned ? (isPad() ? "Unpin" : "Pinned ✓ (click to unpin)") : (isPad() ? "Pin" : "Pin to margin")); b.type = "button"; b.setAttribute("aria-pressed", String(!!e.pinned)); b.addEventListener("click", fn); return b; };
   const delMsg = (e) => ((e.sharedWith || []).length ? `Delete this entry here and in: ${e.sharedWith.map(courseName).join(", ")}?` : "Delete this entry?");
   function entryCard(e) {
     if (editingId === e.id) return buildForm(e);
@@ -675,18 +684,22 @@
 
   /** Tron: Legacy — one screen: an index of entries on the left and the open entry on the right.
    *  Full view (or a new entry / editing) uses the whole screen; "◂ Index" brings the list back. */
-  function buildPad(sorted) {
+  const padCatsShut = (() => { try { return new Set(JSON.parse(localStorage.getItem("ggo-journal-pad-shut")) || []); } catch (e) { return new Set(); } })();
+  function buildPad(sorted, pinned) {
+    pinned = pinned || [];
     const wrap = mk("div", "jr-bookwrap jr-pad");
-    if (focusId && sorted.some((e) => e.id === focusId)) padSel = focusId;
+    const known = (id) => sorted.some((e) => e.id === id) || pinned.some((e) => e.id === id);
+    if (focusId && known(focusId)) padSel = focusId;
     focusId = null;
-    if (!sorted.some((e) => e.id === padSel)) { padSel = sorted.length ? (sortKey === "date-asc" ? sorted[sorted.length - 1] : sorted[0]).id : null; padFull = false; }
-    const open = sorted.find((e) => e.id === padSel) || null;
+    if (!known(padSel)) { padSel = sorted.length ? (sortKey === "date-asc" ? sorted[sorted.length - 1] : sorted[0]).id : pinned.length ? pinned[0].id : null; padFull = false; }
+    const open = sorted.find((e) => e.id === padSel) || pinned.find((e) => e.id === padSel) || null;
+    const openPinned = !!(open && open.pinned);
     const writing = creating || (editingId && open && editingId === open.id);
     const full = padFull || writing;
     const mode = displayMode;
 
     const head = mk("div", "jr-stage-head");
-    head.append(mk("span", "", "Data pad · Teaching log"), mk("span", "", `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`));
+    head.append(mk("span", "", "Data pad · Teaching log"), mk("span", "", `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}${pinned.length ? ` · ${pinned.length} pinned` : ""}`));
     const screen = mk("div", `jr-pad-screen${full ? " jr-pad-full" : ""}`);
 
     // the index
@@ -694,28 +707,45 @@
     const lh = mk("div", "jr-pad-listhead");
     lh.append(mk("span", "", "Index"), btn("+ New", "jr-pad-new", startNew));
     const rows = mk("div", "jr-pad-rows");
-    if (!sorted.length) rows.appendChild(mk("div", "jr-blank", viewActive() ? "No entries match the filters." : "This journal is empty."));
-    sorted.forEach((e, i) => {
+    const row = (e, num) => {
       const r = mk("button", `jr-pad-row jr-pad-${mode}${e.id === padSel ? " on" : ""}${e.mode === "list" && e.done ? " jr-isdone" : ""}`);
       r.type = "button"; r.setAttribute("aria-pressed", String(e.id === padSel));
       const top = mk("span", "jr-pad-rowtop");
-      top.append(mk("span", "jr-pad-n", String(i + 1).padStart(2, "0")), mk("span", "jr-pad-d", e.date));
+      top.append(mk("span", "jr-pad-n", num), mk("span", "jr-pad-d", e.date));
       if (e.mode === "list") top.appendChild(mk("span", "jr-pad-task", e.done ? "✔ done" : "○ to do"));
-      if (e.pinned) top.appendChild(mk("span", "jr-pad-task", "📌"));
       r.append(top, mk("span", "jr-pad-t", e.subject || "(no subject)"));
       if (mode === "full" && e.text) r.appendChild(mk("span", "jr-pad-s", e.text));
       if (mode !== "compact" && e.tags.length) { const t = mk("span", "jr-pad-tags"); e.tags.forEach((x) => t.appendChild(mk("span", "jr-chip static", x))); r.appendChild(t); }
       r.addEventListener("click", () => { if (creating || editingId) return; padSel = e.id; padFull = false; render(); });
       r.disabled = !!(creating || editingId);
-      rows.appendChild(r);
-    });
+      return r;
+    };
+    /** A category in the index: a heading bar (click to fold) and its rows. */
+    const category = (key, label, items, numOf, empty) => {
+      const shut = padCatsShut.has(key) && !items.some((e) => e.id === padSel);
+      const h = mk("button", `jr-pad-cat jr-pad-cat-${key}${shut ? " shut" : ""}`); h.type = "button";
+      h.append(mk("span", "jr-pad-cat-arrow", shut ? "▸" : "▾"), mk("span", "jr-pad-cat-name", label), mk("span", "jr-pad-cat-count", String(items.length).padStart(2, "0")));
+      h.setAttribute("aria-expanded", String(!shut));
+      h.addEventListener("click", () => {
+        if (padCatsShut.has(key)) padCatsShut.delete(key); else padCatsShut.add(key);
+        try { localStorage.setItem("ggo-journal-pad-shut", JSON.stringify([...padCatsShut])); } catch (e) {}
+        render();
+      });
+      rows.appendChild(h);
+      if (shut) return;
+      if (!items.length && empty) rows.appendChild(mk("div", "jr-blank jr-pad-empty", empty));
+      items.forEach((e, i) => rows.appendChild(row(e, numOf(i))));
+    };
+    if (pinned.length) category("pinned", "Pinned", pinned, (i) => `P${i + 1}`);
+    category("log", pinned.length ? "Log" : "All entries", sorted, (i) => String(i + 1).padStart(2, "0"), viewActive() ? "No entries match the filters." : "This journal is empty.");
     list.append(lh, rows);
 
     // the open entry
     const det = mk("div", "jr-pad-detail");
     const dh = mk("div", "jr-pad-dethead");
     if (full && !writing) dh.appendChild(btn("◂ Index", "jr-pad-back", () => { padFull = false; render(); }));
-    dh.appendChild(mk("span", "jr-pad-dlabel", creating ? "New entry" : editingId ? "Editing" : open ? `Entry ${String(sorted.indexOf(open) + 1).padStart(2, "0")} / ${String(sorted.length).padStart(2, "0")}` : "Data log"));
+    const where = open ? (openPinned ? `Pinned · P${pinned.indexOf(open) + 1}` : `Entry ${String(sorted.indexOf(open) + 1).padStart(2, "0")} / ${String(sorted.length).padStart(2, "0")}`) : "Data log";
+    dh.appendChild(mk("span", "jr-pad-dlabel", creating ? "New entry" : editingId ? "Editing" : where));
     if (!full && open) dh.appendChild(btn("Expand ▸", "jr-pad-back", () => { padFull = true; render(); }));
     det.appendChild(dh);
     const body = mk("div", "jr-pad-detbody");
@@ -731,7 +761,7 @@
 
     const foot = mk("div", "jr-stage-foot");
     const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
-    foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}` : `${sorted.length} entries`));
+    foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? (openPinned ? `Pinned ${pinned.indexOf(open) + 1} of ${pinned.length}` : `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}`) : `${sorted.length} entries`));
     wrap.append(head, screen, foot);
     leadId = open ? open.id : null;
     return wrap;
@@ -942,10 +972,10 @@
 
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     const sorted = visibleEntries();
-    panel.appendChild(isPad() ? buildPad(sorted) : buildBook(sorted)); // the journal is always on the desk, even with no entries
+    panel.appendChild(isPad() ? buildPad(sorted, pinned) : buildBook(sorted)); // the journal is always on the desk, even with no entries
     panel.appendChild(sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length));
     if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
-    if (pinned.length) {
+    if (pinned.length && !isPad()) { // the data pad lists pinned entries as their own category in its index
       const m = mk("div", "jr-margin");
       let shut = false; try { shut = localStorage.getItem("ggo-journal-margin-shut") === "1"; } catch (e) {}
       const mt = mk("div", "jr-margin-title"); mt.tabIndex = 0; mt.setAttribute("role", "button");
