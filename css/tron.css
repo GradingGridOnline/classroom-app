@@ -4,7 +4,7 @@
      that traces in from the center, and a light pulse that runs along the
      band's edge about every 25 seconds.
    - Section header bars: dark glass with a bright cyan edge instead of a
-     solid fill.
+     solid fill; a light streak crosses them once, when the page loads.
    - Drop-down menus: black glass with a glowing cyan frame and orange corner
      brackets; they "rez in" top-to-bottom and their items arrive one by one.
    - Buttons: a light streak sweeps across on hover.
@@ -122,6 +122,26 @@
   box-shadow: 0 0 12px rgba(0, 217, 255, 0.16), inset 0 0 18px rgba(0, 217, 255, 0.06);
   color: #e8fdff;
   animation: tron-sweep 1.4s ease-out 0.15s both;
+}
+/* The sweep plays only when the page first loads: a script in index.html adds
+   .tron-settled to <html> a few seconds later, which turns it off for headers
+   that appear afterwards (switching tabs, opening sections). */
+[data-theme="tron-legacy"].tron-settled :is(
+  .attendance-settings-header,
+  #course-section .section-header:not(:has(#course-detail-title)),
+  #course-section summary > .section-header,
+  .unseated-panel > h3,
+  .banks-section > h3,
+  .group-list-section > h3,
+  #mapping-panel > h3,
+  #settings-section .settings-block > h3,
+  #printcard-view > .attendance-settings-block > h4,
+  #reportcard-email-section > h4,
+  #journal-panel .settings-section > h3,
+  .pres-section > .pres-section-head,
+  .qts-sec-head
+) {
+  animation: none;
 }
 [data-theme="tron-legacy"] :is(
   .attendance-settings-header h3,
