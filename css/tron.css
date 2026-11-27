@@ -2,7 +2,7 @@
    Extra layer for the Tron: Legacy theme only, loaded after motion.css.
    - Main tabs: dark light-panel band, uppercase labels, a glowing underline
      that traces in from the center, and a light pulse that runs along the
-     band's edge every few seconds.
+     band's edge about every 25 seconds.
    - Section header bars: dark glass with a bright cyan edge instead of a
      solid fill.
    - Drop-down menus: black glass with a glowing cyan frame and orange corner
@@ -42,7 +42,7 @@
   border-bottom: 2px solid var(--tron-cyan);
   box-shadow: 0 2px 14px rgba(0, 217, 255, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
   flex-wrap: wrap;
-  animation: tron-pulse-run 7s linear 1.2s infinite;
+  animation: tron-pulse-run 25s linear 1.2s infinite;
 }
 [data-theme="tron-legacy"] .main-tab-row .tab-btn {
   position: relative;
@@ -249,7 +249,7 @@
 }
 @keyframes tron-pulse-run {
   0% { background-position: -20% 100%, 0 0; }
-  45%, 100% { background-position: 120% 100%, 0 0; }
+  13%, 100% { background-position: 120% 100%, 0 0; }
 }
 @keyframes tron-sweep {
   from { background-position: -150% 0, 0 0, 0 0; }
