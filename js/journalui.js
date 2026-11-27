@@ -292,6 +292,17 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-grid { padding:12px 14px 6px; gap:10px 16px; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-grid label { font-family:var(--font-heading); font-size:.54rem; letter-spacing:.2em; text-transform:uppercase; color:#7fb0bc; gap:5px; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl :is(input, select) { border-radius:0; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body { max-height:380px; overflow:auto; padding:12px 14px 14px; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body h4 { margin:12px 0 6px; font-family:var(--font-heading); font-size:.58rem; font-weight:400; letter-spacing:.24em; text-transform:uppercase; color:#4fe0ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .hint { color:#9fd8e3; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.8rem; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .jr-bar { font-family:"Share Tech Mono",ui-monospace,monospace; color:#bff3ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .jr-bar i { background:linear-gradient(90deg, #00d9ff, rgba(0,217,255,.45)); border-radius:0; height:8px; box-shadow:0 0 8px rgba(0,217,255,.5); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl-body .btn { border-radius:0; text-transform:uppercase; letter-spacing:.08em; font-size:.68rem; clip-path:polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+[data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bars { display:inline-flex; gap:6px; }
+[data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bar { display:inline-flex; flex-direction:column; align-items:center; gap:3px; padding:2px 2px 0; background:none; border:0; cursor:pointer; color:#4f8f9c; font-family:var(--font-heading); font-size:.5rem; letter-spacing:.22em; text-transform:uppercase; }
+[data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bar i { display:block; width:46px; height:6px; margin:0; background:rgba(0,217,255,.25); border:0; border-radius:0; box-shadow:none; transition:background .2s, box-shadow .2s; }
+[data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bar:hover { color:#bff3ff; } [data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bar:hover i { background:rgba(0,217,255,.55); }
+[data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bar.on { color:#e8fdff; } [data-theme="tron-legacy"] #journal-panel .jr-stage-foot .jr-sf-bars .jr-pad-bar.on i { background:#00d9ff; box-shadow:0 0 10px #00d9ff; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-tags { margin:0; padding:6px 14px 12px; border-top:1px dashed rgba(0,217,255,.2); }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl .jr-sf-tags > span:first-child { font-family:var(--font-heading); font-size:.54rem; letter-spacing:.2em; text-transform:uppercase; color:#7fb0bc; margin-right:4px; }
 @media (max-width:760px) { [data-theme="tron-legacy"] #journal-panel .jr-pad-screen { grid-template-columns:1fr; height:auto; } [data-theme="tron-legacy"] #journal-panel .jr-pad-list { max-height:260px; border-right:0; border-bottom:1px solid rgba(0,217,255,.3); } [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody { min-height:360px; } }
@@ -703,6 +714,29 @@
   /** Tron: Legacy — one screen: an index of entries on the left and the open entry on the right.
    *  Full view (or a new entry / editing) uses the whole screen; "◂ Index" brings the list back. */
   const padCatsShut = (() => { try { return new Set(JSON.parse(localStorage.getItem("ggo-journal-pad-shut")) || []); } catch (e) { return new Set(); } })();
+  let padCtl = (() => { try { const v = localStorage.getItem("ggo-journal-pad-ctl"); return ["filter", "stats", "export"].includes(v) ? v : "filter"; } catch (e) { return "filter"; } })();
+  /** The control screen under the main screen: Sort & filter, Stats or Export (picked with the three bars). */
+  function padControls(sorted, pinned, filterBar) {
+    if (padCtl === "filter") { filterBar.classList.add("jr-pad-ctl"); return filterBar; }
+    const box = mk("div", "jr-sf jr-pad-ctl");
+    const top = mk("div", "jr-sf-top");
+    top.appendChild(mk("b", "", padCtl === "stats" ? "Stats · Entry counts & timeline" : "Export"));
+    box.appendChild(top);
+    const body = mk("div", "jr-pad-ctl-body");
+    if (padCtl === "stats") body.appendChild(countsBody());
+    else {
+      const all = J.entries.slice().sort(cmpDate);
+      top.appendChild(mk("span", "hint", `${all.length} entr${all.length === 1 ? "y" : "ies"}`));
+      body.appendChild(mk("p", "hint", "Download entries as a CSV file for Excel: date, subject, students, tags, the entry, and the attendance / score snapshot."));
+      const row = mk("div", "jr-row");
+      row.appendChild(btn(`Export CSV — showing now (${sorted.length})`, "btn btn-ghost btn-small", () => downloadCsv(sorted, `journal-${today()}.csv`))).title = "The Log entries the index is showing, with the current sort and filters";
+      if (pinned.length) row.appendChild(btn(`Export CSV — pinned (${pinned.length})`, "btn btn-ghost btn-small", () => downloadCsv(pinned, `journal-pinned-${today()}.csv`)));
+      row.appendChild(btn(`Export CSV — all entries (${all.length})`, "btn btn-ghost btn-small", () => downloadCsv(all, `journal-all-${today()}.csv`)));
+      body.appendChild(row);
+    }
+    box.appendChild(body);
+    return box;
+  }
   function buildPad(sorted, pinned, controls) {
     pinned = pinned || [];
     const wrap = mk("div", "jr-bookwrap jr-pad");
@@ -785,7 +819,15 @@
     screen.append(list, det);
 
     const foot = mk("div", "jr-stage-foot");
-    const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
+    // the three bars pick what the control screen shows
+    const bars = mk("span", "jr-sf-bars jr-pad-bars"); bars.setAttribute("role", "tablist"); bars.setAttribute("aria-label", "Control screen");
+    [["filter", "Control"], ["stats", "Stats"], ["export", "Export"]].forEach(([k, label]) => {
+      const b = mk("button", `jr-pad-bar${padCtl === k ? " on" : ""}`); b.type = "button";
+      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(padCtl === k)); b.title = { filter: "Control: sort & filter", stats: "Stats: entry counts & timeline", export: "Export: CSV files" }[k];
+      b.append(mk("i"), mk("span", "", label));
+      b.addEventListener("click", () => { padCtl = k; try { localStorage.setItem("ggo-journal-pad-ctl", k); } catch (e) {} render(); });
+      bars.appendChild(b);
+    });
     foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? (openPinned ? `Pinned ${pinned.indexOf(open) + 1} of ${pinned.length}` : `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}`) : `${sorted.length} entries`));
     // the control screen under the main screen: sort & filter, as part of the pad
     if (controls) { controls.classList.add("jr-pad-ctl"); wrap.append(head, screen, controls, foot); }
@@ -868,7 +910,12 @@
   };
 
   function countsSection() {
-    const s = section("counts", "Entry Counts & Timeline"); const body = mk("div"); s.appendChild(body);
+    const s = section("counts", "Entry Counts & Timeline"); s.appendChild(countsBody());
+    return s;
+  }
+  /** Entry counts, the timeline, by tag and by student (the Stats screen on the data pad; a section elsewhere). */
+  function countsBody() {
+    const body = mk("div");
     const E = J.entries;
     const days = new Set(E.map((e) => e.date)).size;
     const mentioned = new Set(E.flatMap((e) => e.students)).size;
@@ -899,7 +946,11 @@
     const per = students().map((st) => [sName(st.id), E.filter((e) => e.students.includes(st.id)).length]).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0], undefined, { numeric: true }));
     body.appendChild(mk("h4", "", "By student (fewest entries first)"));
     body.appendChild(bars(per));
-    return s;
+    return body;
+  }
+  function downloadCsv(list, name) {
+    const a = mk("a"); a.href = URL.createObjectURL(new Blob([csvText(exportRows(list))], { type: "text/csv;charset=utf-8" }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
   }
 
   function csvText(rows) {
@@ -1000,7 +1051,7 @@
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     const sorted = visibleEntries();
     const sf = sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length);
-    if (isPad()) panel.appendChild(buildPad(sorted, pinned, sf)); // the data pad carries sort & filter on its own control screen
+    if (isPad()) panel.appendChild(buildPad(sorted, pinned, padControls(sorted, pinned, sf))); // the data pad carries sort & filter on its own control screen
     else { panel.appendChild(buildBook(sorted)); panel.appendChild(sf); } // the journal is always on the desk, even with no entries
     if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
     if (pinned.length && !isPad()) { // the data pad lists pinned entries as their own category in its index
@@ -1026,7 +1077,8 @@
       panel.appendChild(m);
     }
 
-    [["journal-counts", countsSection()], ["journal-search", searchSection()], ["journal-settings", settingsSection()]].forEach(([id, sec]) => {
+    // On the data pad, Stats and Export live on its control screen, so only Settings sits below it.
+    (isPad() ? [["journal-settings", settingsSection()]] : [["journal-counts", countsSection()], ["journal-search", searchSection()], ["journal-settings", settingsSection()]]).forEach(([id, sec]) => {
       panel.appendChild(sec);
       if (window.GGOSections) window.GGOSections.add(id, `#${sec.id}`);
     });
