@@ -598,6 +598,8 @@ table.source-grid.source-grid-over {
 .scoring-tab-row .scoring-main-row,
 .scoring-tab-row .scoring-tool-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; }
 .scoring-tab-row .scoring-tool-tabs[hidden] { display: none; }
+.scoring-tab-row .scoring-save { display: flex; align-items: center; gap: 12px; margin: 0 0 8px auto; align-self: center; }
+.scoring-tab-row .scoring-save .result { margin: 0; }
 .scoring-tab-row .scoring-tool-tabs::before {
   content: "";
   align-self: center;

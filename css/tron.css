@@ -130,6 +130,29 @@
   width: 1px;
 }
 
+[data-theme="tron-legacy"] .scoring-tab-row .scoring-save { filter: drop-shadow(0 0 8px rgba(0, 217, 255, 0.5)); }
+[data-theme="tron-legacy"] .scoring-tab-row .scoring-save .result {
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+[data-theme="tron-legacy"] .scoring-tab-row .scoring-save .btn {
+  min-height: 36px;
+  padding: 8px 20px;
+  white-space: nowrap;
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #001218;
+  background-color: var(--tron-cyan);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+[data-theme="tron-legacy"] .scoring-tab-row .scoring-save .btn:not(:disabled):hover { background-color: #7ff0ff; color: #001218; box-shadow: none; }
+
 /* ----- Section header bars: dark glass with a lit edge ----- */
 [data-theme="tron-legacy"] :is(
   .attendance-settings-header,

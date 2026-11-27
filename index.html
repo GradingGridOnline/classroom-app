@@ -353,10 +353,8 @@
             <span class="scoring-tool-tabs" id="scoring-mode-row" hidden>
               <!-- scoring tool tabs (Progress Tracker, Presentation Calc, ...) get added here by app.js -->
             </span>
-          </div>
-
-          <div class="panel-toolbar pad-toolbar">
-            <div class="pad-save">
+            <!-- Save Scoring saves every tab, so it lives at the end of the tab row rather than in a box of its own -->
+            <div class="pad-save scoring-save">
               <span id="scoring-status" class="result"></span>
               <button id="save-scoring-btn" class="btn btn-primary">Save Scoring</button>
             </div>
