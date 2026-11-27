@@ -279,6 +279,19 @@
 [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody .jr-leafform .jr-ed [contenteditable] { flex:1; min-height:0 !important; overflow:auto; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad-detbody > .jr-newslot { margin:auto; }
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-stage-foot { margin-top:10px; }
+/* the command strip above the main screen (entry count, + New Entry, Show entries) */
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmd { position:relative; margin:0 0 12px; border:1px solid rgba(0,217,255,.4); color:#c9f6ff;
+  background:repeating-linear-gradient(to bottom, rgba(0,217,255,.03) 0 1px, transparent 1px 3px), #061017;
+  box-shadow:0 0 14px rgba(0,217,255,.12), inset 0 0 26px rgba(0,217,255,.05); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmd::after { content:""; position:absolute; left:50%; bottom:-13px; width:120px; margin-left:-60px; height:12px; pointer-events:none;
+  background:linear-gradient(90deg, transparent 0 8px, rgba(0,217,255,.55) 8px 10px, transparent 10px calc(100% - 10px), rgba(0,217,255,.55) calc(100% - 10px) calc(100% - 8px), transparent 0); }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmdhead { display:flex; align-items:center; gap:12px; height:28px; padding:0 14px; border-bottom:1px solid rgba(0,217,255,.28);
+  font-family:var(--font-heading); font-size:.58rem; letter-spacing:.26em; text-transform:uppercase; color:#4fe0ff; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmdhead > span:first-child { flex:1; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmdhead .result { margin:0; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.74rem; letter-spacing:.06em; text-transform:none; }
+/* the toolbar inside it keeps its readout, groups and buttons but loses its own frame */
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmd .pad-toolbar { margin:0; padding:12px 14px 10px; border:0; background:none; box-shadow:none; }
+[data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmd .pad-toolbar::before, [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-cmd .pad-toolbar::after { content:none; }
 /* the control screen under the main screen (sort & filter) */
 [data-theme="tron-legacy"] #journal-panel .jr-pad .jr-pad-ctl { position:relative; margin:12px 0 0; padding:0; border:1px solid rgba(0,217,255,.4); border-radius:0; color:#c9f6ff;
   background:repeating-linear-gradient(to bottom, rgba(0,217,255,.03) 0 1px, transparent 1px 3px), #061017;
@@ -739,7 +752,7 @@
     box.appendChild(body);
     return box;
   }
-  function buildPad(sorted, pinned, controls) {
+  function buildPad(sorted, pinned, controls, command) {
     pinned = pinned || [];
     const wrap = mk("div", "jr-bookwrap jr-pad");
     const known = (id) => sorted.some((e) => e.id === id) || pinned.some((e) => e.id === id);
@@ -832,8 +845,11 @@
     });
     foot.append(mk("span", "", "Link"), bars, mk("span", "", open ? (openPinned ? `Pinned ${pinned.indexOf(open) + 1} of ${pinned.length}` : `Entry ${sorted.indexOf(open) + 1} of ${sorted.length}`) : `${sorted.length} entries`));
     // the control screen under the main screen: sort & filter, as part of the pad
-    if (controls) { controls.classList.add("jr-pad-ctl"); wrap.append(head, screen, controls, foot); }
-    else wrap.append(head, screen, foot);
+    wrap.append(head);
+    if (command) wrap.append(command);
+    wrap.append(screen);
+    if (controls) { controls.classList.add("jr-pad-ctl"); wrap.append(controls); }
+    wrap.append(foot);
     leadId = open ? open.id : null;
     return wrap;
   }
@@ -1049,16 +1065,30 @@
     showGroup.appendChild(seg);
     left.appendChild(showGroup);
     bar.appendChild(left);
-    const right = mk("div", "pad-save"); right.appendChild(status);
-    right.appendChild(btn("Save Journal", "btn btn-primary", async () => {
+    const saveJournal = async () => {
       try { status.textContent = "Saving…"; if (openForm && openForm.submit(true)) render(); await J.save(); status.textContent = "Saved ✓"; } catch (e) { status.textContent = `Couldn't save: ${e.message}`; }
-    }));
-    bar.appendChild(right); panel.appendChild(bar);
+    };
+    const autosaving = !!(window.GGOAutosave && GGOAutosave.enabled());
+    if (!isPad()) {
+      const right = mk("div", "pad-save"); right.appendChild(status);
+      right.appendChild(btn("Save Journal", "btn btn-primary", saveJournal));
+      bar.appendChild(right); panel.appendChild(bar);
+    } else if (!autosaving) {
+      // the data pad has no Save button while autosave is on; with autosave off it keeps a small one so entries can still be stored
+      const right = mk("div", "pad-save");
+      right.appendChild(btn("Save", "btn btn-primary btn-small", saveJournal)).title = "Autosave is off: save the journal";
+      bar.appendChild(right);
+    }
 
     const pinned = J.entries.filter((e) => e.pinned).sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || "").localeCompare(b.createdAt || ""));
     const sorted = visibleEntries();
     const sf = sortFilterBar(sorted.length, J.entries.filter((e) => !e.pinned).length);
-    if (isPad()) panel.appendChild(buildPad(sorted, pinned, padControls(sorted, pinned, sf))); // the data pad carries sort & filter on its own control screen
+    if (isPad()) { // the data pad carries its commands on a strip at the top and sort & filter / stats / settings at the bottom
+      const cmd = mk("div", "jr-pad-cmd");
+      const strip = mk("div", "jr-pad-cmdhead"); strip.append(mk("span", "", "Command"), status);
+      cmd.append(strip, bar);
+      panel.appendChild(buildPad(sorted, pinned, padControls(sorted, pinned, sf), cmd));
+    }
     else { panel.appendChild(buildBook(sorted)); panel.appendChild(sf); } // the journal is always on the desk, even with no entries
     if (refocus) { const f = document.getElementById(refocus); refocus = null; if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } }
     if (pinned.length && !isPad()) { // the data pad lists pinned entries as their own category in its index
