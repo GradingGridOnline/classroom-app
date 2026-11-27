@@ -7366,7 +7366,7 @@ function renderConsultationDetail() {
     itemList.className = "consultation-item-list";
     category.items.forEach((item) => {
       const li = document.createElement("li");
-      const scoreText = item.record === "" ? "—" : item.record === "E" ? "Exempt" : `${item.record}/${item.maxPoints}`;
+      const scoreText = ReportCardModule.itemScoreText(item);
       li.textContent = `${item.name}: ${scoreText}`;
       itemList.appendChild(li);
     });
@@ -7562,7 +7562,7 @@ function buildReportCardSheet(studentId) {
         `${category.name} — ${category.subtotal.percent === null ? "—" : `${category.subtotal.percent}%`}`,
         selectedItems.map((item) => [
           item.name,
-          item.record === "" ? "—" : item.record === "E" ? "Exempt" : `${item.record}/${item.maxPoints}`,
+          ReportCardModule.itemScoreText(item),
         ])
       )
     );

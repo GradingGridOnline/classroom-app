@@ -74,7 +74,10 @@ const ReportCardModule = {
         id: item.id,
         name: item.name,
         maxPoints: item.maxPoints,
-        record: ScoringModule.getRecord(studentId, item.id), // "" | "E" | numeric string
+        record: ScoringModule.getRecord(studentId, item.id), // "" | "E" | numeric string (typed-in score only)
+        // The score the gradebook actually uses: typed-in scores AND scores pulled from tests, quizzes and
+        // scoring tools (an item's Sources). The report card shows this, so test scores appear on it too.
+        score: ScoringModule.computeItemEffectiveScore(studentId, item), // number | null
       })),
     }));
 
@@ -87,6 +90,14 @@ const ReportCardModule = {
       attendanceNote: AttendanceModule.getNote(studentId),
     };
   },
+};
+
+/** "17/20", "Exempt" or "—" for one item of studentDetail(): the item's effective score, as in Main Scores. */
+ReportCardModule.itemScoreText = function (item) {
+  if (item.record === "E") return "Exempt";
+  if (item.score === null || item.score === undefined || Number.isNaN(item.score)) return "—";
+  const n = Math.round(item.score * 100) / 100;
+  return `${n}/${item.maxPoints}`;
 };
 
 window.ReportCardModule = ReportCardModule;
