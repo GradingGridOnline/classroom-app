@@ -57,6 +57,12 @@
       .qz-open-name { cursor: pointer; }
       .qz-open-name:hover { text-decoration: underline; }
       .qz-dlg-cat { font-weight: 700; margin: 10px 0 2px; }
+      .qz-stu-top { display: flex; align-items: baseline; gap: 6px; }
+      .qz-stu-num { flex: none; font-size: .78em; font-weight: 700; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
+      .qz-stu-name { font-weight: 600; }
+      .qz-stu-pron { font-size: .82em; font-style: italic; color: var(--ink-soft); }
+      .qz-stu .hint { margin: 0; }
+      [data-theme="tron-legacy"] .qz-stu-num { border-radius: 0; font-family: "Share Tech Mono", ui-monospace, monospace; color: #4fe0ff; background: rgba(0,217,255,.1); }
       .qz-counts .hint, .qz-form-line .hint { margin: 0; }
       [data-theme="tron-legacy"] .qz-title { text-transform: uppercase; letter-spacing: .1em; font-size: 1.05rem; color: #e8fdff; text-shadow: 0 0 8px rgba(0,217,255,.6); }
       [data-theme="tron-legacy"] .qz-meta { font-family: "Share Tech Mono", ui-monospace, monospace; color: #9fd8e3; }
@@ -1463,8 +1469,7 @@
     sorted.forEach((s) => {
       const tr = h("tr", s.sid !== lastSid ? "qz-newstudent" : "");
       lastSid = s.sid;
-      const nameTd = h("td", "", s.name || "(not on roster)");
-      nameTd.appendChild(h("div", "hint", s.sid));
+      const nameTd = studentNameCell(s);
       nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       if (s.sid !== prevSid && entryCount.get(s.sid) > 1) {
         const cb = button(`Combine ${entryCount.get(s.sid)} entries`, "btn btn-ghost btn-small", () => combineEntries(tool, container, test, quiz, s.sid));
@@ -2062,8 +2067,7 @@
     sortedSubs(quiz).forEach((s) => {
       const eff = ScoringModule.quizEffectiveAnswers(s);
       const tr = h("tr");
-      const nameTd = h("td", "", s.name || "(not on roster)");
-      nameTd.appendChild(h("div", "hint", s.sid));
+      const nameTd = studentNameCell(s);
       nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.append(nameTd, h("td", "", String(s.attempt)));
       qs.forEach((x) => tr.appendChild(h("td", "", optionText(quiz, x.q, eff[x.q.id]))));
@@ -2076,6 +2080,25 @@
 
   // ---------- the results view: a read-only grid of ● / ✕ ----------
   const resultSort = new Map(); // testId -> { key: "name"|"attempt"|"time"|"score"|"q:<n>", dir: 1|-1 } (this visit only)
+  /** The roster's class number and pronunciation for a School ID (matched the same way answers are matched). */
+  function rosterInfo(sid) {
+    const k = String(sid == null ? "" : sid).trim();
+    const st = k ? (RosterModule.students || []).find((x) => String(x.schoolId == null ? "" : x.schoolId).trim() === k) : null;
+    return st ? { num: st.classNumber, pron: st.pronunciation || "" } : null;
+  }
+  /** A results row's student cell: #class number and name, the pronunciation under it, then the School ID. */
+  function studentNameCell(s) {
+    const td = h("td", "qz-stu");
+    const info = rosterInfo(s.sid);
+    const top = h("div", "qz-stu-top");
+    if (info && info.num != null && info.num !== "") top.appendChild(h("span", "qz-stu-num", `#${info.num}`));
+    top.appendChild(h("span", "qz-stu-name", s.name || "(not on roster)"));
+    td.appendChild(top);
+    if (info && info.pron) td.appendChild(h("div", "qz-stu-pron", info.pron));
+    td.appendChild(h("div", "hint", s.sid));
+    return td;
+  }
+
   function renderResults(tool, container, testId) {
     const test = ScoringModule.findTest(tool.id, testId);
     const quiz = ScoringModule.quizOf(tool.id, testId);
@@ -2122,7 +2145,7 @@
       const tb0 = h("tbody"), byS = new Map();
       viewSubs(quiz).forEach((x) => { if (!byS.has(x.sid)) byS.set(x.sid, []); byS.get(x.sid).push(x); });
       [...byS.values()].sort((a, b) => studentOrder(a[0], b[0])).forEach((list) => {
-        const tr = h("tr"), nt = h("td", "", list[0].name || "(not on roster)"); nt.appendChild(h("div", "hint", list[0].sid)); tr.appendChild(nt);
+        const tr = h("tr"), nt = studentNameCell(list[0]); tr.appendChild(nt);
         shownForms.forEach((f) => {
           const mine = list.filter((x) => x.form === f.id).sort((a, b) => (a.attempt - b.attempt));
           const td = h("td", "", mine.length ? mine.map((x) => String(ScoringModule.gradeQuizSubmission(quiz, ScoringModule.quizEffectiveAnswers(x)))).join(" · ") + ` / ${total}` : "—");
@@ -2217,8 +2240,7 @@
       const eff = ScoringModule.quizEffectiveAnswers(s);
       const tr = h("tr", s.sid !== lastSid ? "qz-newstudent" : "");
       lastSid = s.sid;
-      const nameTd = h("td", "", s.name || "(not on roster)");
-      nameTd.appendChild(h("div", "hint", s.sid));
+      const nameTd = studentNameCell(s);
       nameTd.appendChild(deleteAttemptBtn(tool, container, test, quiz, s));
       tr.appendChild(nameTd);
       if (multiForm) { const ft = h("td", "", formName(s)); ft.style.whiteSpace = "nowrap"; if (!((quiz.forms.find((y) => y.id === s.form) || {}).counts !== false)) { ft.title = "This form is not counting toward scores"; ft.textContent += " (not counted)"; } tr.appendChild(ft); }
