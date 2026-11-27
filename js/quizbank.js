@@ -62,6 +62,12 @@
       .qz-stu-name { font-weight: 600; }
       .qz-stu-pron { font-size: .82em; font-style: italic; color: var(--ink-soft); }
       .qz-stu .hint { margin: 0; }
+      .qz-stu-sorts { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 4px; }
+      .qz-stu-sort { font: inherit; font-size: .68rem; font-weight: 600; text-transform: none; letter-spacing: 0; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: inherit; cursor: pointer; opacity: .75; }
+      .qz-stu-sort:hover { opacity: 1; }
+      .qz-stu-sort.on { opacity: 1; background: var(--ink); color: var(--card); border-color: var(--ink); }
+      [data-theme="tron-legacy"] .qz-stu-sort { border-radius: 0; border-color: rgba(0,217,255,.5); }
+      [data-theme="tron-legacy"] .qz-stu-sort.on { background: rgba(0,217,255,.3); color: #fff; border-color: #00d9ff; }
       [data-theme="tron-legacy"] .qz-stu-num { border-radius: 0; font-family: "Share Tech Mono", ui-monospace, monospace; color: #4fe0ff; background: rgba(0,217,255,.1); }
       .qz-counts .hint, .qz-form-line .hint { margin: 0; }
       [data-theme="tron-legacy"] .qz-title { text-transform: uppercase; letter-spacing: .1em; font-size: 1.05rem; color: #e8fdff; text-shadow: 0 0 8px rgba(0,217,255,.6); }
@@ -2180,7 +2186,18 @@
     [["name", "Student"], ...(multiForm ? [["form", "Form"]] : []), ["attempt", "Attempt"], ["time", "Time"], ["score", "Score"]].forEach(([key, label]) => {
       const th = h("th");
       th.rowSpan = 2;
-      sortable(th, key, label);
+      if (key === "name") {
+        // Student: sort by name, class number or pronunciation (click again to reverse)
+        th.appendChild(h("div", "", "Student"));
+        const opts = h("div", "qz-stu-sorts");
+        [["name", "Name"], ["classnum", "Class #"], ["pron", "Pronunciation"]].forEach(([k, l]) => {
+          const b = h("button", `qz-stu-sort${sort.key === k ? " on" : ""}`, l + (sort.key === k ? (sort.dir === 1 ? " ▲" : " ▼") : ""));
+          b.type = "button"; b.title = `Sort by ${l.toLowerCase()}; click again to reverse`;
+          b.addEventListener("click", () => { resultSort.set(testId, { key: k, dir: sort.key === k ? -sort.dir : 1 }); renderScoringToolView(tool, container); });
+          opts.appendChild(b);
+        });
+        th.appendChild(opts);
+      } else sortable(th, key, label);
       r1.appendChild(th);
     });
     let num = 0;
@@ -2228,8 +2245,17 @@
       }
       return 0;
     };
+    const infoOf = new Map();
+    const info = (x) => { if (!infoOf.has(x.sid)) infoOf.set(x.sid, rosterInfo(x.sid) || {}); return infoOf.get(x.sid); };
+    const numOf = (x) => { const n = Number(info(x).num); return Number.isFinite(n) && info(x).num !== "" && info(x).num != null ? n : Infinity; };
     const ordered = [...viewSubs(quiz)].sort((a, b) => {
       if (sort.key === "name") return sort.dir * studentOrder(a, b);
+      if (sort.key === "classnum") { const na = numOf(a), nb = numOf(b); return na === nb ? studentOrder(a, b) : na === Infinity ? 1 : nb === Infinity ? -1 : sort.dir * (na - nb); }
+      if (sort.key === "pron") {
+        const pa = info(a).pron || "", pb = info(b).pron || "";
+        if (!pa || !pb) return pa === pb ? studentOrder(a, b) : pa ? -1 : 1; // students without a pronunciation go last
+        return sort.dir * (pa.localeCompare(pb, "ja") || studentOrder(a, b));
+      }
       if (sort.key === "form") return sort.dir * (formName(a).localeCompare(formName(b)) || studentOrder(a, b));
       // other columns: larger-first when sorted "▲" for score/questions is unnatural, so ▲ = smallest first, except questions (▲ = correct first)
       const d = sortValue(a) - sortValue(b);
