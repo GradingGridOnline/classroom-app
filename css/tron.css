@@ -98,6 +98,38 @@
   box-shadow: 0 8px 18px -10px var(--level-outline), inset 0 0 24px -12px var(--level-outline);
 }
 
+/* ----- Scoring tab row (Main Scores | tools) ----- */
+[data-theme="tron-legacy"] .scoring-tab-row {
+  border-bottom-color: var(--tron-cyan);
+  box-shadow: 0 6px 10px -8px var(--tron-cyan);
+}
+[data-theme="tron-legacy"] .scoring-tab-row .tab-btn {
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6fa6b3;
+}
+[data-theme="tron-legacy"] .scoring-tab-row .tab-btn:hover { color: var(--ink); }
+[data-theme="tron-legacy"] .scoring-tab-row .tab-btn-active {
+  color: #fff;
+  background: linear-gradient(to bottom, rgba(0, 217, 255, 0.14), rgba(0, 217, 255, 0) 85%), var(--card);
+}
+[data-theme="tron-legacy"] .scoring-tab-row .tab-sub {
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: rgba(0, 217, 255, 0.65);
+  text-shadow: none;
+}
+[data-theme="tron-legacy"] .scoring-tab-row .scoring-tool-tabs::before {
+  background: var(--tron-cyan);
+  box-shadow: 0 0 8px var(--tron-cyan);
+  opacity: 0.6;
+  width: 1px;
+}
+
 /* ----- Section header bars: dark glass with a lit edge ----- */
 [data-theme="tron-legacy"] :is(
   .attendance-settings-header,

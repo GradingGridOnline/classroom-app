@@ -586,54 +586,42 @@ table.source-grid.source-grid-over {
   opacity: 0.75;
 }
 
-/* ===== Scoring: "Main Scores" is its own large button, separate from the tool-tab menu ===== */
-.scoring-main-row {
-  margin: 0 0 14px;
-}
-#scoring-mode-entry-btn {
-  font-family: inherit;
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 14px 34px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--green);
-  color: var(--paper);
-  opacity: 0.72;
-  cursor: pointer;
-}
-#scoring-mode-entry-btn:hover { opacity: 1; }
-#scoring-mode-entry-btn.tab-btn-active {
-  opacity: 1;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 35%, transparent);
-}
-/* Cyberpunk: yellow with black text; neon pink text and a glow while it's the open screen */
-[data-theme="cyberpunk"] #scoring-mode-entry-btn,
-[data-theme="cyberpunk"] #scoring-mode-entry-btn:hover {
-  background: #ffe94d;
-  color: #000000;
-  opacity: 1;
-  text-shadow: none;
-}
-[data-theme="cyberpunk"] #scoring-mode-entry-btn.tab-btn-active {
-  color: #ff2e93;
-  font-weight: 800;
-  text-shadow: 0 0 6px rgba(255, 92, 147, 0.75), 0 0 1px rgba(0, 0, 0, 0.6);
-  box-shadow: 0 0 0 2px #ff5c93, 0 0 14px rgba(255, 92, 147, 0.7);
-}
-/* The tool-tab bar below it only shows when there are tools; restore the normal bar padding in Cyberpunk */
-#scoring-mode-row[hidden] { display: none; }
-
-/* Main Scores button and the tool tabs sit on one line */
-.scoring-nav-line {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+/* ===== Scoring: one tab row — Main Scores, a divider, then one tab per scoring tool =====
+   Same outlined tabs as the 3rd/4th levels; the open tab sits on the card color so it
+   joins the page below. Each tab has its type in small text under its name. */
+.scoring-tab-row {
+  --level-outline: var(--green);
+  --level-bg: var(--card);
   margin: 0 0 18px;
+  padding: 0;
 }
-.scoring-nav-line .scoring-main-row { margin: 0; flex: 0 0 auto; }
-.scoring-nav-line #scoring-mode-row { flex: 1 1 auto; margin: 0; min-width: 0; align-self: stretch; }
+.scoring-tab-row .scoring-main-row,
+.scoring-tab-row .scoring-tool-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; }
+.scoring-tab-row .scoring-tool-tabs[hidden] { display: none; }
+.scoring-tab-row .scoring-tool-tabs::before {
+  content: "";
+  align-self: center;
+  width: 2px;
+  height: 30px;
+  margin: 0 12px 0 10px;
+  background: var(--line);
+}
+.scoring-tab-row .tab-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 18px 7px;
+  line-height: 1.2;
+}
+.scoring-tab-row #scoring-mode-entry-btn { font-weight: 700; }
+.scoring-tab-row .tab-sub {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
 
 
 /* ===== Desk lock slider (replaces the padlock icon) ===== */

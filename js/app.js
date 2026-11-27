@@ -3762,6 +3762,15 @@ document.getElementById("scoring-main-row").addEventListener("click", (e) => {
   if (btn) showScoringMode(btn.dataset.scoringMode);
 });
 
+/** A tool tab shows the tool's own name with its type (tracker, presentation, ...) in small text under it. */
+function setScoringTabLabel(btn, tool) {
+  btn.textContent = tool.name;
+  const sub = document.createElement("span");
+  sub.className = "tab-sub";
+  sub.textContent = { table: "tracker", presentation: "presentation", testbank: "test & quiz bank" }[tool.type] || (SCORING_TOOL_TYPES[tool.type] || "").toLowerCase();
+  btn.appendChild(sub);
+}
+
 /** Rebuilds the tool tab buttons and their view containers from ScoringModule.tools — call after loading a course's scoring data, and after adding/removing a tool. Safe to call repeatedly: previously-built tool buttons/views are removed first. */
 function renderScoringToolTabs() {
   el.scoringModeRow.querySelectorAll("[data-dynamic-tool]").forEach((btn) => btn.remove());
@@ -3774,7 +3783,7 @@ function renderScoringToolTabs() {
     btn.className = "tab-btn";
     btn.dataset.scoringMode = tool.id;
     btn.dataset.dynamicTool = "true";
-    btn.textContent = tool.name;
+    setScoringTabLabel(btn, tool);
     el.scoringModeRow.appendChild(btn);
 
     const view = document.createElement("div");
@@ -3851,7 +3860,7 @@ function buildToolNameRow(tool) {
     ScoringModule.renameTool(tool.id, input.value);
     input.value = tool.name;
     const btn = el.scoringModeRow.querySelector(`[data-scoring-mode="${tool.id}"]`);
-    if (btn) btn.textContent = tool.name;
+    if (btn) setScoringTabLabel(btn, tool);
     const settingsHeading = row.closest(".attendance-settings") && row.closest(".attendance-settings").querySelector("h3");
     if (settingsHeading) settingsHeading.textContent = `${tool.name} Settings`;
     await saveScoringThen();
