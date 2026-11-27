@@ -2315,3 +2315,13 @@ textarea {
 .course-item > span {
   align-self: center;
 }
+
+/* ===== Control-bar zones =====
+   Control bars are split into a readout (counts), labelled button groups and a
+   Save zone. In most themes these wrappers are invisible and the bar looks as
+   before; the Tron: Legacy theme (css/tron.css) lays them out as a data pad. */
+.pad-readout,
+.pad-main > .pad-group,
+.pad-save { display: contents; }
+.pad-readout-label { display: none; }
+.pad-readout.pad-readout-tron { display: none; }

@@ -119,17 +119,26 @@
 
         <!-- ----- Roster panel ----- -->
         <div id="roster-panel" class="tab-panel">
-          <div class="panel-toolbar">
-            <span id="roster-count" class="count-badge"></span>
-            <div class="panel-toolbar-buttons">
-              <input id="roster-file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
-              <button id="upload-roster-btn" class="btn btn-ghost">Upload CSV / Excel</button>
-              <button id="add-student-btn" class="btn btn-ghost">+ Add Student</button>
-              <button id="collect-email-btn" class="btn btn-ghost">Collect Email Addresses</button>
-              <button id="sync-email-btn" class="btn btn-ghost" hidden>Sync Emails</button>
-              <button id="show-email-qr-btn" class="btn btn-ghost" hidden>Show QR Code</button>
-              <button id="delete-email-form-btn" class="btn btn-ghost" hidden>Delete Form</button>
-              <button id="save-roster-btn" class="btn btn-primary">Save Roster</button>
+          <div class="panel-toolbar pad-toolbar">
+            <div class="pad-readout">
+              <span id="roster-count" class="count-badge"></span>
+              <span class="pad-readout-label">Students</span>
+            </div>
+            <div class="panel-toolbar-buttons pad-main">
+              <div class="pad-group" data-label="Add Students">
+                <input id="roster-file-input" type="file" accept=".csv,.xlsx,.xls" hidden />
+                <button id="upload-roster-btn" class="btn btn-ghost">Upload CSV / Excel</button>
+                <button id="add-student-btn" class="btn btn-ghost">+ Add Student</button>
+              </div>
+              <div class="pad-group" data-label="Email Collection">
+                <button id="collect-email-btn" class="btn btn-ghost">Collect Email Addresses</button>
+                <button id="sync-email-btn" class="btn btn-ghost" hidden>Sync Emails</button>
+                <button id="show-email-qr-btn" class="btn btn-ghost" hidden>Show QR Code</button>
+                <button id="delete-email-form-btn" class="btn btn-ghost pad-danger" hidden>Delete Form</button>
+              </div>
+              <div class="pad-save">
+                <button id="save-roster-btn" class="btn btn-primary">Save Roster</button>
+              </div>
             </div>
           </div>
           <p id="email-collect-status" class="result"></p>
@@ -216,17 +225,21 @@
 
         <!-- ----- Seating chart panel ----- -->
         <div id="seating-panel" class="tab-panel" hidden>
-          <div class="panel-toolbar module-toolbar">
+          <div class="panel-toolbar module-toolbar pad-toolbar">
+            <div class="pad-readout pad-readout-tron">
+              <span id="seated-count" class="count-badge"></span>
+              <span class="pad-readout-label">Seated</span>
+            </div>
             <div class="module-btn-stack">
-              <div class="main-btns">
+              <div class="main-btns pad-group" data-label="Output">
                 <button id="popout-btn" class="btn btn-ghost">Pop Out ↗</button>
-                <button id="toggle-popout-groups-btn" class="btn btn-ghost">Hide Group Colors in Pop-Out</button>
+                <button id="toggle-popout-groups-btn" class="btn btn-ghost pad-minor">Hide Group Colors in Pop-Out</button>
                 <button id="print-seating-btn" class="btn btn-ghost">Print</button>
               </div>
-              <div class="panel-toolbar-buttons secondary-btns">
+              <div class="panel-toolbar-buttons secondary-btns pad-group" data-label="Arrange">
                 <button id="auto-fill-btn" class="btn btn-ghost">Auto-Fill</button>
                 <button id="auto-fill-numerical-btn" class="btn btn-ghost" title="Seats remaining students in Class Number order, starting at the bottom-left desk and filling upward, then moving one column right">Auto-Fill (Numerical Order)</button>
-                <button id="clear-seating-btn" class="btn btn-ghost">Clear Seating Chart</button>
+                <button id="clear-seating-btn" class="btn btn-ghost pad-danger">Clear Seating Chart</button>
               </div>
             </div>
             <div class="grid-size-controls" hidden>
@@ -237,7 +250,9 @@
               <button id="apply-grid-size-btn" class="btn btn-ghost btn-small">Apply Size</button>
               <button id="trim-empty-btn" class="btn btn-ghost btn-small">Trim Empty Rows/Columns</button>
             </div>
-            <button id="save-seating-btn" class="btn btn-primary module-save">Save Seating Chart</button>
+            <div class="pad-save">
+              <button id="save-seating-btn" class="btn btn-primary module-save">Save Seating Chart</button>
+            </div>
           </div>
 
           <p class="hint">Click a student below, then click a desk to seat them. Click a seated desk to remove that student.</p>
@@ -531,6 +546,7 @@
     <script src="js/attendancereset.js"></script>
     <script src="js/seatingprint.js"></script>
     <script src="js/seatingtoolbar.js"></script>
+    <script src="js/padreadout.js"></script>
     <script src="js/layout.js"></script>
     <script src="js/journalui.js"></script>
     <script src="js/classmaterial.js"></script>

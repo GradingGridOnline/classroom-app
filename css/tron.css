@@ -229,47 +229,214 @@
 [data-theme="tron-legacy"] :is(td, .panel-toolbar) .panel-toolbar::before,
 [data-theme="tron-legacy"] :is(td, .panel-toolbar) .panel-toolbar::after { content: none; }
 
+/* ----- Control bar layout: readout | labelled groups | save -----
+   Applies to bars marked .pad-toolbar (Roster and Seating Chart so far). */
+[data-theme="tron-legacy"] .pad-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 18px 18px 16px;
+}
+[data-theme="tron-legacy"] .pad-toolbar :is(.pad-main, .module-btn-stack) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 0;
+  min-width: 0;
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-main { align-items: stretch; }
+/* Seating Chart: its two groups stack (Output above Arrange), so no divider between them. */
+[data-theme="tron-legacy"] .pad-toolbar .module-btn-stack { flex-direction: column; align-items: flex-start; gap: 14px; }
+[data-theme="tron-legacy"] .pad-toolbar .module-btn-stack > .pad-group { padding-left: 0; border-left: 0; }
+[data-theme="tron-legacy"] .pad-toolbar .module-btn-stack > .pad-group::before { left: 0; }
+
+/* Readout zone: a big glowing number with a small label under it. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-readout {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 92px;
+  padding-right: 18px;
+  margin-right: 18px;
+  border-right: 1px solid rgba(0, 217, 255, 0.25);
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-readout .count-badge {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 1.55rem;
+  line-height: 1;
+  color: var(--tron-cyan-hot);
+  text-shadow: 0 0 8px rgba(0, 217, 255, 0.75);
+  white-space: nowrap;
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-readout-label {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 8.5px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(0, 217, 255, 0.7);
+}
+
+/* Button groups, each with a small label and a divider line on its left. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-group {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 18px 0;
+  border-left: 1px solid rgba(0, 217, 255, 0.2);
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-group:first-child { padding-left: 0; border-left: 0; }
+[data-theme="tron-legacy"] .pad-toolbar .pad-group::before {
+  content: attr(data-label);
+  position: absolute;
+  top: 0;
+  left: 18px;
+  font-family: var(--font-heading);
+  font-size: 8.5px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(0, 217, 255, 0.7);
+  white-space: nowrap;
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-group:first-child::before { left: 0; }
+
+/* Save zone: always far right, behind its own divider. */
+[data-theme="tron-legacy"] .pad-toolbar .pad-save {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 18px;
+  border-left: 1px solid rgba(0, 217, 255, 0.25);
+  filter: drop-shadow(0 0 8px rgba(0, 217, 255, 0.5));
+}
+
+/* Button tiers inside these bars: same height and shape, cut corners.
+   main = bright outline, .pad-minor = dim outline, .pad-danger = orange,
+   Save = solid cyan. */
+[data-theme="tron-legacy"] .pad-toolbar .btn {
+  min-height: 34px;
+  padding: 7px 15px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4f7ff;
+  background-color: rgba(0, 217, 255, 0.06);
+  border: 1px solid rgba(0, 217, 255, 0.7);
+  border-radius: 0;
+  box-shadow: none;
+  filter: none;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+[data-theme="tron-legacy"] .pad-toolbar .btn:not(:disabled):hover {
+  color: #fff;
+  background-color: rgba(0, 217, 255, 0.18);
+  border-color: var(--tron-cyan);
+  box-shadow: inset 0 0 14px rgba(0, 217, 255, 0.45);
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.8);
+}
+[data-theme="tron-legacy"] .pad-toolbar .btn.pad-minor {
+  color: #7fb0bc;
+  background-color: transparent;
+  border-color: rgba(0, 217, 255, 0.3);
+}
+[data-theme="tron-legacy"] .pad-toolbar .btn.pad-danger {
+  color: #ffb27a;
+  background-color: rgba(255, 122, 26, 0.06);
+  border-color: rgba(255, 122, 26, 0.75);
+}
+[data-theme="tron-legacy"] .pad-toolbar .btn.pad-danger:not(:disabled):hover {
+  color: #fff;
+  background-color: rgba(255, 122, 26, 0.22);
+  border-color: var(--marker);
+  box-shadow: inset 0 0 14px rgba(255, 122, 26, 0.5);
+  text-shadow: 0 0 6px rgba(255, 122, 26, 0.9);
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-save .btn {
+  min-height: 44px;
+  padding: 10px 24px;
+  white-space: nowrap;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  color: #001218;
+  background-color: var(--tron-cyan);
+  border: 0;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+[data-theme="tron-legacy"] .pad-toolbar .pad-save .btn:not(:disabled):hover {
+  color: #001218;
+  background-color: #7ff0ff;
+  box-shadow: none;
+  text-shadow: none;
+}
+/* Split buttons (Set Up Desks ▾, Auto-Fill ▾): one cut corner on each half. */
+[data-theme="tron-legacy"] .pad-toolbar .split-btn > .btn:first-child {
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+}
+[data-theme="tron-legacy"] .pad-toolbar .split-btn > .split-caret {
+  padding: 7px 10px;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+}
+@media (max-width: 900px) {
+  [data-theme="tron-legacy"] .pad-toolbar { flex-wrap: wrap; }
+  [data-theme="tron-legacy"] .pad-toolbar .pad-save { margin-top: 12px; }
+}
+
 /* ----- Drop-down menus ----- */
-[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list) {
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu) {
   background: var(--tron-glass) !important;
   border: 1px solid var(--tron-cyan) !important;
   border-radius: 0 !important;
   box-shadow: 0 0 0 1px rgba(0, 217, 255, 0.12), 0 0 18px rgba(0, 217, 255, 0.4), inset 0 0 22px rgba(0, 217, 255, 0.07) !important;
 }
-[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list):not([hidden]) {
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu):not([hidden]) {
   animation: tron-rez 0.22s cubic-bezier(.2, .8, .2, 1);
 }
-[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::before,
-[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::after {
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu)::before,
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu)::after {
   content: "";
   position: absolute;
   width: 10px;
   height: 10px;
   pointer-events: none;
 }
-[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::before {
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu)::before {
   top: -2px;
   left: -2px;
   border-top: 2px solid var(--marker);
   border-left: 2px solid var(--marker);
 }
-[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list)::after {
+[data-theme="tron-legacy"] :is(.settings-panel, .qts-menu, .qz-menu-list, .split-menu)::after {
   bottom: -2px;
   right: -2px;
   border-bottom: 2px solid var(--marker);
   border-right: 2px solid var(--marker);
 }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button) {
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn) {
   border-radius: 0 !important;
   animation: tron-item-in 0.2s ease-out both;
 }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(2) { animation-delay: 0.03s; }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(3) { animation-delay: 0.06s; }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(4) { animation-delay: 0.09s; }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(5) { animation-delay: 0.12s; }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(6) { animation-delay: 0.15s; }
-[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button):nth-child(n+7) { animation-delay: 0.18s; }
-[data-theme="tron-legacy"] :is(.theme-item, .qts-menu > button, .qz-menu-item):hover {
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn):nth-child(2) { animation-delay: 0.03s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn):nth-child(3) { animation-delay: 0.06s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn):nth-child(4) { animation-delay: 0.09s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn):nth-child(5) { animation-delay: 0.12s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn):nth-child(6) { animation-delay: 0.15s; }
+[data-theme="tron-legacy"] :is(.settings-panel > li, .qts-menu > button, .qz-menu-list > button, .split-menu > .btn):nth-child(n+7) { animation-delay: 0.18s; }
+[data-theme="tron-legacy"] :is(.theme-item, .qts-menu > button, .qz-menu-item, .split-menu > .btn):hover {
   background: linear-gradient(90deg, rgba(0, 217, 255, 0.28), rgba(0, 217, 255, 0.04)) !important;
   box-shadow: inset 3px 0 0 var(--tron-cyan);
   color: #fff;
