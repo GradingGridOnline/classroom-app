@@ -8,6 +8,7 @@
    - Drop-down menus: black glass with a glowing cyan frame and orange corner
      brackets; they "rez in" top-to-bottom and their items arrive one by one.
    - Control bars: framed like the data pads / screens in the film.
+   - Module settings: framed as a config screen with numbered sub-sections.
    - Buttons: a light streak sweeps across on hover.
    - Switching tabs: the panel rezzes in with a quick top-to-bottom wipe.
    - Page: the title boots up with a brief flicker; a perspective floor grid
@@ -394,6 +395,155 @@
 @media (max-width: 900px) {
   [data-theme="tron-legacy"] .pad-toolbar { flex-wrap: wrap; }
   [data-theme="tron-legacy"] .pad-toolbar .pad-save { margin-top: 12px; }
+}
+
+/* ----- Module settings: framed as a config screen -----
+   Each module's Settings section (.attendance-settings) becomes one framed screen:
+   the section bar sits flush along its top, a "SETTINGS" tag and cyan readout
+   ticks sit on the frame, sub-section headings are numbered 01, 02, ... and each
+   setting reads as a labelled row. Text boxes keep the theme's own colors. */
+[data-theme="tron-legacy"] .attendance-settings {
+  --pad-c: rgba(0, 217, 255, 0.95);
+  --pad-k: 18px;
+  position: relative;
+  counter-reset: tron-set;
+  margin-top: 28px;
+  padding: 0 0 16px;
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  background:
+    linear-gradient(var(--pad-c), var(--pad-c)) left top / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) left top / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) right top / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) right top / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) left bottom / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) left bottom / 2px var(--pad-k),
+    linear-gradient(var(--pad-c), var(--pad-c)) right bottom / var(--pad-k) 2px,
+    linear-gradient(var(--pad-c), var(--pad-c)) right bottom / 2px var(--pad-k),
+    repeating-linear-gradient(to bottom, rgba(0, 217, 255, 0.03) 0 1px, transparent 1px 3px),
+    rgba(3, 10, 14, 0.7);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat;
+  background-origin: border-box;
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.12), inset 0 0 22px rgba(0, 217, 255, 0.05);
+}
+[data-theme="tron-legacy"] .attendance-settings::before {
+  content: "SETTINGS";
+  position: absolute;
+  top: -8px;
+  left: 26px;
+  z-index: 1;
+  padding: 1px 14px 1px 9px;
+  font-family: var(--font-heading);
+  font-size: 8.5px;
+  line-height: 11px;
+  letter-spacing: 0.28em;
+  color: var(--tron-cyan);
+  background: #050b0f;
+  border: 1px solid var(--tron-cyan);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+  pointer-events: none;
+}
+[data-theme="tron-legacy"] .attendance-settings::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: 30px;
+  width: 64px;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--tron-cyan) 0 8px, transparent 8px 12px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+/* The section bar runs flush along the top of the screen. */
+[data-theme="tron-legacy"] .attendance-settings > .attendance-settings-header {
+  margin: 0 0 14px;
+  border: 0;
+  border-left: 4px solid var(--tron-cyan);
+  border-bottom: 1px solid rgba(0, 217, 255, 0.35);
+  box-shadow: none;
+}
+/* Collapsed (nothing showing under the bar): the screen shrinks to just the bar. */
+[data-theme="tron-legacy"] .attendance-settings:not(:has(> :not(.attendance-settings-header):not([hidden]):not(:empty))) { padding-bottom: 0; }
+[data-theme="tron-legacy"] .attendance-settings:not(:has(> :not(.attendance-settings-header):not([hidden]):not(:empty))) > .attendance-settings-header { margin-bottom: 0; border-bottom: 0; }
+[data-theme="tron-legacy"] .attendance-settings > :not(.attendance-settings-header) {
+  margin-left: 18px;
+  margin-right: 18px;
+}
+/* Numbered sub-section headings: 01, 02, ... */
+[data-theme="tron-legacy"] .attendance-settings :is(.attendance-settings-block, [id$="settings-body"]) h4,
+[data-theme="tron-legacy"] .attendance-settings > h4 {
+  counter-increment: tron-set;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--tron-cyan-hot);
+  border-top-color: rgba(0, 217, 255, 0.2);
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.45);
+}
+[data-theme="tron-legacy"] .attendance-settings :is(.attendance-settings-block, [id$="settings-body"]) h4::before,
+[data-theme="tron-legacy"] .attendance-settings > h4::before {
+  content: counter(tron-set, decimal-leading-zero);
+  padding: 1px 6px;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  color: var(--tron-cyan);
+  border: 1px solid rgba(0, 217, 255, 0.6);
+  text-shadow: none;
+}
+/* Settings rows: small uppercase label, faint line under each row. */
+[data-theme="tron-legacy"] .attendance-settings .mapping-row {
+  margin-top: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.08);
+}
+[data-theme="tron-legacy"] .attendance-settings .mapping-row > label:first-child {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7fb0bc;
+}
+[data-theme="tron-legacy"] .attendance-settings > p.hint:only-of-type,
+[data-theme="tron-legacy"] .attendance-settings [id$="settings-body"] > p.hint:only-child {
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  color: #9fd8e3;
+}
+[data-theme="tron-legacy"] input[type="checkbox"],
+[data-theme="tron-legacy"] input[type="radio"] { accent-color: var(--tron-cyan); }
+
+/* Section-bar buttons (Edit Settings, Done Editing, Save, ...) share the control-bar button style. */
+[data-theme="tron-legacy"] .attendance-settings-header .btn {
+  padding: 5px 13px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4f7ff;
+  background-color: rgba(0, 217, 255, 0.08);
+  border: 1px solid rgba(0, 217, 255, 0.7);
+  border-radius: 0;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+[data-theme="tron-legacy"] .attendance-settings-header .btn:not(:disabled):hover {
+  color: #fff;
+  background-color: rgba(0, 217, 255, 0.2);
+  box-shadow: inset 0 0 12px rgba(0, 217, 255, 0.45);
+  text-shadow: 0 0 6px rgba(0, 217, 255, 0.8);
+}
+[data-theme="tron-legacy"] .attendance-settings-header .btn-primary {
+  color: #001218;
+  background-color: var(--tron-cyan);
+  border-color: var(--tron-cyan);
+}
+[data-theme="tron-legacy"] .attendance-settings-header .btn-primary:not(:disabled):hover {
+  color: #001218;
+  background-color: #7ff0ff;
+  text-shadow: none;
 }
 
 /* ----- Drop-down menus ----- */
