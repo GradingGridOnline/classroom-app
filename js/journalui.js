@@ -143,29 +143,93 @@
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-pageno { color:#6b5236; opacity:.8; font-style:italic; }
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-bookinfo { color:#e8d8ac; opacity:.9; margin-top:30px; }
 
-/* TRON: LEGACY: an Encom touch-panel "light table" with a screen for each entry */
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap { background:#071015; border:1px solid #19d3f0; padding:12px 16px 10px; margin:8px 4px 22px; box-shadow:0 0 0 6px #071015, 0 0 0 7px rgba(0,217,255,.5), 0 0 30px rgba(0,217,255,.22); }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot { display:flex; justify-content:space-between; gap:12px; font-size:.64rem; letter-spacing:.16em; text-transform:uppercase; color:#7fe9ff; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head { border-bottom:1px solid rgba(0,217,255,.35); padding-bottom:5px; margin-bottom:10px; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot { border-top:1px solid rgba(0,217,255,.35); padding-top:5px; margin-top:10px; align-items:center; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot .jr-sf-bars i { display:inline-block; width:34px; height:6px; border:1px solid #19d3f0; margin-left:6px; border-radius:3px; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-book { --jr-rule:#19d3f0; border:0; background:transparent; box-shadow:none; gap:0; grid-template-columns:1fr 12px 1fr; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-spine { background:transparent; box-shadow:none; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page { background:#0a141a; border:1px solid #1fd5f2; border-radius:3px; color:#c9f6ff; padding:34px 22px 30px; font-family:var(--font-body);
-  box-shadow:0 0 14px rgba(0,217,255,.2), inset 0 0 26px rgba(0,217,255,.07); }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page::before { content:"ENTRY .PROGRAM"; position:absolute; top:8px; left:14px; right:14px; font-size:.6rem; letter-spacing:.18em; color:#4fe0ff; border-bottom:1px solid rgba(0,217,255,.3); padding-bottom:3px; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page::after { content:"END .PROGRAM"; position:absolute; top:8px; right:14px; font-size:.6rem; letter-spacing:.18em; color:#4fe0ff; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-title { font-size:1.3rem; line-height:1.3; color:#eaffff; letter-spacing:.06em; text-transform:uppercase; text-shadow:0 0 10px rgba(0,217,255,.55); }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-body { color:#bff3ff; background-image:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,217,255,.035) 3px 4px); background-attachment:local; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot { color:#7fe9ff; letter-spacing:.04em; }
+/* TRON: LEGACY: a data pad — a dark glass slab with a lit frame, two screens with readout strips,
+   a segmented hinge, slim chevron tabs and HUD-style tags. Same functions as every other theme. */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap {
+  --c:#00d9ff; --k:20px; position:relative; margin:14px 4px 24px; padding:14px 18px 12px;
+  border:1px solid rgba(0,217,255,.55);
+  background:
+    linear-gradient(var(--c),var(--c)) left top / var(--k) 2px, linear-gradient(var(--c),var(--c)) left top / 2px var(--k),
+    linear-gradient(var(--c),var(--c)) right top / var(--k) 2px, linear-gradient(var(--c),var(--c)) right top / 2px var(--k),
+    linear-gradient(var(--c),var(--c)) left bottom / var(--k) 2px, linear-gradient(var(--c),var(--c)) left bottom / 2px var(--k),
+    linear-gradient(var(--c),var(--c)) right bottom / var(--k) 2px, linear-gradient(var(--c),var(--c)) right bottom / 2px var(--k),
+    radial-gradient(120% 80% at 50% 0%, rgba(0,217,255,.10), transparent 60%),
+    #040a0e;
+  background-repeat:no-repeat; background-origin:border-box;
+  box-shadow:0 0 0 5px #040a0e, 0 0 0 6px rgba(0,217,255,.25), 0 0 34px rgba(0,217,255,.22), inset 0 0 40px rgba(0,217,255,.06);
+}
+/* grip ticks on the slab's left and right edges */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap::before, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap::after {
+  content:""; position:absolute; top:50%; width:4px; height:64px; margin-top:-32px; pointer-events:none;
+  background:repeating-linear-gradient(to bottom, rgba(0,217,255,.75) 0 6px, transparent 6px 10px);
+}
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap::before { left:-3px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookwrap::after { right:-3px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; font-family:var(--font-heading); font-size:.6rem; letter-spacing:.24em; text-transform:uppercase; color:#7fe9ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head { border-bottom:1px solid rgba(0,217,255,.3); padding-bottom:6px; margin-bottom:12px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head > span:first-child::before { content:""; display:inline-block; width:8px; height:8px; margin-right:9px; background:var(--marker,#ff7a1a); box-shadow:0 0 8px var(--marker,#ff7a1a); vertical-align:0; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-head > span:last-child { font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.8rem; letter-spacing:.08em; color:#e8fdff; text-shadow:0 0 6px rgba(0,217,255,.7); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot { border-top:1px solid rgba(0,217,255,.3); padding-top:6px; margin-top:12px; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot .jr-sf-bars i { display:inline-block; width:26px; height:5px; margin-left:5px; background:rgba(0,217,255,.25); border:0; border-radius:0; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot .jr-sf-bars i:first-child { background:#00d9ff; box-shadow:0 0 8px #00d9ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-stage-foot > span:last-child { font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.75rem; letter-spacing:.08em; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-book { --jr-rule:rgba(0,217,255,.55); border:0; background:transparent; box-shadow:none; gap:0; grid-template-columns:1fr 18px 1fr; }
+/* the hinge between the two screens: a segmented light */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-spine { background:repeating-linear-gradient(to bottom, rgba(0,217,255,.55) 0 14px, transparent 14px 22px) center / 2px 100% no-repeat; box-shadow:none; }
+/* each page is a screen: dark glass, thin frame, corner brackets, a readout strip on top */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page {
+  --c:rgba(0,217,255,.95); --k:12px;
+  border:1px solid rgba(0,217,255,.35); border-radius:0; color:#c9f6ff; padding:40px 22px 30px; font-family:var(--font-body);
+  background:
+    linear-gradient(var(--c),var(--c)) left top / var(--k) 2px, linear-gradient(var(--c),var(--c)) left top / 2px var(--k),
+    linear-gradient(var(--c),var(--c)) right bottom / var(--k) 2px, linear-gradient(var(--c),var(--c)) right bottom / 2px var(--k),
+    repeating-linear-gradient(to bottom, rgba(0,217,255,.03) 0 1px, transparent 1px 3px),
+    linear-gradient(to bottom, rgba(0,217,255,.07), transparent 120px),
+    #061017;
+  background-repeat:no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat, no-repeat; background-origin:border-box;
+  box-shadow:0 0 16px rgba(0,217,255,.16), inset 0 0 30px rgba(0,217,255,.06);
+}
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page::before { content:"DATA LOG"; position:absolute; top:10px; left:16px; right:16px; height:16px; font-family:var(--font-heading); font-size:.56rem; letter-spacing:.26em; color:#4fe0ff; border-bottom:1px solid rgba(0,217,255,.28); }
+/* status lights, bottom-left */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-page::after { content:""; position:absolute; left:16px; bottom:10px; width:34px; height:5px; background:linear-gradient(90deg, #00d9ff 0 8px, transparent 8px 13px, rgba(0,217,255,.45) 13px 21px, transparent 21px 26px, rgba(0,217,255,.2) 26px 34px); }
+/* page number moves into the readout strip: "PG 03" */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pageno { top:9px; bottom:auto; left:auto; right:16px; text-align:right; font-family:"Share Tech Mono",ui-monospace,monospace; font-size:.78rem; letter-spacing:.08em; color:#e8fdff; opacity:1; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pageno::before { content:"PG "; color:#4fe0ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-title { font-family:var(--font-heading); font-size:1.15rem; line-height:1.35; color:#eaffff; letter-spacing:.08em; text-transform:uppercase; text-shadow:0 0 10px rgba(0,217,255,.55); padding-left:12px; border-left:3px solid #00d9ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-body { color:#bff3ff; padding-left:12px; border-left:1px solid rgba(0,217,255,.22); background-image:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,217,255,.03) 3px 4px); background-attachment:local; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot { color:#7fe9ff; letter-spacing:.04em; border-top-color:rgba(0,217,255,.5); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-date { background:#f2d33c; color:#06121a; font-family:"Share Tech Mono",ui-monospace,monospace; font-weight:700; padding:0 7px; letter-spacing:.08em; clip-path:polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-chip, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-chip { border-color:rgba(0,217,255,.6); color:#4fe0ff; border-radius:0; background:rgba(0,217,255,.07); text-transform:uppercase; letter-spacing:.08em; clip-path:polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-chip.on:not(.static) { background:rgba(0,217,255,.35); color:#fff; border-color:#00d9ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-snap { font-family:"Share Tech Mono",ui-monospace,monospace; color:#7fb0bc; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot-actions .btn, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot-actions .jr-pinpill { border-radius:0; border-color:rgba(0,217,255,.5); background:rgba(0,217,255,.05); color:#c4f7ff; text-transform:uppercase; letter-spacing:.08em; font-size:.64rem !important; clip-path:polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot-actions .btn:hover, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot-actions .jr-pinpill:hover { background:rgba(0,217,255,.2); color:#fff; box-shadow:inset 0 0 10px rgba(0,217,255,.45); }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform { color:#bff3ff; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-subject { color:#eaffff; font-size:1.2rem; text-transform:uppercase; letter-spacing:.06em; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-formfoot { color:#7fe9ff; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-date { background:#f2d33c; color:#0a141a; font-weight:700; padding:0 7px; letter-spacing:.08em; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-foot .jr-chip { border-color:#19d3f0; color:#4fe0ff; border-radius:0; background:rgba(0,217,255,.07); text-transform:uppercase; letter-spacing:.08em; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pageno { color:#4fe0ff; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-turn { background:#071015; color:#4fe0ff; border:1px solid #19d3f0; border-radius:0; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookinfo { color:#7fe9ff; letter-spacing:.1em; text-transform:uppercase; font-size:.7rem; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-subject { color:#eaffff; font-family:var(--font-heading); font-size:1.1rem; text-transform:uppercase; letter-spacing:.08em; border-bottom-color:rgba(0,217,255,.5); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-leafform .jr-formfoot { color:#7fe9ff; border-top-color:rgba(0,217,255,.5); }
+/* slim chevron tabs on either side */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-turn { flex-basis:30px; background:linear-gradient(to bottom, transparent, rgba(0,217,255,.08) 50%, transparent); color:#4fe0ff; border:1px solid rgba(0,217,255,.35); border-radius:0; font-size:1.6rem; text-shadow:0 0 8px rgba(0,217,255,.8); clip-path:polygon(0 12px, 12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-turn:not(:disabled):hover { background:rgba(0,217,255,.18); color:#fff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-bookinfo { display:none; } /* the readout strip under the screens shows the pages */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-newslot .btn, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-newbtn { border:1px dashed rgba(0,217,255,.7); border-radius:0; background:rgba(0,217,255,.05); color:#7fe9ff; font-family:var(--font-heading); font-size:.78rem; letter-spacing:.18em; text-transform:uppercase; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-newslot .btn:hover, [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-newbtn:hover { background:rgba(0,217,255,.16); color:#fff; box-shadow:0 0 14px rgba(0,217,255,.35); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-blank { font-family:"Share Tech Mono",ui-monospace,monospace; font-style:normal; color:#7fb0bc; }
+/* full view: the same data pad, larger */
+[data-theme="tron-legacy"] #journal-modal { background:rgba(0,6,10,.72); }
+[data-theme="tron-legacy"] #journal-modal .jr-modal-box {
+  --c:#00d9ff; --k:18px; border-radius:0; border:1px solid rgba(0,217,255,.55); color:#c9f6ff;
+  background:
+    linear-gradient(var(--c),var(--c)) left top / var(--k) 2px, linear-gradient(var(--c),var(--c)) left top / 2px var(--k),
+    linear-gradient(var(--c),var(--c)) right bottom / var(--k) 2px, linear-gradient(var(--c),var(--c)) right bottom / 2px var(--k),
+    repeating-linear-gradient(to bottom, rgba(0,217,255,.03) 0 1px, transparent 1px 3px), #061017;
+  background-repeat:no-repeat, no-repeat, no-repeat, no-repeat, repeat, no-repeat; background-origin:border-box;
+  box-shadow:0 0 0 5px #040a0e, 0 0 0 6px rgba(0,217,255,.25), 0 0 40px rgba(0,217,255,.3);
+}
+[data-theme="tron-legacy"] #journal-modal .jr-modal-title { color:#eaffff; text-transform:uppercase; letter-spacing:.08em; font-size:1.15rem; text-shadow:0 0 10px rgba(0,217,255,.55); padding-left:12px; border-left:3px solid #00d9ff; }
+/* Sort & filter: a config strip */
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-sf { border-radius:0; border-color:rgba(0,217,255,.35); background:rgba(3,10,14,.7); box-shadow:inset 0 0 20px rgba(0,217,255,.05); }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-sf-top b { text-transform:uppercase; letter-spacing:.14em; font-size:.8rem; color:#7fe9ff; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-sf-grid label { text-transform:uppercase; letter-spacing:.1em; font-size:.66rem; color:#7fb0bc; }
 
 /* display modes: full (one whole entry), partial (3 per page), compact (6 titles per page) */
 :is(#journal-panel, #journal-modal) .jr-seg { display:inline-flex; align-items:center; gap:4px; margin-left:12px; }
@@ -190,7 +254,7 @@
 [data-theme="vintage"] :is(#journal-panel, #journal-modal) .jr-seg-label { color:#2b2118; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-pe .jr-title { font-size:.95rem; }
 [data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-ce .jr-title { font-size:.9rem; }
-[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-multi > .jr-item + .jr-item { border-top-color:#19d3f0; }
+[data-theme="tron-legacy"] :is(#journal-panel, #journal-modal) .jr-multi > .jr-item + .jr-item { border-top:1px solid rgba(0,217,255,.55); box-shadow:0 -1px 8px -2px rgba(0,217,255,.6); margin-top:14px; padding-top:14px; }
 
 #journal-modal { position:fixed; inset:0; z-index:20050; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; padding:16px; }
 #journal-modal .jr-modal-box { background:var(--card,#fff); color:var(--ink,#222); border:1px solid var(--line,#ccc); border-radius:var(--radius,10px); box-shadow:0 12px 40px rgba(0,0,0,.45); width:min(780px,94vw); max-height:88vh; overflow:auto; padding:18px 20px; }
@@ -581,9 +645,9 @@
     book.append(left, mk("div", "jr-spine"), right);
     const info = mk("div", "jr-bookinfo");
     // panel lettering (only the Tron: Legacy theme shows these)
-    const stageHead = mk("div", "jr-stage-head"); const shR = mk("span"); stageHead.append(mk("span", "", "GradingGrid touch app · journal · OS12"), shR);
+    const stageHead = mk("div", "jr-stage-head"); const shR = mk("span"); stageHead.append(mk("span", "", "Data pad · Teaching log"), shR);
     const stageFoot = mk("div", "jr-stage-foot"); const sfR = mk("span"); const bars = mk("span", "jr-sf-bars"); bars.append(mk("i"), mk("i"), mk("i"));
-    stageFoot.append(mk("span", "", "Docking channel"), bars, sfR);
+    stageFoot.append(mk("span", "", "Link"), bars, sfR);
     function fill() {
       [[left, spread * 2], [right, spread * 2 + 1]].forEach(([pg, idx]) => {
         pg.innerHTML = "";
@@ -601,7 +665,7 @@
       prev.disabled = lock || spread === 0; next.disabled = lock || spread >= total - 1;
       prev.title = next.title = lock ? "Save or cancel the open entry first" : "";
       info.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2} of ${total * 2} · ${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`;
-      shR.textContent = `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`; sfR.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2}`;
+      shR.textContent = `${sorted.length} entr${sorted.length === 1 ? "y" : "ies"}`; sfR.textContent = `Pages ${spread * 2 + 1}–${spread * 2 + 2} of ${total * 2}`;
     }
     function turn(dir) {
       if (turning || creating || editingId || spread + dir < 0 || spread + dir >= total) return;
