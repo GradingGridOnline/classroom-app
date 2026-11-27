@@ -3467,6 +3467,7 @@ function buildScoringToolsManageBlock() {
   menu.className = "theme-list settings-panel";
   menu.hidden = true;
   Object.entries(SCORING_TOOL_TYPES).forEach(([type, label]) => {
+    if (type === "testbank" && ScoringModule.tools.some((t) => t.type === "testbank")) return; // one Quizzes & Tests per course
     const li = document.createElement("li");
     li.className = "theme-item";
     li.textContent = label;
@@ -3767,7 +3768,7 @@ function setScoringTabLabel(btn, tool) {
   btn.textContent = tool.name;
   const sub = document.createElement("span");
   sub.className = "tab-sub";
-  sub.textContent = { table: "tracker", presentation: "presentation", testbank: "test & quiz bank" }[tool.type] || (SCORING_TOOL_TYPES[tool.type] || "").toLowerCase();
+  sub.textContent = { table: "tracker", presentation: "presentation", testbank: "quizzes · uploads" }[tool.type] || (SCORING_TOOL_TYPES[tool.type] || "").toLowerCase();
   btn.appendChild(sub);
 }
 

@@ -146,7 +146,7 @@
 <ol>
 <li><b>Categories</b> — add categories (e.g. Homework, Tests). Each has items; a category's weight is the sum of its items.</li>
 <li>Add the <b>items</b> inside each category and give each a point value.</li>
-<li><b>Scoring tools</b> — add a <b>Progress Tracker</b>, <b>Presentation Calc</b> or <b>Test &amp; Quiz Bank</b>. Each appears as a tab.</li>
+<li><b>Scoring tools</b> — add a <b>Progress Tracker</b>, <b>Presentation Calc</b> or <b>Quizzes &amp; Tests</b> (one per course). Each appears as a tab.</li>
 </ol>
 <p>Click <b>Save Scoring</b> when you finish (autosave also saves).</p>`);
 
@@ -186,16 +186,25 @@
 </ul>
 <p>You can also email each student or group a PDF report from this tool.</p>`);
 
-  add("testbank", "Scoring", "Test & Quiz Bank", `
-<h4>Add a test or quiz</h4>
+  add("testbank", "Scoring", "Quizzes & Tests", `
+<h4>Two lists</h4>
 <ul>
-<li><b>Upload scores</b> — upload a CSV or Excel file of scores, say which row is the header and which columns hold names / School IDs / scores. Students are matched to the roster.</li>
-<li><b>+ New Quiz</b> — questions with text, scored by points (multiple choice and fill-in-the-blank, in sections).</li>
-<li><b>+ New Answer Collection</b> — the same, but each question is just a number and options, to match a paper test sheet.</li>
-<li><b>+ New Research Survey</b> — like a quiz but with no points and no correct answers; meant for collecting data to export.</li>
-<li><b>+ New Formative Survey</b> — a survey you run again and again. Each QR launch is saved as a run, and Show Results compares the runs side by side (percent per option and average choice).</li>
+<li><b>Quizzes</b> — the quizzes this course uses. <b>Open</b> one (or click its name) to go to its page. <b>Remove</b> takes it out of this course only (its answers here are deleted; the quiz stays in Class Material → Quizzes). Make new quizzes, or add ones you already have, in <b>Class Material → Quizzes</b>.</li>
+<li><b>Uploaded scores</b> — upload a CSV or Excel file of scores (a paper test, another app), say which row is the header and which columns hold names / School IDs / scores. Students are matched to the roster.</li>
 </ul>
-<h4>Quiz editor (Edit this Quiz's Questions)</h4>
+<h4>A quiz's page</h4>
+<ul>
+<li>At the top: its name, type, questions and points, <b>Export ▾</b>, and <b>Counts toward</b>: the Main Scores items (and Progress Tracker columns) its scores go into. <b>Choose… / Change…</b> ticks the items.</li>
+<li>Three steps: <b>1 Questions</b> (the editor), <b>2 Give it</b> (QR forms for this course, plus the other courses using the quiz) and <b>3 Results</b>.</li>
+</ul>
+<h4>Kinds of quiz</h4>
+<ul>
+<li><b>Quiz</b> — questions with text, scored by points (multiple choice and fill-in-the-blank, in sections).</li>
+<li><b>Answer Collection</b> — the same, but each question is just a number and options, to match a paper test sheet.</li>
+<li><b>Research Survey</b> — like a quiz but with no points and no correct answers; meant for collecting data to export.</li>
+<li><b>Formative Survey</b> — a survey you run again and again. Each QR launch is saved as a run, and Show Results compares the runs side by side (percent per option and average choice).</li>
+</ul>
+<h4>Quiz editor (1 Questions)</h4>
 <ol>
 <li>Open <b>settings</b>: option label style (A, a, 1, I…), number of options, <b>time limit</b>, <b>attempts</b> allowed and which attempt counts.</li>
 <li>In each section add questions: <b>+ Multiple choice</b>, <b>+ Multiple select</b> (students tick every option that applies; tick all the correct ones, with optional <b>Partial credit</b>) <b>+ Fill in the blank</b> or <b>+ Long answer</b> (a big text box students type into; marked by hand in Results ▸ Edit mode, 0 to its points; prints as writing lines). Set points, the correct answer, and alternate accepted answers for blanks. <b>Line below</b> puts a dividing line under a question on the students\' form. The <b>Type</b> menu at the top switches the item between Quiz, Answer Collection, Research Survey and Formative Survey. <b>Duplicate</b> copies a question.</li>
@@ -204,16 +213,16 @@
 <li><b>+ Paragraph</b> adds a text box with no question number (a reading passage). Use its <b>Add question</b> menu to attach ordinary questions, which keep their numbers; the box and its questions stay together as one unit. <b>+ Text box</b> adds a plain unnumbered text box for explanations or headings.</li>
 <li><b>Units:</b> an <b>Instructions</b> box starts a unit — the questions under it, up to the next Instructions box — and each question has a <b>Line below</b> button (off by default) that adds a thin dividing line after it (in the editor, the student form and printouts). An Instructions unit is drawn as a box: the instructions on top and its questions inside it; a new unit shows an empty slot until you use the box's <b>Add question</b>. Questions cannot stand alone: a section's header only has <b>+ Instructions</b>, and each box's <b>Add question</b> menu holds every question type, Paragraph and Text box. Clicking a section's heading collapses or expands it. The ▾ button on an Instructions or Paragraph box folds its questions into it; deleting an Instructions or Paragraph box deletes the questions inside it. Enter moves to the next box down. The <b>List ▾</b> button in question, Instructions, Paragraph and Text box editors puts a list marker on the line: dots, numbers, roman numerals (capital or small), triangles, or letters (capital or small); the <b>Margin</b> tick at the bottom of that menu keeps the list's text lined up under the first word when it wraps (otherwise wrapped text goes back under the marker; the margin shows on the student form and printouts), Enter continues the list and Enter on an empty item ends it, and numbers count up by themselves. <b>Question Reference:</b> drag a question's <b>Q</b> pill into any of those text boxes, or type <b>#42#</b> (the question's number between two # signs), and a reference like (Q42) appears; it changes by itself whenever the question's number changes. A <b>Text box</b> has a <b>Border</b> tick that draws a border around it. Untick <b>Show words</b> to hide the instruction text from students and printouts. On each question, <b>Add above</b> (top) and <b>Add below</b> (bottom) add a question, Paragraph, text box, or Instructions (a new unit). Question text and instructions have a small editor: <b>B</b>, <i>I</i>, <u>U</u>, AA (all caps), small caps, <b>Normal</b> (clears formatting from the selected text) and a colour picker — select the text first.</li>
 <li><b>Instructions</b> — add a text box of instructions with <b>+ Instructions</b> (section bar), or above/below one question from its <b>Instructions ▾</b> menu or the question-type menu. They show on the student form and in printouts.</li>
-<li><b>Quiz template (CSV / Excel):</b> <b>Export quiz template</b> (in the quiz editor and the Test &amp; Quiz Bank list; <b>Example sheet</b> in Class Material → Quizzes) downloads a CSV laid out for Excel: one row per item in reading order (QUIZ, SETTING, SECTION, INSTRUCTIONS, PARAGRAPH, TEXT, QUESTION) with columns for type, points, correct answer, other accepted answers, number of options, lines, line below and Option 1, 2, 3… An empty quiz gives an example sheet with notes on what to type where. Fill the sheet in (CSV or .xlsx) and click <b>Upload quiz contents</b> to create it as a new quiz (in the Library, the Library's own button creates a Library item). Anything that can't be read is listed after the upload. Formatting inside text (bold, colours) isn't carried in the sheet. In the Library's Export menu there is also a <b>Quiz template</b> entry for each item.</li>
+<li><b>Quiz sheet (CSV / Excel):</b> <b>Download as sheet</b> (in the quiz editor; <b>Example sheet</b> in Class Material → Quizzes) downloads a CSV laid out for Excel: one row per item in reading order (QUIZ, SETTING, SECTION, INSTRUCTIONS, PARAGRAPH, TEXT, QUESTION) with columns for type, points, correct answer, other accepted answers, number of options, lines, line below and Option 1, 2, 3… An empty quiz gives an example sheet with notes on what to type where. Fill the sheet in (CSV or .xlsx) and click <b>Upload quiz contents</b> to create it as a new quiz (in the Library, the Library's own button creates a Library item). Anything that can't be read is listed after the upload. Formatting inside text (bold, colours) isn't carried in the sheet. In the Library's Export menu there is also a <b>Quiz template</b> entry for each item.</li>
 <li><b>Re-order sections:</b> each section's toolbar has <b>▲ Move up</b> and <b>▼ Move down</b>. In the Print dialog, a Marksheet's <b>Section titles</b> tick shows or hides each section's title above its first question. Printed pages are broken by the app itself: a question (its text, options and answer lines), a text box or an instructions box always moves to the next page whole rather than being cut in half.</li>
 <li><b>Cover page</b> (in the Print dialog): tick <b>Add a cover page</b> to put a page on top of the booklet that hides the questions until students are told to turn it over; choose what it shows (title, course, name/ID lines, date, number of questions, total points, time allowed, number of pages) and a message, and optionally a blank back for double-sided printing. On a printed marksheet, the last question of each Instructions box has a thin line under it.</li>
-<li><b>Print</b> (in the list and the editor) opens a print dialog with a live preview: font, size, spacing, pagination, borders. A Quiz or Survey prints a question sheet; an Answer Collection prints a test booklet and/or a matching marksheet (bubbles and blanks only).</li>
+<li><b>Print</b> (in the editor) opens a print dialog with a live preview: font, size, spacing, pagination, borders. A Quiz or Survey prints a question sheet; an Answer Collection prints a test booklet and/or a matching marksheet (bubbles and blanks only).</li>
 <li>The maximum score is the total of the question points.</li>
 </ol>
-<h4>Collecting answers (QR Code ▾ menu)</h4>
+<h4>Collecting answers (2 Give it)</h4>
 <ol>
-<li><b>Launch QR Code</b> — students scan, enter their School ID, and answer on their phones (a timer shows if you set one).</li>
-<li><b>Get Responses</b> — brings answers in and grades them. <b>Close QR Code</b> ends it (get responses first).</li>
+<li><b>＋ Launch QR form</b> (<b>＋ New form</b> once there is one) — students scan, enter their School ID, and answer on their phones (a timer shows if you set one). Give each sitting its own form, e.g. “Period 2” or “Retake”; untick <b>Counts toward scores</b> to leave a form out.</li>
+<li><b>Get responses</b> — brings answers in and grades them. <b>Close</b> ends a form (get responses first).</li>
 </ol>
 <h4>Results</h4>
 <ul>
@@ -221,8 +230,8 @@
 <li><b>Results</b> — one screen with a <b>View</b> mode (sortable grid of ● / ✕, times) and an <b>Edit</b> mode: change a student's answer, fix an answer key (scores recalculate), combine a student's duplicate entries one by one or all at once. <b>Quiz stats</b> (high, low, median, average…) sit at the bottom.</li>
 <li><b>Export CSV ▾</b> — Responses, Scores per question, or Question summary, opened in Excel.</li>
 </ul>
-<h4>Sharing</h4>
-<p><b>Copy to Shared</b> puts a copy (without students) on the Shared Tests &amp; Quizzes list, visible from every course. There, <b>Add to this course</b> copies it in. Group items with <b>+ Add Section</b>, collapse sections, move items with the <b>Section</b> menu and ▲ ▼ arrows.</p>`);
+<h4>Using a quiz in other courses</h4>
+<p>A quiz exists once: in Class Material → Quizzes, <b>Use in…</b> picks the courses that use it. Fixing a quiz changes it in every one of them and re-grades their answers.</p>`);
 
   add("reportcard", "Course tabs", "Report Card", `
 <h4>Student Consultation</h4>

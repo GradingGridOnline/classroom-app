@@ -50,7 +50,7 @@ const MAX_TABLE_SUBROWS = 20;
 const SCORING_TOOL_TYPES = {
   table: "Progress Tracker",
   presentation: "Presentation Calc",
-  testbank: "Test & Quiz Bank",
+  testbank: "Quizzes & Tests",
 };
 
 function defaultScoringWeights(categories) {
@@ -322,6 +322,9 @@ const ScoringModule = {
     }
     if (this.tools.length >= MAX_SCORING_TOOLS) {
       throw new Error(`You've reached the limit of ${MAX_SCORING_TOOLS} scoring tools.`);
+    }
+    if (type === "testbank" && this.tools.some((t) => t.type === "testbank")) {
+      throw new Error("This course already has a Quizzes & Tests tab: everything goes in that one.");
     }
     const label = SCORING_TOOL_TYPES[type];
     const countOfType = this.tools.filter((t) => t.type === type).length;

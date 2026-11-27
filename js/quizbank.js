@@ -31,7 +31,6 @@
   /** The answers the quiz currently "shows": all forms combined, or just the chosen form (quiz.view). */
   const viewSubs = (q) => (q.view && q.view !== "all" ? q.submissions.filter((x) => x.form === q.view) : q.submissions);
   window.QuizViewSubs = viewSubs;
-  const formsOpen = new Map(); // quiz id → forms shown (default) or folded away
   const viewOf = new Map(); // toolId -> "build" | "results" ("review" opens Results in Edit mode)
   const resultMode = new Map(); // testId -> "view" | "edit": the one Results screen has two modes
   window.QuizBankUI = { open(toolId, testId, view) { editing.set(toolId, testId); viewOf.set(toolId, view || "build"); } };
@@ -227,7 +226,7 @@
     /** kind: "standard" (questions with text) or "answers" (Answer Collection: numbers and options only). */
     addQuizTest(toolId, name, kind) {
       const cfg = this.getTestBankConfig(toolId);
-      if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
+      if (!cfg) throw new Error("That Quizzes & Tests tab no longer exists.");
       if (cfg.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`This bank is at its limit of ${MAX_TESTS_PER_BANK} tests/quizzes.`);
       const test = {
         id: newId("test"), name: (name || "").trim() || "Untitled quiz", maxPoints: 0, sourceFile: "Quiz editor",
@@ -492,77 +491,6 @@
   };
   window.QuizFormsModule = QuizForms;
 
-  // ---------- shared tests & quizzes (one list, visible from every course) ----------
-  const MAX_SHARED_TESTS = 100;
-  const SharedTests = {
-    items: [], // [{ id, name, maxPoints, quiz | null, sourceCourseName, createdAt, section }]
-    sections: [], // [{ id, name, collapsed }]
-    loaded: false,
-    scope: "mine", // "mine" or a group id (groups are made in the Admin screen)
-    scopeLabel() { return this.scope === "mine" ? "Shared" : "the group's shared list"; },
-    async load() {
-      const data = this.scope === "mine" ? await storage.loadFile("sharedtests.json") : await window.GroupShare.loadDoc(this.scope, "tests");
-      this.items = data && Array.isArray(data.items) ? data.items : [];
-      this.sections = data && Array.isArray(data.sections) ? data.sections.filter((s) => s && s.id) : [];
-      this.loaded = true;
-    },
-    async ensureLoaded() { if (!this.loaded) await this.load(); },
-    async save() {
-      const doc = { items: this.items, sections: this.sections };
-      if (this.scope === "mine") await storage.saveFile("sharedtests.json", doc);
-      else await window.GroupShare.saveDoc(this.scope, "tests", doc);
-    },
-    kindOf(item) { return item.quiz ? (item.quiz.kind === "answers" ? "Answer Collection" : isSurveyKind(item.quiz.kind) ? "Research Survey" : item.quiz.kind === "formative" ? "Formative Survey" : "Quiz") : "Test"; },
-    /** A copy of a course's test or quiz WITHOUT students: no rows, scores, unmatched names, submitted answers or QR link. */
-    snapshot(test, courseName) {
-      const quiz = test.quiz ? ScoringModule.normalizeQuiz(test) : null;
-      return {
-        id: newId("shared"),
-        name: test.name,
-        maxPoints: quiz ? ScoringModule.quizTotal(quiz) : Number(test.maxPoints) || 0,
-        quiz: quiz ? JSON.parse(JSON.stringify({ kind: quiz.kind, settings: quiz.settings, sections: quiz.sections })) : null,
-        sourceCourseName: courseName || "",
-        createdAt: new Date().toISOString(),
-      };
-    },
-    /** Adds a copy to the shared list (re-reads the list first so other devices' changes aren't lost). */
-    async addFromCourse(test, courseName) {
-      await this.load();
-      if (this.items.length >= MAX_SHARED_TESTS) throw new Error(`The shared list is at its limit of ${MAX_SHARED_TESTS}.`);
-      this.items.push(this.snapshot(test, courseName));
-      await this.save();
-    },
-    async rename(id, name) {
-      const trimmed = (name || "").trim();
-      if (!trimmed) throw new Error("The name can't be empty.");
-      await this.load();
-      const item = this.items.find((x) => x.id === id);
-      if (item) { item.name = trimmed; await this.save(); }
-    },
-    async remove(id) {
-      await this.load();
-      this.items = this.items.filter((x) => x.id !== id);
-      await this.save();
-    },
-    /** Copies a shared item into this course's bank; the course's own students are used (nobody has answered yet). */
-    copyToCourse(toolId, item) {
-      const cfg = ScoringModule.getTestBankConfig(toolId);
-      if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
-      if (cfg.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`This bank is at its limit of ${MAX_TESTS_PER_BANK} tests/quizzes.`);
-      const test = {
-        id: newId("test"), name: item.name, maxPoints: Number(item.maxPoints) || 0,
-        sourceFile: item.quiz ? "Quiz editor" : "Shared test",
-        rows: [], scores: {}, unmatched: [],
-      };
-      if (item.quiz) {
-        test.quiz = { ...JSON.parse(JSON.stringify(item.quiz)), token: null, submissions: [], forms: [], view: "all", runs: undefined };
-        ScoringModule.normalizeQuiz(test);
-      }
-      cfg.tests.push(test);
-      return test;
-    },
-  };
-  window.SharedTestsModule = SharedTests;
 
   function flush() {
     try { if (window.GGOAutosave && window.GGOAutosave.enabled()) window.GGOAutosave.flush(); } catch (e) {}
@@ -819,7 +747,7 @@
       left.appendChild(textInput(test.name, "", (v) => { ScoringModule.renameTest(tool.id, test.id, v); rerender(); }));
     }
     left.appendChild(button("Print", "btn btn-ghost btn-small", () => window.QuizPrint && QuizPrint.open(quiz, test.name)));
-    left.appendChild(button("Export quiz template", "btn btn-ghost btn-small", () => exportTemplate(test, quiz))).title = "A CSV of this quiz laid out for Excel (an empty quiz gives an example sheet showing what to type where). Fill it in and use “Upload quiz contents” to make a new quiz from it.";
+    left.appendChild(button("Download as sheet", "btn btn-ghost btn-small", () => exportTemplate(test, quiz))).title = "A CSV of this quiz laid out for Excel (an empty quiz gives an example sheet showing what to type where). Fill it in and use “Upload quiz contents” to make a new quiz from it.";
     if (current === "results" && quiz.forms.length) { // which form's answers to show (and send to Main Scores)
       left.appendChild(h("label", "", "Showing:"));
       const vs = h("select");
@@ -1454,7 +1382,7 @@
     body.appendChild(h("p", "hint", "● green = correct, ✕ red = incorrect. Change any student's answer in its box, or fix an answer in the \"Answer key\" row — scores update instantly. Edited answers get a yellow outline and are kept when you Get Responses again."));
 
     if (viewSubs(quiz).length === 0) {
-      body.appendChild(h("p", "hint", "No answers yet. Use QR / Forms in the Tests & Quizzes list to launch a QR code, then Results → Get Responses."));
+      body.appendChild(h("p", "hint", "No answers yet. Open Give it to launch a QR form, then use Get responses."));
       return;
     }
     const stats = statsBox(quiz);
@@ -1869,7 +1797,7 @@
   function parseSheet(rows) {
     const warnings = [];
     const hi = rows.findIndex((r) => sheetNorm(r[0]).toLowerCase() === "kind");
-    if (hi < 0) throw new Error("couldn't find the header row (its first cell must say “Kind”). Use “Export quiz template” to get a sheet with the right layout.");
+    if (hi < 0) throw new Error("couldn't find the header row (its first cell must say “Kind”). Use “Download as sheet” (or “Example sheet” in Class Material → Quizzes) to get a sheet with the right layout.");
     const head = rows[hi].map(sheetNorm), col = (re) => head.findIndex((x) => re.test(x));
     const C = { text: col(/^text$/i), type: col(/^type/i), pts: col(/^points?$/i), ok: col(/^correct/i), more: col(/^other/i), nopt: col(/^number of options/i), lines: col(/^lines?$/i), line: col(/^line below/i), grp: col(/^in paragraph/i), border: col(/^border/i), hide: col(/^hide/i) };
     const optCols = []; head.forEach((x, i) => { const m = /^option\s*(\d+)$/i.exec(x); if (m) optCols.push([Number(m[1]), i]); }); optCols.sort((a, b) => a[0] - b[0]);
@@ -1943,7 +1871,7 @@
   const sheetSummary = (p) => `Created “${p.name}” with ${p.sections.reduce((a, s) => a + s.questions.length, 0)} question(s) in ${p.sections.length} section(s).` + (p.warnings.length ? `\n\nCheck these:\n• ${p.warnings.slice(0, 12).join("\n• ")}${p.warnings.length > 12 ? `\n• …and ${p.warnings.length - 12} more` : ""}` : "");
   function exampleDownload(kind) {
     const quiz = { kind, settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1 }, sections: [{ id: "s", title: "", questions: [], notes: [] }] };
-    rawCsv(`quiz template - ${KIND_NAME[kind] || "Quiz"}.csv`, sheetRows(quiz, ""));
+    rawCsv(`quiz sheet - ${KIND_NAME[kind] || "Quiz"}.csv`, sheetRows(quiz, ""));
   }
   window.QuizSheet = { rows: sheetRows, parse: parseSheet, pick: pickSheet, summary: sheetSummary, example: exampleDownload, download: (name, rows, fmt) => window.QuizExport.download(name, rows, fmt) };
   function exportTemplate(test, quiz) { downloadCsv(safeName(test.name, "template"), sheetRows(quiz, test.name)); }
@@ -2019,7 +1947,7 @@
     body.appendChild(h("p", "hint", "Each time you launch a new QR code, the earlier answers are saved as a run. Compare runs below to see what changed. The current run is saved automatically when you launch the next QR code, or now with the button."));
     const bar = h("div", "qz-actions");
     bar.appendChild(button("Save current answers as a run", "btn btn-primary btn-small", () => {
-      if (quiz.token) { alert("Close the QR code first (Test & Quiz Bank → QR / Forms → Close), so no more answers arrive."); return; }
+      if (quiz.token) { alert("Close the QR code first (Give it → Close), so no more answers arrive."); return; }
       if (!quiz.submissions.length) { alert("There are no current answers to save."); return; }
       archiveRun(quiz); rerender();
     }));
@@ -2084,7 +2012,7 @@
     container.appendChild(section);
     if (quiz.kind === "formative") renderFormativeRuns(body, tool, container, test, quiz);
     if (viewSubs(quiz).length === 0) {
-      body.appendChild(h("p", "hint", "No answers yet. Use QR / Forms in the Tests & Quizzes list to launch a QR code, then Results → Get Responses."));
+      body.appendChild(h("p", "hint", "No answers yet. Open Give it to launch a QR form, then use Get responses."));
       return;
     }
     const bar = h("div", "qz-actions");
@@ -2176,7 +2104,7 @@
     container.appendChild(section);
 
     if (viewSubs(quiz).length === 0) {
-      body.appendChild(h("p", "hint", "No answers yet. Use QR / Forms in the Tests & Quizzes list to launch a QR code, then Results → Get Responses."));
+      body.appendChild(h("p", "hint", "No answers yet. Open Give it to launch a QR form, then use Get responses."));
       return;
     }
     body.appendChild(h("p", "hint", "Click a column heading (Student, Attempt, Time, Score or a question) to sort. Hover over a symbol to see the student's answer. To change an answer, fix the answer key or combine entries, switch to Edit mode above."));
@@ -2375,101 +2303,6 @@
     return btn;
   }
 
-  // ---------- the shared list section (below the Tests & Quizzes list) ----------
-  function buildSharedSection(tool, container) {
-    const rerender = () => renderScoringToolView(tool, container);
-    const { section, body } = makePresSection("Shared Tests & Quizzes");
-    section.classList.add("qz-sec-shared");
-    body.appendChild(h("p", "hint", "This list is the same in every course. \"Add to this course\" copies the whole test or quiz here (this course's students are used). To put a copy of one of this course's tests or quizzes on this list, use \"Copy to Shared\" in its row above."));
-    const statKey = `${tool.id}|shared`;
-    const stat = h("p", "result", statusMsg.get(statKey) || "");
-    const say = (t) => { statusMsg.set(statKey, t); stat.textContent = t; };
-    body.appendChild(stat);
-    const list = h("div");
-    list.appendChild(h("p", "hint", "Loading shared tests…"));
-    // Group picker: shown only if the administrator has put this user in a group
-    const scopeRow = h("p", "hint");
-    scopeRow.hidden = true;
-    body.appendChild(scopeRow);
-    if (window.GroupShare) {
-      window.GroupShare.myGroups().then((groups) => {
-        if (!groups.length) { SharedTests.scope = "mine"; return; }
-        scopeRow.hidden = false;
-        scopeRow.appendChild(document.createTextNode("Showing: "));
-        const sel = document.createElement("select");
-        const o0 = document.createElement("option"); o0.value = "mine"; o0.textContent = "My own shared list"; sel.appendChild(o0);
-        groups.forEach((g) => { const o = document.createElement("option"); o.value = g.id; o.textContent = `Group: ${g.name}`; sel.appendChild(o); });
-        if (groups.some((g) => g.id === SharedTests.scope)) sel.value = SharedTests.scope; else SharedTests.scope = "mine";
-        sel.addEventListener("change", () => {
-          SharedTests.scope = sel.value; SharedTests.loaded = false;
-          list.textContent = ""; list.appendChild(h("p", "hint", "Loading…"));
-          SharedTests.ensureLoaded().then(draw).catch((err) => { list.textContent = ""; list.appendChild(h("p", "hint", `Couldn't load: ${err.message}`)); });
-        });
-        scopeRow.appendChild(sel);
-        scopeRow.appendChild(document.createTextNode("  (\"Copy to Shared\" above adds to the list shown here.)"));
-        if (SharedTests.scope !== "mine" && !SharedTests.loaded) { SharedTests.ensureLoaded().then(draw).catch(() => {}); }
-      });
-    }
-
-    const draw = () => {
-      list.textContent = "";
-      list.appendChild(SectionedBank.build({
-        sections: SharedTests.sections,
-        items: SharedTests.items,
-        headers: ["Test / Quiz", "Max score", "Questions", "Type", "From course", "Section", "Order", ""],
-        emptyText: 'Nothing shared yet — use "Copy to Shared" on a test or quiz above.',
-        persist: () => SharedTests.save(),
-        redraw: draw,
-        buildRow(item, hp) {
-          const tr = h("tr");
-          const nameTd = h("td");
-          nameTd.appendChild(textInput(item.name, "", async (v) => {
-            try {
-              await SharedTests.rename(item.id, v);
-              say("Renamed.");
-            } catch (err) { say(`Couldn't do that: ${err.message}`); }
-            draw();
-          }));
-          tr.appendChild(nameTd);
-          tr.appendChild(h("td", "", item.maxPoints ? String(item.maxPoints) : "—"));
-          tr.appendChild(h("td", "", item.quiz ? String(item.quiz.sections.reduce((a, sec) => a + (sec.questions || []).length, 0)) : "—"));
-          tr.appendChild(h("td", "", SharedTests.kindOf(item)));
-          tr.appendChild(h("td", "hint", item.sourceCourseName || "—"));
-          const secTd = h("td");
-          secTd.appendChild(hp.sectionSelect(item));
-          tr.appendChild(secTd);
-          const orderTd = h("td");
-          orderTd.appendChild(hp.arrows(item));
-          tr.appendChild(orderTd);
-          const actions = h("td");
-          actions.appendChild(button("Add to this course", "btn btn-primary btn-small", () => {
-            try {
-              SharedTests.copyToCourse(tool.id, item);
-              flush();
-              say(`"${item.name}" added to this course.`);
-            } catch (err) { say(`Couldn't do that: ${err.message}`); return; }
-            rerender();
-          }));
-          actions.appendChild(button("Delete", "btn btn-ghost btn-small", async () => {
-            if (!confirm(`Remove "${item.name}" from the shared list? Copies already in courses are not affected.`)) return;
-            try {
-              await SharedTests.remove(item.id);
-              say(`"${item.name}" removed from the shared list.`);
-            } catch (err) { say(`Couldn't do that: ${err.message}`); }
-            draw();
-          }));
-          tr.appendChild(actions);
-          return tr;
-        },
-      }));
-    };
-    SharedTests.ensureLoaded().then(draw).catch((err) => {
-      list.textContent = "";
-      list.appendChild(h("p", "hint", `Couldn't load the shared list: ${err.message}`));
-    });
-    return section;
-  }
-
   // ---------- one combined section: the bank's own view + quiz buttons ----------
   function mergeBankView(tool, container) {
     const rerender = () => renderScoringToolView(tool, container);
@@ -2570,6 +2403,90 @@
         if (td.colSpan === 6) td.colSpan = 7;
       });
     }
+
+    // Two lists: this course's quizzes (open one to give it and see results), and scores uploaded from a file.
+    if (!table || !tbody) return;
+    const quizRows = [], fileRows = [];
+    let bucket = null;
+    Array.from(tbody.children).forEach((tr) => {
+      const at = mains.indexOf(tr);
+      if (at >= 0) bucket = tests[at] && tests[at].quiz ? quizRows : fileRows;
+      if (bucket) bucket.push(tr); else tr.remove(); // (the old "nothing yet" row)
+    });
+    const qTable = h("table", "roster-table qz-quiz-table"), qHead = h("thead"), qhr = h("tr"), qBody = h("tbody");
+    ["Quiz", "Type", "Max score", "Students scored", "Not matched", "QR", ""].forEach((x) => qhr.appendChild(h("th", "", x)));
+    qHead.appendChild(qhr); qTable.append(qHead, qBody);
+    quizRows.forEach((tr) => qBody.appendChild(tr));
+    if (!quizRows.length) { const tr = h("tr"), td = h("td", "hint", "No quizzes in this course yet. Make one, or add one you already have, in Class Material → Quizzes."); td.colSpan = 7; tr.appendChild(td); qBody.appendChild(tr); }
+    // quiz rows: "Remove" takes the quiz out of this course; the quiz itself stays in Class Material → Quizzes
+    quizRows.forEach((tr) => {
+      const at = mains.indexOf(tr); if (at < 0) return;
+      const t = tests[at], del = Array.from(tr.querySelectorAll("button")).find((b) => b.textContent.trim() === "Delete");
+      if (!del) return;
+      const rm = button("Remove", "btn btn-ghost btn-small", () => {
+        const q = ScoringModule.normalizeQuiz(t);
+        if (q.token) { alert("Close its QR code first (Open → Give it → Close)."); return; }
+        const n = new Set(q.submissions.map((x) => x.sid)).size;
+        if (!confirm(`Remove “${t.name}” from this course?${n ? `\n\n${n} student(s)' answers and scores for it here will be deleted.` : ""}\nThe quiz stays in Class Material → Quizzes, and other courses keep it.`)) return;
+        ScoringModule.removeTest(tool.id, t.id); flush(); rerender();
+      });
+      rm.title = "Take this quiz out of this course (it stays in Class Material → Quizzes)";
+      del.replaceWith(rm);
+    });
+    // uploaded scores keep the original table, without the Type column
+    fileRows.forEach((tr) => { if (mains.includes(tr) && tr.children.length === 7) tr.children[1].remove(); else tr.querySelectorAll("td[colspan]").forEach((td) => { if (td.colSpan === 7) td.colSpan = 6; }); });
+    if (headRow && headRow.children.length === 7) { headRow.children[1].remove(); headRow.children[0].textContent = "Test"; }
+    if (!fileRows.length) { const tr = h("tr"), td = h("td", "hint", "No uploaded scores yet. Use “Upload CSV / Excel” above for a paper test or another app's scores."); td.colSpan = 6; tr.appendChild(td); tbody.appendChild(tr); }
+
+    const { section: qs, body: qb } = makePresSection("Quizzes");
+    qs.classList.add("qz-sec-list");
+    qb.appendChild(h("p", "hint", "The quizzes this course uses. Open one to give it by QR code and see the results. Make new quizzes, or add ones you already have, in Class Material → Quizzes."));
+    const qbar = h("div", "panel-toolbar-buttons");
+    const openQ = Array.from(body.querySelectorAll("button")).find((b) => b.textContent.trim() === "Open Quizzes");
+    if (openQ) qbar.appendChild(openQ);
+    qb.append(qbar, stat, qTable);
+    section.before(qs);
+    const head = section.querySelector(".pres-section-head"); if (head) head.textContent = "Uploaded scores";
+    if (hint) hint.textContent = "Scores from a CSV or Excel file (a paper test, another app). Upload one test at a time; then use it in Main Scores (an item's Sources) or a Progress Tracker column.";
+  }
+
+  // ---------- one Quizzes & Tests tab per course ----------
+  /** Folds extra Quizzes & Tests tabs into the first one, moving their tests/quizzes and every Main Scores and
+   *  Progress Tracker link with them. A tab is left alone if an item already pulls from both (it couldn't be merged
+   *  without changing a grade) or the result would be too big. Also renames the old default name. True if anything changed. */
+  ScoringModule.mergeTestBanks = function () {
+    let changed = false;
+    const banks = this.tools.filter((t) => t.type === "testbank");
+    if (banks.length && /^Test & Quiz Bank$/.test(banks[0].name || "")) { banks[0].name = "Quizzes & Tests"; changed = true; }
+    if (banks.length < 2) return changed;
+    const keep = banks[0], keepCfg = this.getTestBankConfig(keep.id);
+    const items = (this.categories || []).flatMap((c) => c.items || []);
+    for (const extra of banks.slice(1)) {
+      const cfg = this.getTestBankConfig(extra.id);
+      if (!cfg || keepCfg.tests.length + cfg.tests.length > MAX_TESTS_PER_BANK) continue;
+      if (items.some((i) => { const src = i.scoreSources; return src && src.testSelections && src.testSelections[extra.id] && src.testSelections[keep.id]; })) continue;
+      keepCfg.tests.push(...cfg.tests);
+      items.forEach((i) => {
+        const src = i.scoreSources; if (!src) return;
+        if (src.testSelections && src.testSelections[extra.id]) { src.testSelections[keep.id] = src.testSelections[extra.id]; delete src.testSelections[extra.id]; }
+        if (src.toolWeights && src.toolWeights[extra.id] != null) { if (!(Number(src.toolWeights[keep.id]) > 0)) src.toolWeights[keep.id] = src.toolWeights[extra.id]; delete src.toolWeights[extra.id]; }
+      });
+      this.tools.forEach((t) => {
+        if (t.type !== "table" || !t.config) return;
+        (Array.isArray(t.config.projects) ? t.config.projects : [t.config]).forEach((pc) => (pc.columns || []).forEach((col) => { if (col.testSource && col.testSource.toolId === extra.id) col.testSource.toolId = keep.id; }));
+      });
+      this.tools = this.tools.filter((t) => t !== extra);
+      changed = true;
+    }
+    return changed;
+  };
+  {
+    const origLoad = ScoringModule.load;
+    ScoringModule.load = async function (courseId) {
+      const r = await origLoad.apply(this, arguments);
+      try { if (!isTmpCourse() && this.mergeTestBanks()) await this.save(); } catch (e) {}
+      return r;
+    };
   }
 
   // ---------- hook into the Test & Quiz Bank view ----------
@@ -2587,9 +2504,8 @@
     ScoringModule.testBankTests(tool.id).forEach((t) => { if (t.quiz) ScoringModule.normalizeQuiz(t); });
     original(tool, container);
     mergeBankView(tool, container);
-    // The Quiz Library (js/qtsbank.js) replaces the old Shared list here: it holds every course's tests plus the Independent list.
-    if (window.QTSBank && QTSBank.buildSection) { SharedTests.scope = "mine"; container.appendChild(QTSBank.buildSection(tool, container)); }
-    else container.appendChild(buildSharedSection(tool, container));
+    // Keeps this course's quizzes in step with Class Material → Quizzes (a quiz fixed elsewhere arrives here).
+    if (window.QTSBank && QTSBank.buildSection) QTSBank.buildSection(tool, container);
   };
 })();
 

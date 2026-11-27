@@ -2,7 +2,7 @@
 // Rules (Nov 2026): a quiz exists once and has no per-course versions. Every course quiz is linked to a Library item;
 // an edit made anywhere reaches every course using it, and answers already given are re-graded (a course whose QR code
 // is open waits until it closes). A variation is a separate quiz (Duplicate). The notes below describe the engine.
-// A tab to the right of Journal, and the same grid inside every course's Test & Quiz Bank. A course "uses" a Library item:
+// Shown in Class Material → Quizzes (js/classmaterial-quiz.js). A course "uses" a Library item:
 // it keeps its own students' answers, scores, QR code and name, plus a working copy of the questions (libId / libRev /
 // libHash). Editing a used quiz's questions in a course (or "Edit questions…" in the Library) updates the item; courses
 // with no student answers follow automatically, courses with answers show "Update available" and one "Update (re-grade)"
@@ -20,16 +20,6 @@
   const live = (courseId) => ScoringModule.currentCourseId === courseId;
   const LIB = "__lib__", LIB_FILE = "quizlibrary.json", OLD_FILE = "sharedtests.json", MAX_LIB = 300;
   const day = (iso) => (iso ? String(iso).slice(0, 10) : "");
-
-  // ---------- the tab + panel ----------
-  const reportBtn = document.getElementById("tab-reportcard-btn");
-  const reportPanel = document.getElementById("reportcard-panel");
-  if (!reportBtn || !reportPanel) return;
-  const tabBtn = mk("button", "tab-btn", "Quiz Library"); tabBtn.id = "tab-qts-btn";
-  (document.getElementById("tab-journal-btn") || reportBtn).after(tabBtn);
-  tabBtn.style.display = "none"; // the Quiz Library now lives inside Class Material (js/classmaterial-quiz.js)
-  const panel = mk("div", "tab-panel"); panel.id = "qts-panel"; panel.hidden = true;
-  reportPanel.after(panel);
 
   const css = mk("style");
   css.textContent = `
@@ -303,7 +293,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       let id = toolId;
       if (id === "__new") id = ScoringModule.addTool("testbank").id;
       const cfg = ScoringModule.getTestBankConfig(id);
-      if (!cfg) throw new Error("That Test & Quiz Bank no longer exists.");
+      if (!cfg) throw new Error("That course's Quizzes & Tests tab no longer exists.");
       if (cfg.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`That bank is at its limit of ${MAX_TESTS_PER_BANK}.`);
       cfg.tests.push(test); flush(); return id;
     }
@@ -313,10 +303,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (toolId === "__new") {
       if (data.tools.length >= MAX_SCORING_TOOLS) throw new Error(`That course already has ${MAX_SCORING_TOOLS} scoring tabs.`);
       const n = data.tools.filter((t) => t.type === "testbank").length;
-      tool = { id: rid("tool"), type: "testbank", name: n === 0 ? "Test & Quiz Bank" : `Test & Quiz Bank ${n + 1}`, config: { tests: [] } };
+      tool = { id: rid("tool"), type: "testbank", name: n === 0 ? "Quizzes & Tests" : `Quizzes & Tests ${n + 1}`, config: { tests: [] } };
       data.tools.push(tool);
     } else tool = data.tools.find((t) => t.id === toolId);
-    if (!tool) throw new Error("That Test & Quiz Bank no longer exists.");
+    if (!tool) throw new Error("That course's Quizzes & Tests tab no longer exists.");
     if (!tool.config || typeof tool.config !== "object") tool.config = {};
     if (!Array.isArray(tool.config.tests)) tool.config.tests = [];
     if (tool.config.tests.length >= MAX_TESTS_PER_BANK) throw new Error(`That bank is at its limit of ${MAX_TESTS_PER_BANK}.`);
@@ -356,7 +346,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   async function applyUpdate(ref, item) {
     const probe = await fullOf(ref);
     if (!probe) throw new Error("That item no longer exists.");
-    if (probe.quiz && probe.quiz.token) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR / Forms → Close)");
+    if (probe.quiz && probe.quiz.token) throw new Error("its QR code is open — close it first (open the quiz → Give it → Close)");
     let students = null;
     if (!live(ref.courseId) && probe.quiz && (probe.quiz.submissions || []).length) {
       const r = await storage.loadFile(`roster-${ref.courseId}.json`);
@@ -370,18 +360,6 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       else if (t.quiz.submissions.length) detachedRegrade(t, students);
       t.libHash = hashOf(t);
     });
-  }
-  /** What an update will change, in words. */
-  async function impactText(target, item) {
-    const t = await fullOf(target);
-    if (!t || !t.quiz) return "";
-    const old = contentOf(t);
-    const count = (secs) => secs.reduce((a, sec) => a + (sec.questions || []).length, 0);
-    const students = new Set((t.quiz.submissions || []).map((x) => x.sid)).size;
-    let msg = `\n\nQuestions: ${count(old.sections)} → ${count(item.sections || [])}. Max score: ${old.max} → ${item.max}.`;
-    if (students) msg += `\n${students} student(s) have answered it. Their answers are kept and regraded against the new questions (a new question counts as unanswered), so scores can change.`;
-    if (t.libHash && hashOf(t) !== t.libHash) msg += "\nThis course's own changes to the questions will be replaced. (To keep them, choose “Make my own copy” instead.)";
-    return msg;
   }
   /** Brings every course quiz up to its Library item's newest questions, re-grading answers already given.
    *  Only a course whose QR code is open (or whose own edits haven't reached the Library yet) waits. */
@@ -423,11 +401,6 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     if (r.updated) parts.push(`${r.updated} other ${r.updated === 1 ? "course" : "courses"} updated${r.regraded ? ` (${r.regraded} student${r.regraded === 1 ? "" : "s"} re-graded)` : ""}`);
     if (r.waiting) parts.push(`${r.waiting} waiting for ${r.waiting === 1 ? "its" : "their"} QR code to close`);
     return `“${item.name}” saved${parts.length ? ` — ${parts.join(", ")}` : ""}.`;
-  }
-  /** Makes a course quiz independent of the Library (one way: it can't rejoin). Kept for old data paths; the UI no longer offers it. */
-  async function makeOwn(ref) {
-    await editCourseTest(ref, (t) => { delete t.libId; delete t.libRev; delete t.libHash; });
-    return "That quiz is now its own copy. Library changes no longer reach it.";
   }
   /** Puts a course quiz into the Library (new item) and links it. Returns the item. */
   async function addToLibrary(ref) {
@@ -622,383 +595,10 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
   }
 
 
-  // ---------- adding to courses ----------
-  /** src: a Library item { courseId: LIB, id } or a course quiz { courseId, toolId, id } (it is added to the Library first). */
-  async function addDialog(src) {
-    const model = await loadModel({});
-    const full = await fullOf(src);
-    if (!full) throw new Error("That item no longer exists.");
-    if (!full.quiz) throw new Error("Only quizzes and surveys can be added to courses.");
-    const fromLib = src.courseId === LIB;
-    const itemId = fromLib ? src.id : full.libId;
-    const using = new Set(model.rows.filter((r) => itemId && r.d.libId === itemId).map((r) => r.courseId));
-    const picked = await dialog((box, done) => {
-      box.appendChild(mk("h3", "", `Add “${full.name}” to courses`));
-      box.appendChild(mk("p", "hint", fromLib || (full.libId && itemById(full.libId))
-        ? "Each course gets its own quiz to run: students' answers and scores stay in that course. The questions stay in the Library, so later changes reach every course that uses it."
-        : "This quiz is put in the Library first. Each course then gets its own quiz to run (answers and scores stay in that course), and later changes to the questions reach every course that uses it."));
-      const boxes = [];
-      model.courses.forEach((c) => {
-        const l = mk("label", "qts-check"); const cb = mk("input"); cb.type = "checkbox"; cb.value = c.id;
-        l.append(cb, mk("span", "", c.name + (c.id === src.courseId ? " (this course — adds a second copy)" : using.has(c.id) ? " (already uses it)" : "")));
-        boxes.push(cb); box.appendChild(l);
-      });
-      const msg = mk("p", "hint"); box.appendChild(msg);
-      const acts = mk("div", "qts-actions");
-      const cancel = mk("button", "btn btn-ghost", "Cancel"); cancel.type = "button"; cancel.addEventListener("click", () => done(null));
-      const go = mk("button", "btn btn-primary", "Add"); go.type = "button";
-      go.addEventListener("click", () => { const ids = boxes.filter((b) => b.checked).map((b) => b.value); if (!ids.length) { msg.textContent = "Tick at least one course."; return; } done(ids); });
-      acts.append(cancel, go); box.appendChild(acts);
-    });
-    if (!picked) return "";
-    let item;
-    if (fromLib) { await libLoad(true); item = itemById(src.id); } else item = await addToLibrary(src);
-    if (!item) throw new Error("That Library item no longer exists.");
-    const errs = []; let n = 0;
-    for (const cid of picked) {
-      try {
-        const course = model.courses.find((x) => x.id === cid);
-        const toolId = cid === src.courseId && src.toolId ? src.toolId : course && course.tools.length ? course.tools[0].toolId : "__new";
-        await courseAdd(cid, toolId, useOf(item, cid === src.courseId ? `${item.name} (copy)` : item.name));
-        n++;
-      } catch (e) { errs.push(`${(model.courses.find((c) => c.id === cid) || {}).name || cid}: ${e.message}`); }
-    }
-    return `Added “${item.name}” to ${n} course${n === 1 ? "" : "s"}.${errs.length ? ` Couldn't add to: ${errs.join("; ")}` : ""}`;
-  }
-  /** One Library item (or a course quiz, which is put in the Library first) into one specific Test & Quiz Bank. */
-  async function useIn(src, courseId, toolId) {
-    let item;
-    if (src.courseId === LIB) { await libLoad(true); item = itemById(src.id); } else item = await addToLibrary(src);
-    if (!item) throw new Error("That Library item no longer exists.");
-    await courseAdd(courseId, toolId, useOf(item, item.name));
-    return `Added “${item.name}” to this course.`;
-  }
-  async function updateOne(row) {
-    await libLoad(true);
-    const item = itemById(row.d.libId);
-    if (!item) throw new Error("the Library item no longer exists");
-    if (row.d.qr) throw new Error("its QR code is open — close it first (Test & Quiz Bank → QR / Forms → Close)");
-    if (row.d.answers > 0 || row.d.edited) {
-      if (!confirm(`Update “${row.d.name}”${row.courseName ? ` (${row.courseName})` : ""} to the newest version of “${item.name}”?${await impactText(row, item)}`)) return "";
-    }
-    await applyUpdate(row, item);
-    return `Updated “${row.d.name}”.`;
-  }
-  async function updateAll(item, uses) {
-    const stale = uses.filter((r) => isStale(r.d, item));
-    const withAns = stale.filter((r) => r.d.answers > 0);
-    if (!stale.length) return "Everything is already up to date.";
-    if (!confirm(`Update ${stale.length} course${stale.length === 1 ? "" : "s"} to the newest “${item.name}”?${withAns.length ? `\n\n${withAns.length} of them have student answers, which are kept and regraded against the new questions (scores can change).` : ""}`)) return "";
-    let n = 0; const skipped = [];
-    for (const r of stale) { try { await applyUpdate(r, item); n++; } catch (e) { skipped.push(`${r.courseName}: ${e.message}`); } }
-    return `Updated ${n}.${skipped.length ? ` Skipped — ${skipped.join("; ")}` : ""}`;
-  }
-
-  // ---------- the Library grid (tab, and inside each Test & Quiz Bank) ----------
-  // ctx (optional, inside a Test & Quiz Bank): { toolId, rerender }
-  let pendingMsg = "";
-  const openUses = new Set(); // Library item ids whose "Used in" list is open
-  const COLS = [["name", "Name"], ["type", "Type"], ["q", "Questions"], ["max", "Max"], ["used", "Used in"], ["status", "Status"]];
+  // ---------- small helpers ----------
   const kindKey = (k) => (k === "answers" ? "answers" : k === "formative" ? "formative" : isSurveyKind(k) ? "survey" : "quiz");
   const qCount = (item) => (item.sections || []).reduce((a, sec) => a + (sec.questions || []).length, 0);
   const courseWord = (n) => `${n} course${n === 1 ? "" : "s"}`;
-  function useStatus(d, item) {
-    if (!isStale(d, item)) return "Up to date";
-    return d.qr ? "Update available (close its QR first)" : d.edited ? "Update available (has its own changes)" : "Update available";
-  }
-  function makeView(host, ctx) {
-    ctx = ctx || {};
-    let model = null, busy = false, statusEl = null;
-    const F = { q: "", course: "", type: "", status: "" };
-    let sort = [{ key: "name", dir: 1 }];
-    const inTool = !!ctx.toolId;
-    host.classList.add("qts-root");
-    const say = (t) => { if (statusEl) statusEl.textContent = t; };
-
-    async function refresh(msg, force, rebuild) {
-      if (busy) return;
-      busy = true;
-      host.textContent = "";
-      host.appendChild(mk("p", "hint", "Loading your Library…"));
-      try {
-        model = await loadModel({ flush: !inTool, rebuild: !!rebuild });
-        const r = await syncPass();
-        if (r.updated) { model = await loadModel({}); msg = msg || `${courseWord(r.updated)} updated to the newest version.`; }
-      } catch (e) { host.textContent = ""; host.appendChild(mk("p", "hint", `Couldn't load: ${e.message}`)); busy = false; return; }
-      busy = false;
-      render(msg);
-    }
-    const changed = async (msg) => {
-      try { await Index.flush(); } catch (e) {}
-      if (inTool && ctx.rerender) { pendingMsg = msg || ""; ctx.rerender(); } else await refresh(msg);
-    };
-    const run = (fn) => async () => { try { const m = await fn(); if (m !== undefined && m !== "") await changed(m); else if (m === "") say(""); } catch (e) { say(`Couldn't do that: ${e.message}`); } };
-
-    function gridRows() {
-      const out = [];
-      model.items.forEach((item) => {
-        const uses = model.rows.filter((r) => r.d.libId === item.id);
-        const stale = uses.filter((r) => isStale(r.d, item));
-        out.push({ kind: "item", item, uses, stale, name: item.name, type: kindKey(item.kind), q: qCount(item), max: item.kind === "survey" || item.kind === "formative" ? null : item.max, status: stale.length ? "Update available" : "Up to date" });
-      });
-      model.rows.forEach((r) => {
-        if (r.d.libId && itemById(r.d.libId)) return;
-        out.push({ kind: "own", r, name: r.d.name, type: r.d.kind, q: r.d.questions, max: r.d.max, status: "Own copy" });
-      });
-      return out;
-    }
-    function visibleRows() {
-      const q = F.q.toLowerCase();
-      const rows = gridRows().filter((g) => {
-        if (q && !String(g.name).toLowerCase().includes(q)) return false;
-        if (F.course && !(g.kind === "item" ? g.uses.some((u) => u.courseId === F.course) : g.r.courseId === F.course)) return false;
-        if (F.type && g.type !== F.type) return false;
-        if (F.status && g.status !== F.status) return false;
-        return true;
-      });
-      const val = (g, k) => {
-        switch (k) {
-          case "name": return String(g.name).toLowerCase();
-          case "type": return g.type;
-          case "q": return g.q == null ? -1 : g.q;
-          case "max": return g.max == null ? -1 : g.max;
-          case "used": return g.kind === "item" ? new Set(g.uses.map((u) => u.courseId)).size : 1;
-          default: return g.status;
-        }
-      };
-      rows.sort((a, b) => { for (const s of sort) { const x = val(a, s.key), y = val(b, s.key); if (x !== y) return (x < y ? -1 : 1) * s.dir; } return String(a.name).localeCompare(String(b.name)); });
-      return rows;
-    }
-
-    function itemMenu(g) {
-      const item = g.item, ref = { courseId: LIB, toolId: "", id: item.id };
-      const items = [];
-      if (inTool) items.push({ label: "Use in this course", onClick: run(() => useIn(ref, ScoringModule.currentCourseId, ctx.toolId)) });
-      items.push({ label: "Add to courses…", onClick: run(() => addDialog(ref)) });
-      items.push({ label: "Edit questions…", onClick: run(() => openTplEditor({ id: item.id })) });
-      if (g.stale.length) items.push({ label: "Update all courses (re-grade)", onClick: run(() => updateAll(item, g.uses)) });
-      items.push("-",
-        { label: "Rename…", onClick: run(async () => {
-          const v = prompt("New name:", item.name); if (v === null || !v.trim()) return "";
-          await libLoad(true); const it = itemById(item.id); if (it) { it.name = v.trim(); await libSave(); } return "Renamed.";
-        }) },
-        { label: "Delete from Library…", onClick: run(async () => {
-          if (!confirm(`Delete “${item.name}” from the Library?\n\n${g.uses.length ? `The ${g.uses.length} course quiz${g.uses.length === 1 ? "" : "zes"} using it keep their questions and students' answers, and become own copies.` : "No course uses it."}`)) return "";
-          await libLoad(true);
-          lib.items = lib.items.filter((x) => x.id !== item.id); await libSave();
-          for (const u of g.uses) { try { await makeOwn(u); } catch (e) {} }
-          return "Deleted from the Library.";
-        }) });
-      const ex = exportMenuItems({ courseId: LIB, toolId: "", id: item.id, d: { kind: kindKey(item.kind) } }, say);
-      if (ex.length) items.push("-", ...ex);
-      return items;
-    }
-    function ownMenu(g) {
-      const r = g.r, d = r.d, items = [];
-      if (d.kind !== "test") {
-        if (inTool && r.courseId !== ScoringModule.currentCourseId) items.push({ label: "Use in this course (adds it to the Library)", onClick: run(() => useIn(r, ScoringModule.currentCourseId, ctx.toolId)) });
-        items.push({ label: "Add to courses… (adds it to the Library)", onClick: run(() => addDialog(r)) });
-        items.push({ label: "Add to the Library only", onClick: run(async () => { const it = await addToLibrary(r); return `“${it.name}” is in the Library.`; }) });
-        items.push("-");
-      }
-      items.push(
-        { label: "Rename…", onClick: run(async () => {
-          const v = prompt("New name:", d.name); if (v === null || !v.trim()) return "";
-          await editCourseTest(r, (t) => { t.name = v.trim(); }); return "Renamed.";
-        }) },
-        { label: "Delete…", onClick: run(async () => {
-          if (d.qr) throw new Error("close its QR code first (Test & Quiz Bank → QR / Forms → Close)");
-          if (!confirm(`Delete “${d.name}” from ${r.courseName}?${d.answers ? `\n\nIt has ${d.answers} student(s)' answers/scores, which will be lost.` : ""}`)) return "";
-          await courseRemove(r.courseId, r.toolId, r.id); return "Deleted.";
-        }) });
-      const ex = exportMenuItems(r, say);
-      if (ex.length) items.push("-", ...ex);
-      return items;
-    }
-    function useMenu(u, item) {
-      const items = [];
-      if (isStale(u.d, item)) items.push({ label: "Update (re-grade)", onClick: run(() => updateOne(u)) });
-      items.push({ label: "Make my own copy", onClick: run(async () => { if (!confirm(`Make “${u.d.name}” (${u.courseName}) its own copy? Library changes will no longer reach it, and it can't rejoin.`)) return ""; return makeOwn(u); }) },
-        { label: "Remove from this course…", onClick: run(async () => {
-          if (u.d.qr) throw new Error("close its QR code first");
-          if (!confirm(`Remove “${u.d.name}” from ${u.courseName}?${u.d.answers ? `\n\nIt has ${u.d.answers} student(s)' answers, which will be lost.` : ""}\nThe Library item stays.`)) return "";
-          await courseRemove(u.courseId, u.toolId, u.id); return "Removed from the course.";
-        }) });
-      return items;
-    }
-    function usesTable(g, span) {
-      const tr = mk("tr"); const td = mk("td", "qts-detail"); td.colSpan = span;
-      const tb = mk("table", "source-grid qts-grid");
-      const hr = mk("tr"); ["Course", "Its name", "Students answered", "Status", ""].forEach((x) => hr.appendChild(mk("th", "nosort", x)));
-      const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
-      const body = mk("tbody"); tb.appendChild(body);
-      g.uses.forEach((u) => {
-        const r = mk("tr");
-        r.append(mk("td", "", `${u.courseName} › ${u.toolName}`), mk("td", "qts-name", u.d.name || "(untitled)"), mk("td", "qts-n", String(u.d.answers || 0)), mk("td", isStale(u.d, g.item) ? "qts-stale" : "", useStatus(u.d, g.item)));
-        const c = mk("td"); c.appendChild(menuButton("Menu", () => useMenu(u, g.item))); r.appendChild(c); body.appendChild(r);
-      });
-      const sc = mk("div", "qts-wrap"); sc.appendChild(tb); td.appendChild(sc); tr.appendChild(td);
-      return tr;
-    }
-    function selectFilter(label, key, options) {
-      const l = mk("label", "", label); const s = mk("select");
-      options.forEach(([v, t]) => { const o = mk("option", "", t); o.value = v; s.appendChild(o); });
-      s.value = F[key];
-      s.addEventListener("change", () => { F[key] = s.value; render(); });
-      l.appendChild(s); return l;
-    }
-
-    function render(msg) {
-      host.textContent = "";
-      const head = mk("div", "qts-head");
-      if (!inTool) head.appendChild(mk("h3", "", "Quiz Library"));
-      const re = mk("button", "btn btn-ghost btn-small", "Refresh"); re.type = "button"; re.addEventListener("click", () => refresh("", true));
-      const rb = mk("button", "btn btn-ghost btn-small", "Rebuild index"); rb.type = "button";
-      rb.title = "Re-reads every course once. Use it if the list looks out of date (for example after changes made on another device).";
-      rb.addEventListener("click", () => { if (confirm("Re-read every course to rebuild the Library's list of where quizzes are used? This reads all your courses' scoring data once.")) refresh("", true, true); });
-      if (!inTool) [["standard", "Quiz"], ["answers", "Answer Collection"], ["survey", "Research Survey"], ["formative", "Formative Survey"]].forEach(([kind, label]) => {
-        const nb = mk("button", "btn btn-ghost btn-small", `+ New ${label}`); nb.type = "button";
-        nb.addEventListener("click", run(async () => { // a new item made right in the Library (no course needed); opens in the editor
-          const name = prompt(`${label} name:`, `${label} ${model.items.length + 1}`); if (name === null || !name.trim()) return "";
-          await libLoad(true);
-          if (lib.items.length >= MAX_LIB) throw new Error(`The Library is at its limit of ${MAX_LIB} items.`);
-          const item = newItem({ name: name.trim(), quiz: { kind, settings: { labelStyle: "upper", defaultOptions: 4, timeLimit: 0, attemptsAllowed: 1, attemptRule: "best" }, sections: [{ id: rid("sec"), title: "Section 1", questions: [], notes: [] }] } }, name.trim());
-          lib.items.push(item); await libSave(); invalidate();
-          await openTplEditor({ id: item.id });
-          return "";
-        }));
-        head.appendChild(nb);
-      });
-      if (!inTool && window.QuizSheet) {
-        const up = mk("button", "btn btn-ghost btn-small", "Upload quiz contents"); up.type = "button"; up.title = "Make a new Library item from a filled-in CSV or Excel sheet (see “Export quiz template”).";
-        up.addEventListener("click", () => QuizSheet.pick(async (p, f) => {
-          try {
-            await libLoad(true);
-            if (lib.items.length >= MAX_LIB) throw new Error(`The Library is at its limit of ${MAX_LIB} items.`);
-            const name = p.name || f.name.replace(/\.[^.]+$/, "");
-            const item = newItem({ name, quiz: { kind: p.kind, settings: p.settings, sections: p.sections } }, name);
-            lib.items.push(item); await libSave(); invalidate();
-            alert(QuizSheet.summary({ ...p, name }));
-            await openTplEditor({ id: item.id });
-          } catch (e) { say(`Couldn't do that: ${e.message}`); }
-        }));
-        const ex = mk("button", "btn btn-ghost btn-small", "Export quiz template"); ex.type = "button"; ex.title = "Downloads an example sheet (CSV) showing what to type where. Fill it in (in Excel too) and upload it.";
-        ex.addEventListener("click", () => QuizSheet.example("standard"));
-        head.append(up, ex);
-      }
-      head.append(re, rb);
-      host.appendChild(head);
-      statusEl = mk("p", "result", msg || ""); host.appendChild(statusEl);
-      if (!model) return;
-      host.appendChild(mk("p", "hint", "Each quiz's questions live here once. A course that uses an item keeps its own students' answers, scores and QR code. Edit an item and every course that uses it follows; a course that already has student answers shows “Update available” until you update it."));
-
-      (model.legacy || []).forEach((old) => {
-        const p = mk("p", "hint"); p.style.cssText = "border:1px solid var(--line);border-radius:6px;padding:6px 8px;";
-        p.appendChild(document.createTextNode(`${old.label} still holds ${old.items.length} item${old.items.length === 1 ? "" : "s"}. `));
-        const b = mk("button", "btn btn-ghost btn-small", "Import into the Library…"); b.type = "button"; b.addEventListener("click", run(() => importLegacy(old)));
-        p.appendChild(b); host.appendChild(p);
-      });
-
-      const filters = mk("div", "qts-filters");
-      const sl = mk("label", "", "Search"); const si = mk("input"); si.type = "search"; si.value = F.q; si.placeholder = "Name";
-      si.addEventListener("input", () => { F.q = si.value; const pos = si.selectionStart; render(); const n = host.querySelector(".qts-filters input[type=search]"); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } });
-      sl.appendChild(si);
-      filters.append(
-        sl,
-        selectFilter("Course", "course", [["", "All courses"], ...model.courses.map((c) => [c.id, c.name])]),
-        selectFilter("Type", "type", [["", "All"], ["quiz", "Quiz"], ["test", "Test"], ["survey", "Research Survey"], ["formative", "Formative Survey"], ["answers", "Answer Collection"]]),
-        selectFilter("Status", "status", [["", "All"], ["Up to date", "Up to date"], ["Update available", "Update available"], ["Own copy", "Own copy"]]),
-      );
-      host.appendChild(filters);
-
-      const rows = visibleRows();
-      const tb = mk("table", "source-grid qts-grid");
-      const hr = mk("tr");
-      COLS.forEach(([k, label]) => {
-        const pos = sort.findIndex((x) => x.key === k);
-        const th = mk("th", "", label + (pos < 0 ? " ⇅" : ` ${sort[pos].dir > 0 ? "▲" : "▼"}${sort.length > 1 ? pos + 1 : ""}`));
-        th.title = "Click: sort ascending. Click again: descending. A third click turns it off. A second sorted column sorts within the first.";
-        th.addEventListener("click", () => {
-          if (pos < 0) { sort = sort.length >= 2 ? [sort[0], { key: k, dir: 1 }] : [...sort, { key: k, dir: 1 }]; }
-          else if (sort[pos].dir > 0) sort[pos].dir = -1;
-          else sort.splice(pos, 1);
-          render();
-        });
-        hr.appendChild(th);
-      });
-      hr.appendChild(mk("th", "nosort", "Control"));
-      const th = mk("thead"); th.appendChild(hr); tb.appendChild(th);
-      const body = mk("tbody"); tb.appendChild(body);
-      if (!rows.length) { const tr = mk("tr"); const td = mk("td", "hint", gridRows().length ? "Nothing matches these filters." : "Nothing here yet. Use “+ New Quiz” above, or open a quiz's controls → “Add to courses…” to put it in the Library."); td.colSpan = COLS.length + 1; tr.appendChild(td); body.appendChild(tr); }
-      rows.forEach((g) => {
-        const tr = mk("tr");
-        const num = (v) => mk("td", "qts-n", v == null || v === "" ? "—" : String(v));
-        let used;
-        if (g.kind === "item") {
-          const n = new Set(g.uses.map((u) => u.courseId)).size;
-          if (!g.uses.length) used = mk("td", "qts-n", "—");
-          else {
-            used = mk("td", "qts-n"); const a = mk("span", "qts-link", courseWord(n) + (g.uses.length > n ? ` (${g.uses.length} copies)` : ""));
-            a.title = "Click to show or hide where it is used."; a.addEventListener("click", () => { if (openUses.has(g.item.id)) openUses.delete(g.item.id); else openUses.add(g.item.id); render(); });
-            used.appendChild(a);
-          }
-        } else used = mk("td", "qts-n", g.r.courseName);
-        const st = mk("td", `qts-n${g.status === "Update available" ? " qts-stale" : ""}`, g.kind === "item" && g.stale.length > 1 ? `Update available (${g.stale.length})` : g.status);
-        tr.append(mk("td", "qts-name", g.name || "(untitled)"), mk("td", "", KIND_LABEL[g.type] || "Quiz"), num(g.q), num(g.max), used, st);
-        const td = mk("td", "qts-ctl");
-        const all = g.kind === "item" ? itemMenu(g) : ownMenu(g);
-        const cut = all.lastIndexOf("-");
-        const exps = cut >= 0 ? all.slice(cut + 1) : [];
-        const expMenu = exps.length && exps.every((x) => /^(CSV|Excel)/.test(x.label)) ? exps : null;
-        (expMenu ? all.slice(0, cut) : all).forEach((it) => { // the controls sit side by side
-          if (it === "-") return;
-          const b = mk("button", "btn btn-ghost btn-small", it.label.replace(/…$/, "")); b.type = "button"; b.title = it.label;
-          b.addEventListener("click", (ev) => { ev.stopPropagation(); it.onClick(); }); td.appendChild(b);
-        });
-        if (g.kind === "item" && window.QRStyles && QRStyles.menuButton) {
-          const sb = QRStyles.menuButton(() => g.item.style || null, async (st) => {
-            await libLoad(true); const it = itemById(g.item.id); if (!it) return;
-            it.style = st || undefined; it.hash = hashOf(itemTest(it)); it.rev += 1; it.updatedAt = nowIso(); await libSave();
-            await syncPass(it.id); await refresh("");
-          }, say, "btn btn-ghost btn-small");
-          td.insertBefore(sb, td.children[3] || null);
-        }
-        if (expMenu) td.appendChild(menuButton("Export", () => expMenu));
-        tr.appendChild(td);
-        body.appendChild(tr);
-        if (g.kind === "item" && openUses.has(g.item.id) && g.uses.length) body.appendChild(usesTable(g, COLS.length + 1));
-      });
-      const sc = mk("div", "qts-wrap"); sc.appendChild(tb); host.appendChild(sc);
-      host.appendChild(mk("p", "hint", `${rows.length} shown. “Own copy” = a quiz that belongs to one course only. Its menu → “Add to courses…” puts it in the Library.`));
-    }
-
-    return { refresh, render };
-  }
-
-  // ---------- importing the old group lists ----------
-  async function importLegacy(old) {
-    const quizzes = old.items.filter((x) => x && x.quiz);
-    if (!quizzes.length) throw new Error("There are no quizzes or surveys in that list to import.");
-    const pick = await dialog((box, done) => {
-      box.appendChild(mk("h3", "", "Import into the Library"));
-      box.appendChild(mk("p", "hint", `Choose the items from ${old.label}. They are added to the Library; use “Add to courses…” to put them in courses.`));
-      const cbs = quizzes.map((it) => { const l = mk("label", "qts-check"); const cb = mk("input"); cb.type = "checkbox"; cb.checked = true; l.append(cb, mk("span", "", it.name || "(untitled)")); box.appendChild(l); return cb; });
-      const acts = mk("div", "qts-actions");
-      const cancel = mk("button", "btn btn-ghost", "Cancel"); cancel.type = "button"; cancel.addEventListener("click", () => done(null));
-      const go = mk("button", "btn btn-primary", "Import"); go.type = "button";
-      go.addEventListener("click", () => done(quizzes.filter((_, i) => cbs[i].checked)));
-      acts.append(cancel, go); box.appendChild(acts);
-    });
-    if (!pick || !pick.length) return "";
-    await libLoad(true);
-    let n = 0;
-    for (const it of pick) {
-      if (lib.items.length >= MAX_LIB) break;
-      lib.items.push(newItem({ quiz: it.quiz, name: it.name, maxPoints: it.maxPoints }, it.name)); n++;
-    }
-    await libSave();
-    return `Imported ${n} item${n === 1 ? "" : "s"} into the Library.`;
-  }
 
   // ---------- editing a Library item's questions ----------
   // The item is loaded into a hidden course (like course templates are), edited in the normal Test & Quiz Bank editor, then written back.
@@ -1057,7 +657,7 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     const cid = `tmpledit-qts-${Date.now().toString(36)}`, toolId = "tpl-tool";
     const test = clone(item); test.quiz = { ...clone(item.quiz), token: null, submissions: [] };
     await storage.saveFile(`roster-${cid}.json`, { students: [] });
-    await storage.saveFile(`scoring-${cid}.json`, { categories: [], records: {}, weights: {}, presentationMigrated: true, tools: [{ id: toolId, type: "testbank", name: "Test & Quiz Bank", config: { tests: [test] } }] });
+    await storage.saveFile(`scoring-${cid}.json`, { categories: [], records: {}, weights: {}, presentationMigrated: true, tools: [{ id: toolId, type: "testbank", name: "Quizzes & Tests", config: { tests: [test] } }] });
     const course = { id: cid, name: `Quiz: ${item.name}`, periodId: null, archived: false, templateId: null, editingTemplateId: "qts" };
     CoursesModule.courses.push(course);
     const back = ScoringModule.currentCourseId && !isTmp(ScoringModule.currentCourseId) ? ScoringModule.currentCourseId : null;
@@ -1074,18 +674,6 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
 
 
 
-  // ---------- the tab ----------
-  const tabView = makeView(panel, null);
-  const origShowTab = window.showTab;
-  window.showTab = function (tab) {
-    origShowTab.apply(this, arguments);
-    const on = tab === "qts";
-    panel.hidden = !on;
-    tabBtn.classList.toggle("tab-btn-active", on);
-    if (on) tabView.refresh("", true);
-  };
-  tabBtn.addEventListener("click", () => window.showTab("qts"));
-
   // ---------- inside a Test & Quiz Bank + helpers for quizbank.js ----------
   const lastSync = new Map();
   let firstLoad = true;
@@ -1095,8 +683,6 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
     flushIndex: () => Index.flush(),
     pushNow: () => Push.run(),
     setDelay(ms) { Push.delay = ms; },
-    /** "Add to courses…" for a quiz in the open course. Resolves to a message ("" if cancelled). */
-    addToCourses: (courseId, toolId, test) => addDialog({ courseId, toolId, id: test.id }),
     /** Buttons for a quiz that uses a Library item (badge, Update (re-grade), Make my own copy). */
     statusButtons(courseId, toolId, t, say, rerender) {
       if (!t.libId || !t.quiz) return [];
@@ -1136,6 +722,6 @@ table.qts-grid .qts-link { cursor:pointer; text-decoration:underline; }
       }
       return section;
     },
-    core: { batch, adoptOrphans, syncWords, addDialog, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, updateOne, updateAll, makeOwn, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, useStatus, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
+    core: { batch, adoptOrphans, syncWords, rid, clone, LIB, libLoad, libSave, libEnsure, getLib: () => lib, itemById, newItem, useOf, itemTest, loadModel, fullOf, courseAdd, courseRemove, editCourseTest, syncPass, applyUpdate, addToLibrary, openTplEditor, exportMenuItems, menuButton, dialog, isStale, KIND_LABEL, kindKey, hashOf, contentOf, describe, MAX_LIB, toast, qCount },
   };
 })();
